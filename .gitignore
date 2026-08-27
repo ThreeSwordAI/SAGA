@@ -13,3 +13,16 @@ __pycache__/
 #configs/
 #scripts/
 #check_env.sh
+
+# ── [TASK-00] large binaries never enter git ──────────────────────────────────
+# Small artifacts stay trackable: results/**/*.json, results/**/*.csv,
+# results/**/gates/phi_e*.npz, figures_data/
+*.pth
+*.pt
+results/**/ckpt/
+results/**/attn/
+results/**/*_norms.npz
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+wandb/

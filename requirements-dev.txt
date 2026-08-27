@@ -1,0 +1,4 @@
+# Dev/test extras on top of requirements.txt (CPU is enough for the test suite)
+pytest>=8.0.0
+pyyaml>=6.0
+pillow>=10.0.0
