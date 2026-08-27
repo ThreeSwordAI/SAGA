@@ -28,10 +28,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from saga.run_registry import file_sha256
 
 
-def guess_fields(path_str: str) -> dict:
+def guess_fields(rel_path: str) -> dict:
     """Best-effort parse of exp/arch/recipe/variant/seed from a path.
-    Empty string when unsure."""
-    p = path_str.replace("\\", "/").lower()
+    Empty string when unsure.
+
+    Must be given the path RELATIVE to the scanned root: ancestor directories
+    (e.g. the enclosing /home/.../SAGA/ project dir) would otherwise
+    contaminate every row — a bare 'saga' ancestor must not label baseline
+    checkpoints as variant=saga."""
+    p = rel_path.replace("\\", "/").lower()
 
     exp = ""
     m = re.search(r"(?:^|[/_\-])(e\d+)(?=[/_\-.]|$)", p)
@@ -55,7 +60,7 @@ def guess_fields(path_str: str) -> dict:
         recipe = "mixup"
 
     variant = ""
-    if "saga" in p:
+    if re.search(r"(?:^|[/_\-.])saga(?=[/_\-.]|$)", p):
         variant = "saga"
     elif re.search(r"register|(?:^|[/_\-])reg\d*(?=[/_\-.]|$)", p):
         variant = "registers"
@@ -80,17 +85,25 @@ def scan(roots, do_hash: bool):
             continue
         found = sorted(root.rglob("*.pth"))
         print(f"{root}: {len(found)} .pth files")
+        root_resolved = root.resolve()
         for f in found:
             stat = f.stat()
+            abs_path = f.resolve()
+            try:
+                rel = abs_path.relative_to(root_resolved).as_posix()
+            except ValueError:
+                rel = f.name
             row = {
-                "path": f.resolve().as_posix(),
+                "path": abs_path.as_posix(),
                 "filename": f.name,
                 "size_bytes": stat.st_size,
                 "mtime_iso": datetime.fromtimestamp(
                     stat.st_mtime, tz=timezone.utc).isoformat(),
                 "sha256": file_sha256(f) if do_hash else "",
             }
-            row.update(guess_fields(f.resolve().as_posix()))
+            # guesses come ONLY from below the scanned root, so ancestor
+            # directory names cannot mislabel rows
+            row.update(guess_fields(rel))
             rows.append(row)
     return rows
 
