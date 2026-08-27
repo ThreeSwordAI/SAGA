@@ -71,3 +71,50 @@ end of TASK 01, see next entry).
 - `results/diagsplit/val_diag_split.json` (tools/build_diag_split.py on an
   extracted ImageFolder ImageNet copy with val/).
 - `pytest -q` green on the HPC after env update (`timm>=1.0.0`).
+
+**Update 2026-08-27 (later):** all three came back (commit `bffefbf`): split
+valid (10000 imgs, 1000 classes, 10/class, seed 0), manifest 78 rows all
+hashed, HPC pytest 31 passed. Human ground truth: e2 = 12 headline runs, ONE
+surviving repeat each (~3 repeats overwrote the same dir; no seed control) —
+the "27 runs × 3 seeds" premise in TASK_00_01 is obsolete. Legacy history
+JSONs are partial (resume overwrote them). Standing rule from the human:
+everything written from now on must be idempotent / append-safe.
+
+---
+
+## 2026-08-27 — TASK 02, PHASE 1 (rederive prep)
+
+**Done (local, by Claude Code):**
+- `saga/metrics.py` + `oversmoothing_pairwise_nosink` (median+5·MAD exclusion,
+  same convention as `sink_counts_mad`; closed form on survivors; skip <2
+  survivors) wired into `compute_diagnostics` → diagnose JSON now carries
+  `oversmooth_pairwise_nosink` and `nosink_excluded_mean`. Test T8.
+- Manifest filled per human authorization (separate commit `0c44771`):
+  all 24 e2 rows recipe∈{mixup,nomix} (12 blanks → mixup), seed → `rlast`;
+  e1/e3/e6 untouched.
+- `tools/check_done.py` — requeue guard (output JSON exists + ckpt_sha256
+  matches ⇒ skip step).
+- `tools/compute_fixed_thr.py` — per-arch τ from nomix-baseline last diagnose
+  norms; LOWER medians throughout (matches torch.median / sink_counts_mad).
+- `tools/apply_fixed_thr.py` — backfills ONLY `sink_fixed_thr` +
+  `fixed_thr_value` into diag JSONs from `_norms.npz`; idempotent.
+- `tools/gen_rederive_jobs.py` → generated `scripts/rederive_e2.sh`:
+  24 e2 checkpoints × (eval + diagnose) = 48 guarded sequential steps,
+  failures append to `results/legacy/rederive_failures.log` and continue,
+  ends with compute/apply fixed-thr; ~9 h on one GPU (est.).
+- **e3 EXCLUDED** from re-derivation: its 3 checkpoints are full `ViTDetector`
+  state dicts (backbone+neck+head, `detection/tools/train.py`), not plain
+  ImageNet classifiers — strict load via model_factory would rightly fail.
+- Review workflow confirmed + fixed a requeue-safety bug: `tools/diagnose.py`
+  wrote its JSON (the completion marker) BEFORE the npz; now npz first,
+  JSON last.
+- `pytest -q`: **41 passed** (~12 s, CPU). No training-code edits.
+
+**Commits:** `0c44771` (manifest fill), plus
+`[TASK-02] nosink metric, fixed-thr tools, job generator`
+
+**Pending from HPC (before PHASE 2):**
+- 24 × `results/legacy/eval/e2_*.json`, 24 × `results/legacy/diag/e2_*.json`
+  (with nosink fields), `results/diagsplit/fixed_thresholds.json`.
+- `rederive_failures.log` verified absent/empty; `*_norms.npz` KEPT on the
+  HPC (git-ignored; needed later for histograms).

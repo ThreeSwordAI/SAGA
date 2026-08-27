@@ -140,6 +140,55 @@ def oversmoothing_consecutive_legacy(x_patch: torch.Tensor) -> torch.Tensor:
     return (left * right).sum(dim=-1).mean(dim=1)
 
 
+def _nosink_per_image(x_patch: torch.Tensor, norms: torch.Tensor,
+                      k: float = 5.0):
+    """Sink-excluded pairwise cosine per image.
+
+    Tokens with norm STRICTLY above median + k*MAD (the same per-image
+    threshold as sink_counts_mad) are excluded; the closed-form mean pairwise
+    cosine runs on the survivors. Returns (cos [B] with NaN where fewer than
+    2 tokens survive, n_excluded [B])."""
+    x = _fp32(x_patch)
+    v = _fp32(norms)
+    m = v.median(dim=1, keepdim=True).values
+    mad = (v - m).abs().median(dim=1, keepdim=True).values
+    keep = v <= (m + k * mad)                                  # [B, N]
+
+    p = torch.nn.functional.normalize(x, dim=-1)
+    w = keep.to(p.dtype).unsqueeze(-1)
+    n_kept = keep.sum(dim=1).to(p.dtype)                       # [B]
+    s = (p * w).sum(dim=1).pow(2).sum(dim=-1)                  # [B]
+    denom = (n_kept * (n_kept - 1)).clamp_min(1.0)
+    cos = (s - n_kept) / denom
+    cos = torch.where(n_kept >= 2, cos,
+                      torch.full_like(cos, float("nan")))
+    return cos, (~keep).sum(dim=1).to(p.dtype)
+
+
+def oversmoothing_pairwise_nosink(x_patch: torch.Tensor, norms: torch.Tensor,
+                                  k: float = 5.0):
+    """
+    Oversmoothing with sink tokens excluded (TASK-02 addendum).
+
+    Removing high-norm outliers mechanically raises the mean pairwise cosine
+    among survivors, so a model that merely ABSORBS outliers (registers)
+    could look "more oversmoothed" for arithmetic reasons. This variant
+    excludes, per image, tokens above the median + k*MAD norm threshold and
+    computes the closed-form pairwise mean cosine on the kept tokens. Images
+    with fewer than 2 surviving tokens are skipped (still counted in the
+    exclusion mean).
+
+    x_patch: [B, N, D] (prefix tokens already removed); norms: [B, N].
+    Returns (mean cosine over non-skipped images, mean #excluded per image)
+    as scalar tensors; the first is NaN if every image was skipped.
+    """
+    cos, excluded = _nosink_per_image(x_patch, norms, k)
+    valid = torch.isfinite(cos)
+    mean_cos = cos[valid].mean() if bool(valid.any()) else \
+        torch.tensor(float("nan"))
+    return mean_cos, excluded.mean()
+
+
 def effective_rank(x_patch: torch.Tensor) -> torch.Tensor:
     """
     Effective rank (Roy & Vetterli) of the patch-token matrix per image:
@@ -248,8 +297,11 @@ def compute_diagnostics(
         "sink_fixed": 0.0,
         "over_pair": 0.0,
         "over_legacy": 0.0,
+        "nosink_cos": 0.0,
+        "nosink_excl": 0.0,
         "reg_norm": 0.0,
     }
+    nosink_valid_n = 0
     effrank_sum, effrank_n = 0.0, 0
     ratio_sums = torch.zeros(L, dtype=torch.float64)
     attn_sums = torch.zeros(L, dtype=torch.float64)
@@ -281,6 +333,12 @@ def compute_diagnostics(
 
             sums["over_pair"] += oversmoothing_pairwise(patch).sum().item()
             sums["over_legacy"] += oversmoothing_consecutive_legacy(patch).sum().item()
+
+            ns_cos, ns_excl = _nosink_per_image(patch, norms, k=5.0)
+            ns_valid = torch.isfinite(ns_cos)
+            sums["nosink_cos"] += ns_cos[ns_valid].sum().item()
+            nosink_valid_n += int(ns_valid.sum())
+            sums["nosink_excl"] += ns_excl.sum().item()
 
             if n_effrank is None or effrank_n < n_effrank:
                 take = B if n_effrank is None else min(B, n_effrank - effrank_n)
@@ -324,6 +382,9 @@ def compute_diagnostics(
         "fixed_thr_value": fixed_thr,
         "oversmooth_pairwise": sums["over_pair"] / n_images,
         "oversmooth_consecutive_legacy": sums["over_legacy"] / n_images,
+        "oversmooth_pairwise_nosink": (sums["nosink_cos"] / nosink_valid_n
+                                       if nosink_valid_n else None),
+        "nosink_excluded_mean": sums["nosink_excl"] / n_images,
         "eff_rank": effrank_sum / max(effrank_n, 1),
         "cls_norm_ratio": (ratio_sums / n_images).tolist(),
         "cls_attn_share": (attn_sums / n_images).tolist() if with_attn else None,

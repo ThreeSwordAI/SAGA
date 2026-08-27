@@ -12,6 +12,7 @@ SCHEMA_KEYS = {
     "sink_mad_k5", "sink_mu2s", "sink_mu3s", "sink_mu4s", "sink_mu5s",
     "sink_mu6s", "sink_fixed_thr", "fixed_thr_value",
     "oversmooth_pairwise", "oversmooth_consecutive_legacy",
+    "oversmooth_pairwise_nosink", "nosink_excluded_mean",
     "eff_rank", "cls_norm_ratio", "cls_attn_share", "reg_norm_mean",
 }
 

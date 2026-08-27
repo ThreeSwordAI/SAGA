@@ -101,9 +101,10 @@ def main():
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    with open(out, "w") as f:
-        json.dump(result, f, indent=2)
 
+    # npz FIRST, JSON LAST: the JSON is the completion marker that requeue
+    # guards (tools/check_done.py) test, so it must not exist unless every
+    # output landed — a job killed mid-write then simply re-runs this step
     npz_path = out.with_name(out.stem + "_norms.npz")
     np.savez(
         npz_path,
@@ -111,6 +112,9 @@ def main():
         cls_norms=arrays["cls_norms"],
         median_patch_norms=arrays["median_patch_norms"],
     )
+
+    with open(out, "w") as f:
+        json.dump(result, f, indent=2)
 
     print(f"\nsink_mad_k5={result['sink_mad_k5']:.4f}  "
           f"oversmooth_pairwise={result['oversmooth_pairwise']:.4f}  "
