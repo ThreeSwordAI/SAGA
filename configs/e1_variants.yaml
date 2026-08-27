@@ -1,0 +1,125 @@
+# ── E1: Systematic Gate Variant Study ────────────────────────────────────────
+# 24 variants testing all combinations of gate terms, positions, and granularity.
+# Submitted as SLURM array job: --array=0-15 (wave 1), then 0-23 (wave 2).
+#
+# Wave 1 (V00-V15): all 2^4 component subsets  → run first
+# Wave 2 (V16-V23): position, granularity, hyperparam → run after wave 1 analysis
+#
+# IMPORTANT: Before submitting wave 2, update V16-V23 gate.terms to the best
+# component combo found in wave 1. Currently set to full SAGA as placeholder.
+
+_base_: base.yaml
+
+model:
+  arch: vit_base_patch16_224
+
+train:
+  epochs: 100
+
+# ── 24 variants — selected by --variant_id argument ──────────────────────────
+variants:
+
+  # ── Group 1: Component ablation (all 16 subsets of {A, B, C, D}) ──────────
+
+  - id: 0
+    name: V00_baseline
+    gate: {terms: []}
+
+  - id: 1
+    name: V01_A
+    gate: {terms: [A]}
+
+  - id: 2
+    name: V02_B
+    gate: {terms: [B]}
+
+  - id: 3
+    name: V03_C
+    gate: {terms: [C]}
+
+  - id: 4
+    name: V04_D
+    gate: {terms: [D]}
+
+  - id: 5
+    name: V05_AB
+    gate: {terms: [A, B]}
+
+  - id: 6
+    name: V06_AC
+    gate: {terms: [A, C]}
+
+  - id: 7
+    name: V07_AD
+    gate: {terms: [A, D]}
+
+  - id: 8
+    name: V08_BC
+    gate: {terms: [B, C]}
+
+  - id: 9
+    name: V09_BD
+    gate: {terms: [B, D]}
+
+  - id: 10
+    name: V10_CD
+    gate: {terms: [C, D]}
+
+  - id: 11
+    name: V11_ABC
+    gate: {terms: [A, B, C]}
+
+  - id: 12
+    name: V12_ABD
+    gate: {terms: [A, B, D]}
+
+  - id: 13
+    name: V13_ACD
+    gate: {terms: [A, C, D]}
+
+  - id: 14
+    name: V14_BCD
+    gate: {terms: [B, C, D]}
+
+  - id: 15
+    name: V15_ABCD_full
+    gate: {terms: [A, B, C, D]}
+
+  # ── Group 2: Gate position ────────────────────────────────────────────────
+  # UPDATE gate.terms below to best combo from wave 1 before submitting wave 2.
+
+  - id: 16
+    name: V16_pos_G1
+    gate: {terms: [B], position: G1}    # after SDPA (default)
+
+  - id: 17
+    name: V17_pos_G2
+    gate: {terms: [B], position: G2}    # after V projection
+
+  - id: 18
+    name: V18_pos_G3
+    gate: {terms: [B], position: G3}    # after K projection
+
+  - id: 19
+    name: V19_pos_G5
+    gate: {terms: [B], position: G5}    # after output projection
+
+  # ── Group 3: Gate granularity ─────────────────────────────────────────────
+
+  - id: 20
+    name: V20_gran_head
+    gate: {terms: [B], granularity: head_specific}   # default
+
+  - id: 21
+    name: V21_gran_elem
+    gate: {terms: [B], granularity: elementwise}     # per-dimension
+
+  # ── Group 4: Hyperparameter sensitivity ───────────────────────────────────
+
+  - id: 22
+    name: V22_lambda_low
+    gate: {terms: [A, B, C, D], lambda_0: 0.05}  # half of default
+
+  - id: 23
+    name: V23_lambda_high
+    gate: {terms: [A, B, C, D], lambda_0: 0.20}  # double of default

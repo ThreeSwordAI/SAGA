@@ -1,0 +1,31 @@
+# detection/configs/paths.yaml.template
+# ============================================================
+# Copy to paths.yaml and fill in your paths.
+# paths.yaml is gitignored — this template is version-controlled.
+#
+#   cp detection/configs/paths.yaml.template \
+#      detection/configs/paths.yaml
+# ============================================================
+
+cluster: alex
+
+data:
+  train_zip: /home/woody/iwi5/iwi5359h/Data/COCO/train2017.zip
+  val_zip:   /home/woody/iwi5/iwi5359h/Data/COCO/val2017.zip
+  ann_zip:   /home/woody/iwi5/iwi5359h/Data/COCO/annotations_trainval2017.zip
+
+backbones:
+  baseline:  /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_baseline_nomix/best.pth
+  registers: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/best.pth
+  saga:      /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA_nomix/best.pth
+
+outputs:
+  checkpoints: /home/vault/iwi5/iwi5359h/SAGA/e3/checkpoints
+  results:     /home/vault/iwi5/iwi5359h/SAGA/e3/results
+  logs:        /home/vault/iwi5/iwi5359h/SAGA/e3/logs
+
+scratch:
+  base: /scratch/iwi5359h
+
+code:
+  root: /home/hpc/iwi5/iwi5359h/my_repos/SAGA

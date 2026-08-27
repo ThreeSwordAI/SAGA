@@ -1,0 +1,29 @@
+# evaluation/e5_lost/configs/paths.yaml.template
+# ============================================================
+# Copy to paths.yaml and fill in your paths.
+# paths.yaml is gitignored — this template is version-controlled.
+#
+#   cp evaluation/e5_lost/configs/paths.yaml.template \
+#      evaluation/e5_lost/configs/paths.yaml
+# ============================================================
+
+data:
+  # VOC 2007 tar files — never extracted, staged at runtime
+  voc_trainval_tar: /home/woody/iwi5/iwi5359h/Data/VOC/VOCtrainval_06-Nov-2007.tar
+  voc_test_tar:     /home/woody/iwi5/iwi5359h/Data/VOC/VOCtest_06-Nov-2007.tar
+
+  # Staging directory — created and deleted per run
+  stage_base: /tmp
+
+checkpoints:
+  baseline:  /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_baseline_nomix/best.pth
+  registers: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/best.pth
+  saga:      /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA_nomix/best.pth
+
+outputs:
+  results:  /home/vault/iwi5/iwi5359h/SAGA/e5/results
+  features: /home/vault/iwi5/iwi5359h/SAGA/e5/features
+  figures:  /home/woody/iwi5/iwi5359h/saga_e5_figures
+
+code:
+  root: /home/hpc/iwi5/iwi5359h/my_repos/SAGA

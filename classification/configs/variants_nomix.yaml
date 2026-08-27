@@ -1,0 +1,68 @@
+# configs/variants_nomix.yaml
+# ============================================================
+# ViT-S only, 3 variants, WITHOUT MixUp/CutMix.
+# Inherits from base.yaml and overrides augmentation only.
+#
+# Array mapping:
+#   sbatch --array=0-2 scripts/e2_nomix_alex.sh
+#   0 = ViT-S_baseline_nomix
+#   1 = ViT-S_registers_nomix
+#   2 = ViT-S_SAGA_nomix
+# ============================================================
+
+_base_: base.yaml
+
+# Override augmentation at top level — applies to all variants below
+augmentation:
+  rand_aug:           true
+  rand_aug_magnitude: 9
+  rand_aug_layers:    2
+  mixup_alpha:        0.0   # disabled — MixUp destroys spatial statistics
+  cutmix_alpha:       0.0   # disabled — CutMix destroys spatial statistics
+  random_erase_prob:  0.25
+
+variants:
+
+  - id: 0
+    name: ViT-S_baseline_nomix
+    model:
+      arch: vit_small_patch16_224
+      gate: false
+      registers: 0
+
+  - id: 1
+    name: ViT-S_registers_nomix
+    model:
+      arch: vit_small_patch16_224
+      gate: false
+      registers: 4
+
+  - id: 2
+    name: ViT-S_SAGA_nomix
+    model:
+      arch: vit_small_patch16_224
+      gate: true
+      registers: 0
+
+  # ── ViT-Base (86M params) ───────────────────────────────────────────────
+  - id: 3
+    name: ViT-B_baseline_nomix
+    model:
+      arch: vit_base_patch16_224
+      gate: false
+      registers: 0
+ 
+  - id: 4
+    name: ViT-B_registers_nomix
+    model:
+      arch: vit_base_patch16_224
+      gate: false
+      registers: 4
+ 
+  - id: 5
+    name: ViT-B_SAGA_nomix
+    model:
+      arch: vit_base_patch16_224
+      gate: true
+      registers: 0
+ 

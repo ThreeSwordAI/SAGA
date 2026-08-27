@@ -1,0 +1,37 @@
+# detection/configs/variants.yaml
+# ============================================================
+# E3 detection variants — 3 runs.
+#
+# Array mapping:
+#   sbatch --array=0-2 scripts/e3_train_alex.sh
+#   0 = ViT-B_baseline_det
+#   1 = ViT-B_registers_det
+#   2 = ViT-B_SAGA_det
+#
+# All use nomix backbones from E2.
+# ============================================================
+
+_base_: base.yaml
+
+variants:
+
+  - id: 0
+    name: ViT-B_baseline_det
+    model:
+      gate:      false
+      registers: 0
+    backbone_key: baseline    # key into paths.yaml backbones section
+
+  - id: 1
+    name: ViT-B_registers_det
+    model:
+      gate:      false
+      registers: 4
+    backbone_key: registers
+
+  - id: 2
+    name: ViT-B_SAGA_det
+    model:
+      gate:      true
+      registers: 0
+    backbone_key: saga

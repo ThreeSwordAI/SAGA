@@ -1,0 +1,37 @@
+# segmentation/configs/variants.yaml
+# ============================================================
+# E4 segmentation variants — 3 runs.
+#
+# Array mapping:
+#   sbatch --array=0-2 scripts/e4_train_alex.sh
+#   0 = ViT-B_baseline_seg
+#   1 = ViT-B_registers_seg
+#   2 = ViT-B_SAGA_seg
+#
+# All use nomix ViT-B backbones from E2.
+# ============================================================
+
+_base_: base.yaml
+
+variants:
+
+  - id: 0
+    name: ViT-B_baseline_seg
+    model:
+      gate:      false
+      registers: 0
+    backbone_key: baseline
+
+  - id: 1
+    name: ViT-B_registers_seg
+    model:
+      gate:      false
+      registers: 4
+    backbone_key: registers
+
+  - id: 2
+    name: ViT-B_SAGA_seg
+    model:
+      gate:      true
+      registers: 0
+    backbone_key: saga

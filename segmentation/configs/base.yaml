@@ -1,0 +1,40 @@
+# segmentation/configs/base.yaml
+# ============================================================
+# Shared segmentation hyperparameters for all E4 variants.
+# ============================================================
+
+model:
+  arch:        vit_base_patch16_224
+  patch_size:  16
+  img_size:    224          # backbone training size
+  embed_dim:   768
+  fpn_indices: [3, 6, 9, 11]
+  fpn_out_channels: 256
+  num_classes: 150          # ADE20K semantic classes (ignore_index=255)
+
+train:
+  epochs:                  80
+  warmup_epochs:           2
+  batch_size:              16    # global — 4 per GPU × 4 GPUs
+  num_workers:             4
+  input_size:              512   # square crop for training
+
+  backbone_lr:             1e-5
+  head_lr:                 1e-4
+  weight_decay:            0.05
+  grad_clip:               1.0
+  freeze_backbone_epochs:  2
+
+  amp: true
+
+  # Augmentation
+  random_flip_prob:        0.5
+  random_scale:            [0.5, 2.0]   # random resize range
+
+logging:
+  log_freq:   50
+  save_freq:  10    # save checkpoint every N epochs
+
+eval:
+  eval_freq:  10    # run mIoU eval every N epochs
+  input_size: 512   # single-scale val (no TTA)

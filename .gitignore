@@ -1,0 +1,15 @@
+#classification/outputs/
+*/checkpoints/
+*/results/
+*/logs/
+*/figures/
+*.pth
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+#saga_old/
+#tools/
+#configs/
+#scripts/
+#check_env.sh

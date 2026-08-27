@@ -1,0 +1,47 @@
+# configs/base.yaml
+# ============================================================
+# Shared training hyperparameters for all E2 variants.
+# Per-model overrides live in vit_small/base/large.yaml.
+# Do not put paths here — those go in paths.yaml.
+# ============================================================
+
+model:
+  img_size:    224
+  patch_size:  16
+  num_classes: 1000
+  pretrained:  false   # E2 trains from scratch
+
+train:
+  epochs:        300
+  warmup_epochs: 20
+  batch_size:    1024   # global — divided by n_gpus per GPU
+  optimizer:     adamw
+  lr:            1.0e-3
+  lr_scaling:    true   # scale lr = base_lr * batch_size / 1024
+  min_lr:        1.0e-6
+  weight_decay:  0.05
+  betas:         [0.9, 0.999]
+  grad_clip:     1.0
+  amp:           true
+  label_smoothing: 0.1
+
+augmentation:
+  rand_aug:           true
+  rand_aug_magnitude: 9
+  rand_aug_layers:    2
+  mixup_alpha:        0.8
+  cutmix_alpha:       1.0
+  random_erase_prob:  0.25
+
+data:
+  input_size:   224
+  num_workers:  8
+  pin_memory:   true
+
+logging:
+  log_freq:   100   # print every N steps
+  save_freq:  25    # save last.pth every N epochs (for resume)
+
+# Gate B hyperparameters (only relevant when gate: true)
+gate:
+  enabled: true

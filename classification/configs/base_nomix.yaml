@@ -1,0 +1,23 @@
+# configs/base_nomix.yaml
+# ============================================================
+# Same as base.yaml but WITHOUT MixUp and CutMix.
+# Used to isolate the effect of label-mixing augmentation
+# on the SAGA gate's spatial prior learning.
+#
+# Hypothesis: MixUp/CutMix dilute the positional gradient
+# signal to φ_h because blended images destroy the spatial
+# statistics the gate relies on.
+# ============================================================
+
+_base_: base.yaml
+
+augmentation:
+  rand_aug:           true
+  rand_aug_magnitude: 9
+  rand_aug_layers:    2
+  mixup_alpha:        0.0   # disabled
+  cutmix_alpha:       0.0   # disabled
+  random_erase_prob:  0.25
+
+train:
+  label_smoothing: 0.1      # keep label smoothing — only mixing disabled

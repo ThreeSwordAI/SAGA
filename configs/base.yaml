@@ -1,0 +1,55 @@
+# ── SAGA base configuration ───────────────────────────────────────────────────
+# All experiment configs inherit from this file via _base_: base.yaml
+# Do NOT run experiments with this file directly.
+
+model:
+  arch: vit_base_patch16_224
+  img_size: 224
+  patch_size: 16
+  num_classes: 1000
+  pretrained: false              # train from scratch for all ablations
+
+gate:
+  terms: [A, B, C, D]           # full SAGA — overridden per variant in e1_variants.yaml
+  position: G1                  # G1: after SDPA, before output projection
+  granularity: head_specific    # one scalar gate per attention head
+  lambda_0: 0.10                # CRF term weight at layer 0
+  beta: 0.10                    # CRF decay rate: λ_l = λ_0 * exp(-β * l)
+  mu: 0.05                      # diversity term weight
+  init_bias: 4.0                # σ(4.0) ≈ 0.98 → gate starts as identity
+
+data:
+  root: null                    # set via --data_root CLI or env.sh
+  input_size: 224
+  num_workers: 8
+  pin_memory: true
+
+train:
+  epochs: 100
+  batch_size: 1024              # global batch (across all GPUs)
+  optimizer: adamw
+  lr: 1.0e-3                    # base LR — scaled if lr_scaling: true
+  lr_scaling: true              # final_lr = lr * batch_size / 1024
+  min_lr: 1.0e-6
+  weight_decay: 0.05
+  betas: [0.9, 0.999]
+  grad_clip: 1.0
+  warmup_epochs: 10
+  schedule: cosine
+  label_smoothing: 0.1
+  drop_path_rate: 0.1
+  amp: true                     # bfloat16 automatic mixed precision
+
+augmentation:
+  rand_aug: true
+  rand_aug_magnitude: 9
+  rand_aug_layers: 2
+  mixup_alpha: 0.8
+  cutmix_alpha: 1.0
+  random_erase_prob: 0.25
+
+logging:
+  save_freq: 20                 # save checkpoint every N epochs
+  save_best: true               # always save best top-1 checkpoint
+  log_freq: 100                 # print log every N steps
+  use_wandb: false              # set true if wandb is configured

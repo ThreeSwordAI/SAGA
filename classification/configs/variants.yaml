@@ -1,0 +1,84 @@
+# configs/variants.yaml
+# ============================================================
+# E2 variant definitions — 9 runs total.
+# Each variant inherits from base.yaml and overrides as needed.
+#
+# Array job mapping:
+#   sbatch --array=0-8 scripts/e2_train_alex.sh
+#   SLURM_ARRAY_TASK_ID → variant id
+#
+# Three model scales × three configurations:
+#   baseline   : standard ViT, no modification
+#   registers  : ViT + 4 register tokens (Darcet et al. ICLR 2024)
+#   saga       : ViT + SAGA spatial gate (this work)
+# ============================================================
+
+_base_: base.yaml
+
+variants:
+
+  # ── ViT-Small (22M params) ──────────────────────────────────────────────
+  - id: 0
+    name: ViT-S_baseline
+    model:
+      arch: vit_small_patch16_224
+      gate: false
+      registers: 0
+
+  - id: 1
+    name: ViT-S_registers
+    model:
+      arch: vit_small_patch16_224
+      gate: false
+      registers: 4
+
+  - id: 2
+    name: ViT-S_SAGA
+    model:
+      arch: vit_small_patch16_224
+      gate: true
+      registers: 0
+
+  # ── ViT-Base (86M params) ───────────────────────────────────────────────
+  - id: 3
+    name: ViT-B_baseline
+    model:
+      arch: vit_base_patch16_224
+      gate: false
+      registers: 0
+
+  - id: 4
+    name: ViT-B_registers
+    model:
+      arch: vit_base_patch16_224
+      gate: false
+      registers: 4
+
+  - id: 5
+    name: ViT-B_SAGA
+    model:
+      arch: vit_base_patch16_224
+      gate: true
+      registers: 0
+
+  # ── ViT-Large (307M params) ─────────────────────────────────────────────
+  - id: 6
+    name: ViT-L_baseline
+    model:
+      arch: vit_large_patch16_224
+      gate: false
+      registers: 0
+
+  - id: 7
+    name: ViT-L_registers
+    model:
+      arch: vit_large_patch16_224
+      gate: false
+      registers: 4
+
+  - id: 8
+    name: ViT-L_SAGA
+    model:
+      arch: vit_large_patch16_224
+      gate: true
+      registers: 0

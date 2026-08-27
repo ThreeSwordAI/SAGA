@@ -1,0 +1,50 @@
+# detection/configs/base.yaml
+# ============================================================
+# Shared detection hyperparameters for all E3 variants.
+# ============================================================
+
+model:
+  # ViT backbone settings
+  arch:        vit_base_patch16_224
+  patch_size:  16
+  img_size:    224          # backbone was trained at this size
+  num_classes: 1000         # backbone classification head (unused in detection)
+  embed_dim:   768
+  # Intermediate block indices to extract for feature pyramid
+  # ViT-B has 12 blocks (0-11) — use 4 evenly spaced
+  fpn_indices: [3, 6, 9, 11]
+
+  # Detection head
+  num_det_classes: 80       # COCO categories
+  fpn_out_channels: 256     # FPN feature dimension
+  anchor_sizes: [[32], [64], [128], [256]]
+  anchor_ratios: [0.5, 1.0, 2.0]
+
+train:
+  epochs:           25
+  warmup_epochs:    1
+  batch_size:       8       # global — 2 per GPU × 4 GPUs
+  num_workers:      4
+
+  # Two-stage LR — backbone much lower than head
+  backbone_lr: 1.0e-5
+  head_lr: 1.0e-4
+  weight_decay:     0.05
+  grad_clip:        1.0
+
+  # Backbone freezing
+  freeze_backbone_epochs: 1   # freeze backbone for first N epochs
+
+  # Input size for detection (standard COCO)
+  min_size: 800
+  max_size: 1333
+
+  amp: true
+
+logging:
+  log_freq:  50
+  save_freq: 5    # save checkpoint every N epochs
+
+eval:
+  # Run COCO eval every N epochs during training
+  eval_freq: 5

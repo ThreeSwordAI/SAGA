@@ -1,0 +1,22 @@
+# evaluation/e6_finegrained/configs/paths.yaml.template
+# ============================================================
+# Copy to paths.yaml — gitignored after copy.
+# ============================================================
+
+data:
+  cub_tar:      /home/woody/iwi5/iwi5359h/Data/CUB-200/CUB_200_2011.tgz
+  aircraft_tar: /home/woody/iwi5/iwi5359h/Data/FGVC-Aircraft/fgvc-aircraft-2013b.tar.gz
+  stage_base:   /tmp
+
+backbones:
+  # ViT-B nomix checkpoints (E2)
+  baseline: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_baseline_nomix/best.pth
+  saga:     /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA_nomix/best.pth
+  # ViT-S nomix checkpoints (E2) — used for scale comparison in CUB rerun
+  baseline_small: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_baseline_nomix/best.pth
+  saga_small:     /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_SAGA_nomix/best.pth
+
+outputs:
+  checkpoints: /home/vault/iwi5/iwi5359h/SAGA/e6/checkpoints
+  results:     /home/vault/iwi5/iwi5359h/SAGA/e6/results
+  logs:        /home/vault/iwi5/iwi5359h/SAGA/e6/logs

@@ -1,0 +1,37 @@
+# configs/paths.yaml.template
+# ============================================================
+# Copy this file to configs/paths.yaml and fill in your paths.
+# paths.yaml is gitignored — this template is version-controlled.
+#
+# Usage:
+#   cp configs/paths.yaml.template configs/paths.yaml
+#   # then edit paths.yaml with your cluster paths
+# ============================================================
+
+cluster: alex   # or tinygpu — for documentation only
+
+data:
+  # Read-only ImageNet source (tar.gz files, never extracted)
+  train_tars:
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_0.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_1.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_2.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_3.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_4.tar.gz
+  val_tar:
+    /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/val_images.tar.gz
+
+outputs:
+  # All outputs go here — gitignored, backed up to vault
+  checkpoints: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints
+  results:     /home/vault/iwi5/iwi5359h/SAGA/e2/results
+  logs:        /home/vault/iwi5/iwi5359h/SAGA/e2/logs
+  figures:     /home/woody/iwi5/iwi5359h/saga_e2_figures
+
+scratch:
+  # Fast local disk — staged per job, deleted after
+  # Use ${SLURM_JOB_ID} in the shell script, not here
+  base: /scratch/iwi5359h
+
+code:
+  root: /home/hpc/iwi5/iwi5359h/my_repos/SAGA
