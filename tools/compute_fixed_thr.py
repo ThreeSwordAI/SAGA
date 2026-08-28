@@ -2,15 +2,26 @@
 """
 tools/compute_fixed_thr.py
 ==========================
-Calibrate one absolute sink threshold per arch from the NOMIX BASELINE
-(last.pth) diagnose norms (TASK-02 1.2). No GPU.
+Calibrate absolute sink thresholds from BASELINE (last.pth) diagnose norms.
+No GPU.
+
+v1 (TASK-02 1.2) — one tau per ARCH from the nomix baseline:
 
     python tools/compute_fixed_thr.py --diag-dir results/legacy/diag \
         --out results/diagsplit/fixed_thresholds.json
 
-For each arch: tau = median over images of (median(v_i) + k*MAD(v_i)),
-computed on last_block_patch_norms of the file matching
-<exp>_<arch>_nomix_baseline_<seed>_last_norms.npz (exactly one must match).
+v2 (TASK-02C A1) — one tau per (ARCH, RECIPE) cell from that cell's own
+baseline (the per-arch v1 tau saturated on ViT-B/mixup, whose norm scale
+dwarfs the nomix calibration). Keys are "<arch>|<recipe>". The v1 file is
+left untouched (provenance):
+
+    python tools/compute_fixed_thr.py --per-cell \
+        --diag-dir results/legacy/diag \
+        --out results/diagsplit/fixed_thresholds_v2.json
+
+Either way: tau = median over images of (median(v_i) + k*MAD(v_i)) on
+last_block_patch_norms of the matching baseline-last norms file (exactly one
+must match per arch / per cell).
 """
 
 import argparse
@@ -24,6 +35,12 @@ DEFINITION = ("per arch, on the nomix baseline last.pth diagnose norms: "
               "tau = median over images of (median(v_i) + k*MAD(v_i)) on "
               "last_block_patch_norms, k={k}; all medians are LOWER medians, "
               "matching torch.median as used by saga.metrics.sink_counts_mad")
+
+DEFINITION_V2 = ("per (arch, recipe) cell, on THAT CELL's baseline last.pth "
+                 "diagnose norms: tau = median over images of (median(v_i) + "
+                 "k*MAD(v_i)) on last_block_patch_norms, k={k}; all medians "
+                 "are LOWER medians, matching torch.median as used by "
+                 "saga.metrics.sink_counts_mad")
 
 
 def _lower_median(a: np.ndarray, axis: int) -> np.ndarray:
@@ -48,8 +65,8 @@ def compute_tau(npz_path: Path, k: float) -> float:
     return float(_lower_median(per_image_mad_thresholds(norms, k), axis=0))
 
 
-def find_source(diag_dir: Path, arch: str) -> Path:
-    pattern = f"*_{arch}_nomix_baseline_*_last_norms.npz"
+def find_source(diag_dir: Path, arch: str, recipe: str = "nomix") -> Path:
+    pattern = f"*_{arch}_{recipe}_baseline_*_last_norms.npz"
     matches = sorted(diag_dir.glob(pattern))
     if len(matches) != 1:
         raise FileNotFoundError(
@@ -58,31 +75,56 @@ def find_source(diag_dir: Path, arch: str) -> Path:
     return matches[0]
 
 
+def source_sha(npz_path: Path) -> str:
+    sibling = npz_path.with_name(npz_path.name.replace("_norms.npz", ".json"))
+    with open(sibling) as f:
+        return json.load(f)["ckpt_sha256"]
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Calibrate per-arch fixed sink thresholds from the "
-                    "nomix baseline diagnose norms.")
+        description="Calibrate fixed sink thresholds from baseline diagnose "
+                    "norms (per arch by default; per (arch, recipe) cell "
+                    "with --per-cell).")
     parser.add_argument("--diag-dir", default="results/legacy/diag")
     parser.add_argument("--out", default="results/diagsplit/fixed_thresholds.json")
     parser.add_argument("--archs", nargs="+",
                         default=["vit_small", "vit_base"])
+    parser.add_argument("--per-cell", action="store_true",
+                        help="v2: one tau per (arch, recipe), from that "
+                             "cell's own baseline; keys '<arch>|<recipe>'")
+    parser.add_argument("--recipes", nargs="+", default=["mixup", "nomix"],
+                        help="recipes for --per-cell mode")
     parser.add_argument("--k", type=float, default=5.0)
     args = parser.parse_args()
+
+    if args.per_cell and args.out == parser.get_default("out"):
+        raise SystemExit(
+            "--per-cell must not write to the v1 default path "
+            "(spec: leave the v1 file untouched) — pass --out explicitly, "
+            "e.g. --out results/diagsplit/fixed_thresholds_v2.json")
 
     diag_dir = Path(args.diag_dir)
     result = {}
     sources = {}
-    for arch in args.archs:
-        npz_path = find_source(diag_dir, arch)
-        result[arch] = compute_tau(npz_path, args.k)
+    if args.per_cell:
+        for arch in args.archs:
+            for recipe in args.recipes:
+                key = f"{arch}|{recipe}"
+                npz_path = find_source(diag_dir, arch, recipe)
+                result[key] = compute_tau(npz_path, args.k)
+                sources[key] = source_sha(npz_path)
+                print(f"{key}: tau = {result[key]:.6f}  "
+                      f"(from {npz_path.name})")
+        result["definition"] = DEFINITION_V2.format(k=args.k)
+    else:
+        for arch in args.archs:
+            npz_path = find_source(diag_dir, arch)
+            result[arch] = compute_tau(npz_path, args.k)
+            sources[arch] = source_sha(npz_path)
+            print(f"{arch}: tau = {result[arch]:.6f}  (from {npz_path.name})")
+        result["definition"] = DEFINITION.format(k=args.k)
 
-        sibling_json = npz_path.with_name(
-            npz_path.name.replace("_norms.npz", ".json"))
-        with open(sibling_json) as f:
-            sources[arch] = json.load(f)["ckpt_sha256"]
-        print(f"{arch}: tau = {result[arch]:.6f}  (from {npz_path.name})")
-
-    result["definition"] = DEFINITION.format(k=args.k)
     result["k"] = args.k
     result["source_ckpt_sha256"] = sources
     result["timestamp"] = datetime.now(timezone.utc).isoformat()

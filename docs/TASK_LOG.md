@@ -221,3 +221,40 @@ all schema/sha/bin-edge checks clean.
 
 **Pending from HPC:** nothing. TASK 02B complete. Next input: the human's
 Gate-1 framing decision (memo: `results/notes/gate1_addendum.md`).
+
+---
+
+## 2026-08-28 — TASK 02C, PHASE A (metric v2 + gate/forensics tools)
+
+Human decisions recorded in the task file: primary sink metric moves to a
+per-(arch, recipe) fixed τ (v1's per-arch τ saturated on ViT-B/mixup);
+the ViT-B/mixup cell is QUARANTINED pending forensics.
+
+**Done (local, by Claude Code):**
+- A1 `tools/compute_fixed_thr.py --per-cell` → v2 taus keyed
+  `"<arch>|<recipe>"` from each cell's OWN baseline last norms; refuses to
+  write to the v1 default path (v1 file untouched, provenance).
+  `tools/apply_fixed_thr.py --version v2 --thr-file ...` → adds ONLY
+  `sink_fixed_v2` + `fixed_thr_v2_value` (v1 fields never touched;
+  idempotent; now ATOMIC in-place rewrite via tmp+os.replace after review
+  confirmed a kill-mid-write could truncate a results JSON).
+- A2 `tools/extract_gate.py`: (default) dumps SAGA gate logits φ
+  (`blocks.{i}.attn.gate.phi` [H,196] per block → npz [L,H,N]) +
+  per-layer sigmoid-stats sidecar (mean/std/min/max, frac<0.4/<0.25/>0.75,
+  NaN/Inf), npz-first/marker-last, sha-keyed skip; (--forensics) one CSV row
+  per e2 checkpoint: top-level keys, epoch, top1, best_top1, last LR,
+  optimizer step count, scaler/EMA presence, model tensor count/params.
+- Tests: 11 new (per-cell keying incl. distractor files, v2-only writes +
+  idempotency + no-tmp-left, v1 behavior unchanged, φ round-trip on a real
+  SAGA model with layer-order check, φ stats known values + NaN, non-SAGA
+  rejection, forensics full/missing/raw-state-dict rows, v1-path guard).
+- Review workflow: 1 confirmed defect fixed (non-atomic JSON rewrite),
+  2 hardenings applied from refuted-but-noted findings (stale-marker unlink
+  in extract_gate; --per-cell v1-path guard).
+- `pytest -q`: **65 passed**. No training-code edits.
+
+**Commit:** `[TASK-02C] metric v2 + gate extraction + forensics tools (phase A)`
+
+**Pending from HPC (Phase B, ~10 min CPU):** v2 thresholds + v2 apply +
+gate dumps (8 SAGA ckpts) + forensics CSV (24 ckpts); commit + push per the
+task file's Phase-B block. Then Phase C locally.
