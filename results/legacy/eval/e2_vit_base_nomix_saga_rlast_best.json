@@ -1,0 +1,16 @@
+{
+  "top1": 77.55,
+  "top5": 92.986,
+  "loss": 1.187201552481763,
+  "n_images": 50000,
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA_nomix/best.pth",
+  "ckpt_sha256": "82456589c91ec3757509bd1d48aa6cf1e8dd51235a1138df6b7e1951181c2ba0",
+  "git_sha": "ec2c3a2ce63f4ee686ed9538943e849d478483d7",
+  "arch": "vit_base",
+  "variant": "saga",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-08-27T21:02:18.401123+00:00"
+}

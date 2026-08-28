@@ -1,0 +1,16 @@
+{
+  "top1": 75.764,
+  "top5": 91.714,
+  "loss": 1.2788173236150853,
+  "n_images": 50000,
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers/last.pth",
+  "ckpt_sha256": "3e13c788fff6812a17ec0c04a2f1505a2e3af2a9c2db9d6afe9319084cdc1e53",
+  "git_sha": "ec2c3a2ce63f4ee686ed9538943e849d478483d7",
+  "arch": "vit_base",
+  "variant": "registers",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-08-27T20:34:10.045663+00:00"
+}

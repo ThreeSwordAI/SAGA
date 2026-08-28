@@ -1,0 +1,16 @@
+{
+  "top1": 78.56,
+  "top5": 93.932,
+  "loss": 0.9907885876651294,
+  "n_images": 50000,
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_baseline_nomix/best.pth",
+  "ckpt_sha256": "67c85a1d70b30f54bdacc16c18dbac7da3abba7ca98486536dc6f7a33b76eb07",
+  "git_sha": "ec2c3a2ce63f4ee686ed9538943e849d478483d7",
+  "arch": "vit_small",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-08-27T21:23:30.569020+00:00"
+}

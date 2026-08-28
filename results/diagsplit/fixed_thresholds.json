@@ -1,0 +1,11 @@
+{
+  "vit_small": 19.859375,
+  "vit_base": 68.71875,
+  "definition": "per arch, on the nomix baseline last.pth diagnose norms: tau = median over images of (median(v_i) + k*MAD(v_i)) on last_block_patch_norms, k=5.0; all medians are LOWER medians, matching torch.median as used by saga.metrics.sink_counts_mad",
+  "k": 5.0,
+  "source_ckpt_sha256": {
+    "vit_small": "8d980da27a4b571a117e82451c8c9deff126e437206faee5120e069d3667e10d",
+    "vit_base": "2a7f8c84dc32571e95dc3745422b4960f9dd602433cd42f1e16891b6c491cac5"
+  },
+  "timestamp": "2026-08-27T21:37:17.321135+00:00"
+}
