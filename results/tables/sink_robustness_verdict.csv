@@ -1,0 +1,16 @@
+# CAVEAT: the fixed tau is PER-ARCH (calibrated on that arch's nomix baseline), so sink_fixed_thr comparisons are valid within an arch, never across arches.
+comparison,threshold,vit_base/mixup,vit_base/nomix,vit_small/mixup,vit_small/nomix
+saga_vs_baseline,sink_mad_k5,S<B,S>B,S<B,S<B
+saga_vs_baseline,sink_mu2s,S>B,S<B,S>B,S>B
+saga_vs_baseline,sink_mu3s,S<B,S<B,S<B,S<B
+saga_vs_baseline,sink_mu4s,S<B,S<B,S<B,S<B
+saga_vs_baseline,sink_mu5s,S<B,S<B,S<B,S<B
+saga_vs_baseline,sink_mu6s,S<B,S>B,S<B,S<B
+saga_vs_baseline,sink_fixed_thr,S>B,S<B,S<B,S<B
+registers_vs_baseline,sink_mad_k5,R<B,R<B,R<B,R<B
+registers_vs_baseline,sink_mu2s,R>B,R<B,R>B,R>B
+registers_vs_baseline,sink_mu3s,R<B,R<B,R<B,R<B
+registers_vs_baseline,sink_mu4s,R<B,R<B,R<B,R<B
+registers_vs_baseline,sink_mu5s,R<B,R<B,R<B,R<B
+registers_vs_baseline,sink_mu6s,R<B,R<B,R<B,R<B
+registers_vs_baseline,sink_fixed_thr,R<B,R>B,R<B,R<B

@@ -154,3 +154,42 @@ nosink + fixed-thr fields present), `fixed_thresholds.json`
 
 **Pending from HPC:** nothing. Next: human reads `results/notes/gate1_report.md`
 and decides Gate 1; awaiting pointer to the next task.
+
+---
+
+## 2026-08-28 — TASK 02B, PHASE A (sink robustness + relocation, Gate-1 addendum)
+
+**Done (local, by Claude Code):**
+- A1 `analysis/build_sink_robustness.py` → `results/tables/sink_robustness.csv`
+  (12 runs × 7 thresholds, sha-checked vs manifest) +
+  `sink_robustness_verdict.csv` (7 thresholds × 4 cells × {S,R} vs B, with
+  the per-arch-τ caveat). Key facts: ViT-B/nomix shows S<B under μ+3/4/5σ
+  AND fixed τ but S>B under MAD and μ+6σ (the H1-predicted shape);
+  ViT-B/mixup baseline+saga SATURATE the fixed τ (≈196/196 — τ was
+  calibrated on the nomix baseline; mixup ViT-B norms sit entirely above it).
+- A2 `analysis/collect_F6.py` + `plotting/plot_F6.py` →
+  `results/figures_data/F6_legacy.csv` (144 rows) +
+  `results/figures/F6_draft.pdf` (committed -f). SAGA's CLS-norm ratio ends
+  above baseline in all 4 cells; its CLS attn share ends below baseline.
+- A3 `analysis/build_gate1_addendum.py` → `results/notes/gate1_addendum.md`
+  (programmatic; corrected table, robustness matrix + factual readings +
+  saturation note, F6 final-block observations, best-vs-last recap, open
+  questions; §5 norm-scale marked PENDING PHASE B — the script self-fills it
+  from `*_normstats.json` when Phase B lands, then just re-run it).
+- Phase-B script written now: `tools/summarize_norms.py` (CPU; per-arch
+  shared log bin edges; lower-median convention; idempotent — skips only on
+  matching sha AND matching current edges).
+- Review workflow confirmed + fixed 3 memo-generator defects: MISSING
+  verdict entries were rendered as "equal"; forced H1/H2 binary could print
+  a false "H2" beside contradicting numbers (now 4-way: H1 / H2 / both /
+  neither); saturation span pooled across arches (now per-arch). All pinned
+  by tests.
+- Cross-checks vs raw JSONs (independent path): robustness 12×7, verdict
+  14×4 recomputed, F6 144×2 — zero errors. `pytest -q`: **54 passed**.
+
+**Commit:** `[TASK-02B] sink robustness + F6 draft + memo (phase A)`
+
+**Pending from HPC (Phase B, ~5 min CPU):**
+- `python tools/summarize_norms.py --diag-dir results/legacy/diag` →
+  commit `results/legacy/diag/*_normstats.json` and push.
+- Then Phase C locally: A1 histogram draft + memo §5 finalized.
