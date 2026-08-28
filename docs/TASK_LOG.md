@@ -118,3 +118,39 @@ everything written from now on must be idempotent / append-safe.
   (with nosink fields), `results/diagsplit/fixed_thresholds.json`.
 - `rederive_failures.log` verified absent/empty; `*_norms.npz` KEPT on the
   HPC (git-ignored; needed later for histograms).
+
+**Update 2026-08-28:** everything came back clean (commit `ca345fd`): 24 eval
++ 24 diag JSONs (all n_images correct, all ckpt_sha256 match the manifest,
+nosink + fixed-thr fields present), `fixed_thresholds.json`
+(vit_small τ=19.8594, vit_base τ=68.7188, k=5), no failures log.
+
+---
+
+## 2026-08-28 — TASK 02, PHASE 2 (corrected tables, F3 draft, Gate-1 report)
+
+**Done (local, by Claude Code; no GPU, no HPC needed):**
+- 2.1 completeness: all 12 e2 runs have eval(best), eval(last), diag(best),
+  diag(last) with manifest-matching `ckpt_sha256` — zero gaps.
+- 2.2 `analysis/build_legacy_tables.py` → `results/tables/legacy_e2_corrected.csv`
+  (12 rows; diagnostics from `last.pth`; sha mismatch ⇒ MISSING, never a
+  wrong-checkpoint number). Every cell mechanically cross-checked against the
+  raw JSONs via an independent code path — zero discrepancies.
+- 2.3 memo: `top1_best_minus_last` column; flags |Δ|>0.25: ViT-B/mixup
+  baseline (+0.570) and ViT-B/mixup saga (+0.750) need discussion.
+- 2.4 `analysis/collect_F3.py` → `results/figures_data/F3_legacy.csv` (sha-
+  validated against manifest); `plotting/plot_F3.py` →
+  `results/figures/F3_draft.pdf` (committed with -f; `*/figures/` is ignored).
+- 2.5 `analysis/build_gate1_report.py` → `results/notes/gate1_report.md`
+  (generated programmatically — no hand-typed numbers). **Verdicts:
+  ViT-S/mixup PASS, ViT-B/mixup PASS, ViT-S/nomix PARTIAL (registers did not
+  worsen oversmoothing), ViT-B/nomix PARTIAL (SAGA sink 15.19 > baseline
+  10.31). Overall: PARTIAL.** Gate-1 decision is the human's.
+- Review workflow confirmed + fixed: collect_F3 now treats a manifest-sha
+  mismatch as a gap (was: silently plottable); diag(best) completeness clause
+  now test-pinned; report degrades gracefully (INCOMPLETE) on MISSING cells.
+- `pytest -q`: **45 passed**. No training-code edits.
+
+**Commit:** `[TASK-02] corrected legacy tables + F3 draft + gate1 report`
+
+**Pending from HPC:** nothing. Next: human reads `results/notes/gate1_report.md`
+and decides Gate 1; awaiting pointer to the next task.
