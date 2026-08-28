@@ -1,0 +1,156 @@
+{
+  "shape_LHN": [
+    12,
+    6,
+    196
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "mean_gate": 0.5107422975319633,
+      "std_gate": 0.033638883115969236,
+      "min_gate": 0.40818553334101465,
+      "max_gate": 0.5950975805177374,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 1,
+      "mean_gate": 0.5131628011078274,
+      "std_gate": 0.03484580988069404,
+      "min_gate": 0.4103920383226403,
+      "max_gate": 0.6014464261894624,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 2,
+      "mean_gate": 0.5036654199790092,
+      "std_gate": 0.0480944550897492,
+      "min_gate": 0.24273514396056367,
+      "max_gate": 0.5482378799973961,
+      "frac_below_0.4": 0.03826530612244898,
+      "frac_below_0.25": 0.0008503401360544217,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 3,
+      "mean_gate": 0.5285992302313912,
+      "std_gate": 0.012549040863504685,
+      "min_gate": 0.49115741537093366,
+      "max_gate": 0.5682619455168146,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 4,
+      "mean_gate": 0.5335085959089964,
+      "std_gate": 0.032875235324897396,
+      "min_gate": 0.31660742938024017,
+      "max_gate": 0.5854893033002978,
+      "frac_below_0.4": 0.023809523809523808,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 5,
+      "mean_gate": 0.5526975510532819,
+      "std_gate": 0.027278871235879243,
+      "min_gate": 0.40410652032844024,
+      "max_gate": 0.6342449030013165,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 6,
+      "mean_gate": 0.5732907916452485,
+      "std_gate": 0.028528000135898197,
+      "min_gate": 0.4392080533291837,
+      "max_gate": 0.64800143031159,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 7,
+      "mean_gate": 0.5905674525423394,
+      "std_gate": 0.0345838250004138,
+      "min_gate": 0.4978059338139629,
+      "max_gate": 0.6887632603133401,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 8,
+      "mean_gate": 0.6285268490499433,
+      "std_gate": 0.04225665006960687,
+      "min_gate": 0.5191103307948579,
+      "max_gate": 0.7364484537051716,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 9,
+      "mean_gate": 0.5913803569887535,
+      "std_gate": 0.06940368210732184,
+      "min_gate": 0.4778410489372635,
+      "max_gate": 0.735588943437833,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 10,
+      "mean_gate": 0.6039792293345908,
+      "std_gate": 0.020707807645601484,
+      "min_gate": 0.5519363503494189,
+      "max_gate": 0.6656533753879753,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 11,
+      "mean_gate": 0.5,
+      "std_gate": 0.0,
+      "min_gate": 0.5,
+      "max_gate": 0.5,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    }
+  ],
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_SAGA/last.pth",
+  "ckpt_sha256": "92a03a4716ce07c0460eb132720d8a816aaa2bcde49713b86c57c774fef22995",
+  "timestamp": "2026-08-28T15:27:56.348937+00:00"
+}

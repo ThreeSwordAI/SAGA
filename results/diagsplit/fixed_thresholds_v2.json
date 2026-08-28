@@ -1,0 +1,15 @@
+{
+  "vit_small|mixup": 20.90625,
+  "vit_small|nomix": 19.859375,
+  "vit_base|mixup": 226.75,
+  "vit_base|nomix": 68.71875,
+  "definition": "per (arch, recipe) cell, on THAT CELL's baseline last.pth diagnose norms: tau = median over images of (median(v_i) + k*MAD(v_i)) on last_block_patch_norms, k=5.0; all medians are LOWER medians, matching torch.median as used by saga.metrics.sink_counts_mad",
+  "k": 5.0,
+  "source_ckpt_sha256": {
+    "vit_small|mixup": "cd926200127b98cbc597ddad82d84fd823376addc0ac1075a98de73b21e7d17d",
+    "vit_small|nomix": "8d980da27a4b571a117e82451c8c9deff126e437206faee5120e069d3667e10d",
+    "vit_base|mixup": "467daf9dfcfd712534737cf727ff05155b31e4905cd3597da766224526ba70a5",
+    "vit_base|nomix": "2a7f8c84dc32571e95dc3745422b4960f9dd602433cd42f1e16891b6c491cac5"
+  },
+  "timestamp": "2026-08-28T15:26:52.206163+00:00"
+}

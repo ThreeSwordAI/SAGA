@@ -1,0 +1,156 @@
+{
+  "shape_LHN": [
+    12,
+    12,
+    196
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "mean_gate": 0.4990931737285088,
+      "std_gate": 0.031156160711885726,
+      "min_gate": 0.37995115762044945,
+      "max_gate": 0.610512026945966,
+      "frac_below_0.4": 0.002551020408163265,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 1,
+      "mean_gate": 0.4997751938917087,
+      "std_gate": 0.030691251715676562,
+      "min_gate": 0.2748106923710419,
+      "max_gate": 0.6142564410264135,
+      "frac_below_0.4": 0.01403061224489796,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 2,
+      "mean_gate": 0.50641708531934,
+      "std_gate": 0.037116091951130706,
+      "min_gate": 0.26025494872631894,
+      "max_gate": 0.5905502180208342,
+      "frac_below_0.4": 0.023809523809523808,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 3,
+      "mean_gate": 0.5247951689384,
+      "std_gate": 0.026659325548928376,
+      "min_gate": 0.3293050788531809,
+      "max_gate": 0.5871546777086101,
+      "frac_below_0.4": 0.017006802721088437,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 4,
+      "mean_gate": 0.5403679419280607,
+      "std_gate": 0.0236348773953129,
+      "min_gate": 0.3703133253215269,
+      "max_gate": 0.6120761166964659,
+      "frac_below_0.4": 0.0012755102040816326,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 5,
+      "mean_gate": 0.5652117945996226,
+      "std_gate": 0.026946715294937154,
+      "min_gate": 0.415958672232944,
+      "max_gate": 0.6317296137223867,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 6,
+      "mean_gate": 0.6071064477559832,
+      "std_gate": 0.020108620273350936,
+      "min_gate": 0.50602283206899,
+      "max_gate": 0.6737308855424629,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 7,
+      "mean_gate": 0.6203538739929346,
+      "std_gate": 0.039337456378638336,
+      "min_gate": 0.48150154751053065,
+      "max_gate": 0.7337219627399545,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 8,
+      "mean_gate": 0.6515706049768102,
+      "std_gate": 0.021960411323688846,
+      "min_gate": 0.5482553144123758,
+      "max_gate": 0.7379262166083304,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 9,
+      "mean_gate": 0.6351247757260147,
+      "std_gate": 0.02303180273432129,
+      "min_gate": 0.5687314201809877,
+      "max_gate": 0.6975070359503006,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 10,
+      "mean_gate": 0.6400258314644022,
+      "std_gate": 0.03320291689800133,
+      "min_gate": 0.565961667216963,
+      "max_gate": 0.7327139067657649,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 11,
+      "mean_gate": 0.5,
+      "std_gate": 0.0,
+      "min_gate": 0.5,
+      "max_gate": 0.5,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    }
+  ],
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA_nomix/last.pth",
+  "ckpt_sha256": "4a1c5a1fe54692afbffdc25f26b9491c255d826f27aefeec9b74cf775ba43ef2",
+  "timestamp": "2026-08-28T15:27:55.355512+00:00"
+}

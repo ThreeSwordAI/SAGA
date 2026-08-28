@@ -1,0 +1,156 @@
+{
+  "shape_LHN": [
+    12,
+    6,
+    196
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "mean_gate": 0.5107439791039996,
+      "std_gate": 0.033646027341937945,
+      "min_gate": 0.4081610701768175,
+      "max_gate": 0.5951073036381148,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 1,
+      "mean_gate": 0.5131656103509115,
+      "std_gate": 0.034852925920672385,
+      "min_gate": 0.41036830620788955,
+      "max_gate": 0.6014580063518947,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 2,
+      "mean_gate": 0.5036662762475779,
+      "std_gate": 0.04810198177079449,
+      "min_gate": 0.24268669886089275,
+      "max_gate": 0.5482304064873167,
+      "frac_below_0.4": 0.03826530612244898,
+      "frac_below_0.25": 0.0008503401360544217,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 3,
+      "mean_gate": 0.5286035672173196,
+      "std_gate": 0.0125502268726976,
+      "min_gate": 0.4911628488705825,
+      "max_gate": 0.568282513241912,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 4,
+      "mean_gate": 0.533514419703504,
+      "std_gate": 0.03288056962944156,
+      "min_gate": 0.316577897161989,
+      "max_gate": 0.5855108495665611,
+      "frac_below_0.4": 0.023809523809523808,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 5,
+      "mean_gate": 0.5527076598614308,
+      "std_gate": 0.027283617451880886,
+      "min_gate": 0.40409116982125426,
+      "max_gate": 0.6342717131083196,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 6,
+      "mean_gate": 0.5733051715084223,
+      "std_gate": 0.028532611173195017,
+      "min_gate": 0.4391978281202283,
+      "max_gate": 0.6480441871482784,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 7,
+      "mean_gate": 0.5905822883513947,
+      "std_gate": 0.034588690255697246,
+      "min_gate": 0.49780857080311575,
+      "max_gate": 0.6888011694577029,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 8,
+      "mean_gate": 0.6285460346259836,
+      "std_gate": 0.04226399031705217,
+      "min_gate": 0.5191104777288651,
+      "max_gate": 0.7365038182107628,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 9,
+      "mean_gate": 0.5913945066359784,
+      "std_gate": 0.06941115781015474,
+      "min_gate": 0.4778354273640725,
+      "max_gate": 0.7356432413621449,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 10,
+      "mean_gate": 0.6039968242104351,
+      "std_gate": 0.02071271675668126,
+      "min_gate": 0.5519298424607461,
+      "max_gate": 0.6656866843523777,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    },
+    {
+      "layer": 11,
+      "mean_gate": 0.5,
+      "std_gate": 0.0,
+      "min_gate": 0.5,
+      "max_gate": 0.5,
+      "frac_below_0.4": 0.0,
+      "frac_below_0.25": 0.0,
+      "frac_above_0.75": 0.0,
+      "has_nan": false,
+      "has_inf": false
+    }
+  ],
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_SAGA/best.pth",
+  "ckpt_sha256": "09d1889c7061db0903edad420833ec1147e507572b28038ff75e1efea139b672",
+  "timestamp": "2026-08-28T15:27:55.874055+00:00"
+}

@@ -50,5 +50,7 @@
   ],
   "reg_norm_mean": null,
   "seed": 0,
-  "timestamp": "2026-08-27T21:22:44.849403+00:00"
+  "timestamp": "2026-08-27T21:22:44.849403+00:00",
+  "sink_fixed_v2": 5.4322,
+  "fixed_thr_v2_value": 20.90625
 }
