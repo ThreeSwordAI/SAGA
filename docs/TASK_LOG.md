@@ -193,3 +193,31 @@ and decides Gate 1; awaiting pointer to the next task.
 - `python tools/summarize_norms.py --diag-dir results/legacy/diag` →
   commit `results/legacy/diag/*_normstats.json` and push.
 - Then Phase C locally: A1 histogram draft + memo §5 finalized.
+
+**Update 2026-08-28:** Phase B back (commit `2eab70f`): 24 normstats files,
+all schema/sha/bin-edge checks clean.
+
+---
+
+## 2026-08-28 — TASK 02B, PHASE C (histograms + memo finalized)
+
+**Done (local, by Claude Code):**
+- C1 `plotting/plot_A1.py` → `results/figures/A1_norm_hist_draft.pdf`
+  (committed -f): per-cell overlaid log-x/log-y norm histograms from the
+  normstats (per-arch shared bins), fixed τ solid + per-variant MAD
+  thresholds dashed. The ViT-B/mixup fixed-τ saturation is directly visible
+  (baseline+SAGA bulks sit entirely right of τ).
+- C2 memo §5 finalized by re-running `analysis/build_gate1_addendum.py`.
+  Verified by independent recompute from raw normstats (0 errors).
+  SAGA-vs-baseline relative changes (threshold / p99.9 / max):
+  ViT-S mixup −23.7/−56.3/−54.5 → neither pattern (extremes shrank MORE
+  than the threshold); ViT-S nomix −14.9/−52.2/−52.6 → neither;
+  ViT-B mixup +28.7/−52.5/−45.7 → neither (threshold GREW, extremes
+  shrank); **ViT-B nomix −23.9/+54.5/+39.4 → BOTH signatures (threshold
+  shrank while extremes grew — fewer-but-larger outliers).**
+- Review workflow: 0 findings. `pytest -q`: **54 passed**.
+
+**Commit:** `[TASK-02B] histograms + memo finalized (phase C)`
+
+**Pending from HPC:** nothing. TASK 02B complete. Next input: the human's
+Gate-1 framing decision (memo: `results/notes/gate1_addendum.md`).
