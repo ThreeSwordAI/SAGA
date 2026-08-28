@@ -284,6 +284,75 @@ def sec_normscale(diag_dir: Path, t):
     return L
 
 
+def sec_v2_postscript(robustness_rows, verdict_rows, cells,
+                      thr_v2_path: Path, forensics_path: Path):
+    """TASK-02C postscript: per-cell fixed-tau v2 outcome + forensics pointer.
+    Renders only when the v2 data exists."""
+    if not thr_v2_path.exists() or not robustness_rows \
+            or "sink_fixed_v2" not in robustness_rows[0]:
+        return []
+    thr = json.load(open(thr_v2_path))
+    L = ["## 7. Postscript (TASK-02C): fixed threshold v2 + forensics",
+         "",
+         "The primary fixed τ is now calibrated PER (arch, recipe) on that "
+         "cell's own baseline (v1's per-arch τ saturated on ViT-B/mixup). "
+         "v2 taus (`results/diagsplit/fixed_thresholds_v2.json`): "
+         + "; ".join(f"{k} = {fmt(thr[k])}" for k in sorted(thr)
+                     if "|" in k) + ".",
+         ""]
+
+    v2_counts = [(r["arch"], r["recipe"], r["variant"],
+                  float(r["sink_fixed_v2"]))
+                 for r in robustness_rows
+                 if r.get("sink_fixed_v2") not in (None, "", "MISSING")]
+    sat = [x for x in v2_counts if x[3] >= SATURATION_FRAC * N_PATCHES]
+    hi = max(v2_counts, key=lambda x: x[3])
+    if not sat:
+        L.append(f"Saturation under v2 (criterion: count ≥ "
+                 f"{SATURATION_FRAC:.0%} of {N_PATCHES} tokens): none. "
+                 f"Max observed count: {fmt(hi[3])}/{N_PATCHES} "
+                 f"({ARCH_NAME[hi[0]]}/{hi[1]} {hi[2]}).")
+    else:
+        L.append(f"Saturation under v2 (criterion: count ≥ "
+                 f"{SATURATION_FRAC:.0%} of {N_PATCHES} tokens): "
+                 + "; ".join(f"{ARCH_NAME[a]}/{r} {v}: {fmt(x)}/{N_PATCHES}"
+                             for a, r, v, x in sat) + ".")
+    L.append("")
+    L.append("Ordering under sink_fixed_v2 (from the rebuilt verdict "
+             "matrix):")
+    for row in verdict_rows:
+        if row["threshold"] != "sink_fixed_v2":
+            continue
+        L.append(f"- {row['comparison']}: "
+                 + "; ".join(f"{ARCH_NAME[a]}/{r} {row[f'{a}/{r}']}"
+                             for a, r in cells) + ".")
+    L.append("")
+    # completeness summary DERIVED from the forensics CSV, not asserted
+    csv_path = Path("results/legacy/ckpt_forensics.csv")
+    if forensics_path.exists() and csv_path.exists():
+        FINAL_EPOCH = 299
+        frows = [r for r in csv.DictReader(open(csv_path, newline=""))
+                 if r["filename"] == "last.pth"]
+        bad = [r for r in frows if int(r["epoch"]) != FINAL_EPOCH]
+        if bad:
+            detail = "; ".join(
+                f"{ARCH_NAME[r['arch']]}/{r['recipe']}/{r['variant']} at "
+                f"{r['epoch']}" for r in sorted(
+                    bad, key=lambda r: (r["arch"], r["recipe"],
+                                        r["variant"])))
+            L.append(f"Checkpoint forensics (full completeness table: "
+                     f"`results/notes/bmixup_forensics.md`): {len(bad)} of "
+                     f"{len(frows)} runs have last.pth below the final "
+                     f"epoch {FINAL_EPOCH} — {detail}. The remaining "
+                     f"{len(frows) - len(bad)} runs completed.")
+        else:
+            L.append(f"Checkpoint forensics (`results/notes/"
+                     f"bmixup_forensics.md`): all {len(frows)} runs' "
+                     f"last.pth carry epoch {FINAL_EPOCH} (complete).")
+        L.append("")
+    return L
+
+
 def sec_open_questions():
     return [
         "## 6. Open questions for the human",
@@ -337,6 +406,10 @@ def main():
     L += sec_best_last(t)
     L += sec_normscale(Path(args.diag_dir), t)
     L += sec_open_questions()
+    L += sec_v2_postscript(
+        robustness_rows, verdict_rows, cells,
+        Path("results/diagsplit/fixed_thresholds_v2.json"),
+        Path("results/notes/bmixup_forensics.md"))
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

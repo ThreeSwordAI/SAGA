@@ -12,7 +12,7 @@ import tools.summarize_norms as summarize_norms
 
 THRESH_FIELDS = {"sink_mad_k5": 3.0, "sink_mu2s": 5.0, "sink_mu3s": 2.0,
                  "sink_mu4s": 1.0, "sink_mu5s": 0.5, "sink_mu6s": 0.25,
-                 "sink_fixed_thr": 4.0}
+                 "sink_fixed_thr": 4.0, "sink_fixed_v2": 8.0}
 
 
 def _write_manifest(path, rows):
@@ -54,7 +54,7 @@ def test_verdict_matrix_orders_and_ties(tmp_path):
 
     cells, rows = build_verdict(diags)
     assert cells == [("vit_small", "nomix")]
-    assert len(rows) == 14                          # 7 thresholds x 2 blocks
+    assert len(rows) == 16                          # 8 thresholds x 2 blocks
     for row in rows:
         if row["comparison"] == "saga_vs_baseline":
             assert row["vit_small/nomix"] == "S<B"

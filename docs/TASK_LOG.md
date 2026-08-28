@@ -258,3 +258,45 @@ the ViT-B/mixup cell is QUARANTINED pending forensics.
 **Pending from HPC (Phase B, ~10 min CPU):** v2 thresholds + v2 apply +
 gate dumps (8 SAGA ckpts) + forensics CSV (24 ckpts); commit + push per the
 task file's Phase-B block. Then Phase C locally.
+
+**Update 2026-08-28:** Phase B back (`417f03c`), all outputs verified clean
+(v2 taus incl. vit_base|mixup=226.75; v2 fields added with v1 untouched;
+8 φ dumps, no NaN/Inf; 24-row forensics CSV).
+
+---
+
+## 2026-08-28 — TASK 02C, PHASE C (v2 robustness, gate maps, forensics note)
+
+**Done (local, by Claude Code):**
+- C1: `sink_robustness{,_verdict}.csv` rebuilt with `sink_fixed_v2` (v1
+  kept; 8 thresholds × 2 × 4 cells). **No saturation under v2** (max count
+  175.90/196, ViT-B/nomix registers, under the ≥95% flag). Under v2:
+  SAGA < baseline in 3 cells; **ViT-B/mixup still S>B (44.73 vs 13.81)**;
+  registers < baseline except ViT-B/nomix R>B.
+- C2: `plotting/plot_gates_legacy.py` → `results/figures/
+  gates_legacy_draft.pdf` (4 per-layer×head map pages + summary panel,
+  committed -f). All four SAGA runs share a mild gate profile (means
+  0.48–0.65, peak at layer 8, final layer ≈0.5).
+- C3 (amended): `analysis/build_bmixup_forensics.py` →
+  `results/notes/bmixup_forensics.md` with the 24-checkpoint completeness
+  table. Epoch semantics verified from the trainer save code (0-indexed;
+  last.pth only at k·25−1 or 299; complete ⇔ last==299). **Finding: all
+  three ViT-B/mixup runs are INCOMPLETE — last.pth at epochs 199 (baseline),
+  249 (registers), 74 (SAGA, LR 8.5e-4); SAGA's best.pth (89) is newer than
+  its last.pth (74). All 9 other runs complete at 299, LR 1e-6.** Evidence
+  table incomplete-vs-pathological, no verdict.
+- C4: addendum §7 postscript (v2 taus, criterion-stated saturation line,
+  v2 orderings, CSV-derived completeness summary).
+- Review workflow confirmed 4 facts-discipline defects, all fixed:
+  "never resubmitted" speculation replaced by the derivable interval;
+  blanket "far below" saturation line now states criterion + max count;
+  two hardcoded prose blocks (addendum forensics sentence, §3 gate-profile
+  summary) now computed from the data.
+- Note numbers verified against source files by independent recompute
+  (0 errors). `pytest -q`: **65 passed**. No training-code edits.
+
+**Commit:** `[TASK-02C] v2 robustness + gate maps + forensics note (phase C)`
+
+**Pending from HPC:** nothing. TASK 02C complete. Next input: the human's
+decision on the quarantined ViT-B/mixup cell (retrain vs drop) and Gate-1
+framing.

@@ -26,11 +26,13 @@ import sys
 from pathlib import Path
 
 THRESHOLDS = ["sink_mad_k5", "sink_mu2s", "sink_mu3s", "sink_mu4s",
-              "sink_mu5s", "sink_mu6s", "sink_fixed_thr"]
+              "sink_mu5s", "sink_mu6s", "sink_fixed_thr", "sink_fixed_v2"]
 
-CAVEAT = ("# CAVEAT: the fixed tau is PER-ARCH (calibrated on that arch's "
-          "nomix baseline), so sink_fixed_thr comparisons are valid within "
-          "an arch, never across arches.")
+CAVEAT = ("# CAVEAT: sink_fixed_thr (v1) tau is PER-ARCH (calibrated on the "
+          "arch's nomix baseline) and saturated on ViT-B/mixup; "
+          "sink_fixed_v2 tau is PER-(ARCH, RECIPE), calibrated on each "
+          "cell's own baseline. Fixed-threshold comparisons are valid "
+          "within one calibration cell, never across.")
 
 
 def load_diag_last(manifest, diag_dir):
@@ -103,7 +105,7 @@ def main():
         w.writeheader()
         for (arch, recipe, variant), d in sorted(diags.items()):
             w.writerow({"arch": arch, "recipe": recipe, "variant": variant,
-                        **{t: d[t] for t in THRESHOLDS},
+                        **{t: d.get(t, "MISSING") for t in THRESHOLDS},
                         "ckpt_sha256": d["ckpt_sha256"]})
     print(f"wrote {out}: {len(diags)} runs")
 
