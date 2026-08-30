@@ -300,3 +300,44 @@ task file's Phase-B block. Then Phase C locally.
 **Pending from HPC:** nothing. TASK 02C complete. Next input: the human's
 decision on the quarantined ViT-B/mixup cell (retrain vs drop) and Gate-1
 framing.
+
+---
+
+## 2026-08-31 — TASK 05, PHASE A (trainer fixes + rerun launch tooling)
+
+**Done (local, by Claude Code). First task allowed to modify the trainer.**
+- `classification/tools/train.py` rewritten for the e2r runs, math
+  legacy-identical (verified: build_model verbatim; timm loader args
+  identical + explicit timm defaults for prefetcher/persistent workers;
+  same criteria/optimizer/LR-scaling/cosine args; per-iter step_update kept,
+  the legacy per-epoch scheduler.step(epoch+1) removed after EMPIRICALLY
+  verifying it is a value no-op at t_in_epochs=False). New: seeding (M4,
+  per-rank streams reproduce legacy independence), exact full-val with
+  all_reduce (B1) + best on the reduced value, results/runs/<run_id>/
+  contract (meta/config/log.csv append-safe), atomic last.pth EVERY epoch
+  with per-rank RNG + sampler epoch + schedule geometry, `--resume auto`
+  (same command fresh/resume; log dedup; geometry guards: steps_per_epoch
+  drift = hard error, --max_epochs change = rebuilt scheduler warning),
+  φ dump every epoch, diag every 10 epochs (norms-only), optional
+  grad-φ logging.
+- `configs/e2r_matrix.yaml` (10 runs; log_grad_phi only on the two
+  designated ViT-S saga s1 runs), `scripts/gen_slurm_chain.py` →
+  10 sbatch+submit chains (singleton + afterany; header per legacy e2
+  script), `scripts/sync_results.sh`.
+- Tests: 10 new (T-eq incl. 1-step loss/grad vs legacy path; T-resume with
+  poisoned-row dedup; T-atomic kill; T-contract; geometry-drift refusal;
+  fresh-start leftover-log truncation). `pytest -q`: **75 passed**.
+- Review workflow (20 agents): 9 confirmed findings → 4 fixed in code
+  (submit-script extend hazard → singleton; scheduler-geometry poisoning →
+  guards; cross-rank RNG correlation → per-rank reseed; leftover-log
+  duplicates → fresh-start truncation). **1 LAUNCH-BLOCKING question for
+  the human: per the committed legacy code, variants_nomix.yaml's top-level
+  augmentation block was silently DROPPED by load_config — the legacy
+  "nomix" runs may have trained WITH mixup. Must be settled on the HPC
+  (grep the legacy resolved config) BEFORE launching any nomix chain.**
+
+**Commit:** `[TASK-05] trainer fixes (seeding, full-val, resume, contract) + launch tooling`
+
+**Pending from HPC:** human answers the nomix question; smoke run; then the
+chain submissions (see the task's end-of-task block). Progress arrives via
+`scripts/sync_results.sh` pushes (log.csv, diag, gates, meta per run).

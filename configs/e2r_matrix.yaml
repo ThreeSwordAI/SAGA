@@ -1,0 +1,36 @@
+# configs/e2r_matrix.yaml — TASK-05 seeded rerun matrix (10 runs)
+# ==============================================================
+# Consumed by classification/tools/train.py (--matrix ... --run <run_id>)
+# and scripts/gen_slurm_chain.py. Every run resolves onto the LEGACY
+# configs (classification/configs/base.yaml [+ base_nomix.yaml]) so the
+# new runs pool with the 9 valid legacy runs. The knobs below default to
+# their legacy values and are recorded resolved in each run's meta.json.
+
+config_dir: ../classification/configs
+
+defaults:
+  gate_init_logit: 0.0        # legacy: phi = 0  ->  gate = 0.5
+  wd_phi_zero: false          # legacy: weight decay applies to phi
+  drop_path_rate: 0.0         # legacy: no drop path
+  diag_freq: 10               # diag/diag_e###.json every N epochs
+  diag_split: results/diagsplit/val_diag_split.json
+  diag_n_effrank: 10000
+  grad_log_every: 100         # log_grad_phi cadence (iters)
+  grad_log_epochs: 31         # ... for epochs 0..30
+
+# SLURM chain lengths (24 h walltime each): ViT-S ~35 h -> 2; ViT-B ~82 h -> 4
+chain:
+  vit_small_patch16_224: 2
+  vit_base_patch16_224: 4
+
+runs:
+  e2r_vits_nomix_baseline_s1: {arch: vit_small_patch16_224, recipe: nomix, variant: baseline, seed: 1}
+  e2r_vits_nomix_baseline_s2: {arch: vit_small_patch16_224, recipe: nomix, variant: baseline, seed: 2}
+  e2r_vits_nomix_saga_s1:     {arch: vit_small_patch16_224, recipe: nomix, variant: saga, seed: 1, log_grad_phi: true}
+  e2r_vits_nomix_saga_s2:     {arch: vit_small_patch16_224, recipe: nomix, variant: saga, seed: 2}
+  e2r_vits_mixup_baseline_s1: {arch: vit_small_patch16_224, recipe: mixup, variant: baseline, seed: 1}
+  e2r_vits_mixup_baseline_s2: {arch: vit_small_patch16_224, recipe: mixup, variant: baseline, seed: 2}
+  e2r_vits_mixup_saga_s1:     {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 1, log_grad_phi: true}
+  e2r_vits_mixup_saga_s2:     {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 2}
+  e2r_vitb_mixup_baseline_s1: {arch: vit_base_patch16_224, recipe: mixup, variant: baseline, seed: 1}
+  e2r_vitb_mixup_saga_s1:     {arch: vit_base_patch16_224, recipe: mixup, variant: saga, seed: 1}
