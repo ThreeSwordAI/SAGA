@@ -341,3 +341,66 @@ framing.
 **Pending from HPC:** human answers the nomix question; smoke run; then the
 chain submissions (see the task's end-of-task block). Progress arrives via
 `scripts/sync_results.sh` pushes (log.csv, diag, gates, meta per run).
+
+**Update 2026-09-04/05:** smoke PASSED (steps/epoch 1251 = legacy). Six
+mixup chains ran to completion (300 contiguous epochs each; resume machinery
+worked in production). SAGA wins top-1 in all three cells (S/mixup s1 +0.47,
+s2 +0.83, B/mixup +0.22 on best). Ground truth from HPC: legacy "nomix"
+config dump shows mixup 0.8/cutmix 1.0 — the nomix label is FALSE (see
+TASK-06B). ViT-B/mixup diag: SAGA oversmooth 0.324 vs 0.733 but MAD-sinks
+18.7 vs 9.5 — the ViT-B MAD pattern reproduces on a clean seeded run.
+
+---
+
+## 2026-09-05 — TASK 06 PHASE 1 + TASK 06B PART 1 (recipe-identity correction)
+
+TASK 06 had NOT been started; per 06B 1.1 its Phase 1 tooling was built now,
+with 06B's corrections layered on. Reconciliations recorded:
+- **PROJECT.md did not exist** → created `docs/PROJECT.md` as a stub carrying
+  the mandated erratum verbatim; full description queued for the milestone
+  rewrite.
+- **TASK-06 1.2 (extend v2 with vit_base|mixup) is unsatisfiable**: that key
+  already exists in `fixed_thresholds_v2.json` (TASK-02C, calibrated on the
+  VOID legacy ViT-B baseline, epoch-199). Reconciliation (recorded in the
+  erratum note's "Threshold governance"): v2 is FROZEN as TASK-02C
+  provenance; the e2r-calibrated ViT-B/mixup τ lives in the CANON file; v2
+  is never applied to e2r run dirs.
+- derive_runs is a runtime DRIVER, not a script generator (skip-guard shas
+  must be hashed beside the HPC-only checkpoints; documented in the tool).
+
+**Done (local):**
+- `tools/derive_runs.py` — idempotent eval+diagnose+summarize driver over
+  `results/runs/e2r_*` with a run-COMPLETION gate (end_time + final log
+  epoch; mid-training checkpoints are never derived as "final"; incomplete
+  runs deferred, not failed) and full failure logging.
+- `analysis/check_eval_consistency.py` — eval(last) vs the epoch-299 log
+  row; truncated runs are themselves WARNINGs.
+- `tools/compute_fixed_thr.py --cell CELL=NPZ` — extend/create thresholds
+  files; existing keys/definition immutable, k-mismatch refused, no-op
+  reruns leave the file bytes untouched, v1 path unreachable.
+  `--definition canon` creates `fixed_thresholds_canon.json` (per
+  (arch, recipe_actual), seeded-s1-baseline calibration).
+- `tools/apply_fixed_thr.py --version canon` (+ `--runs-root`): fields
+  `sink_fixed_canon`/`canon_thr_value` only; legacy dirnames remapped per
+  the erratum (ViT-S nomix→mixup; ViT-B nomix→pending, skipped); run-dir
+  diags resolve recipe from their own config.resolved.yaml. v2 also accepts
+  run-dir paths. v1/v2 fields untouched everywhere.
+- `analysis/build_recipe_erratum.py` → `results/notes/recipe_erratum.md`
+  (proof recomputed live: legacy nomix-vs-mixup resolved diff = ZERO keys;
+  true-nomix = exactly mixup_alpha+cutmix_alpha → 0). `docs/PROJECT.md`
+  erratum. Manifest gained `recipe_actual` (ViT-S e2 = mixup, ViT-B e2 =
+  pending, others blank) — committed separately (`d0f385e`).
+- Review workflow (11 agents): 5 confirmed findings, all fixed (the v2-key
+  conflict above; k-mismatch guard; completion gate; summarize_norms
+  failure capture; consistency checker epoch-299 semantics).
+- `pytest -q`: **89 passed**. eval/diagnose/trainer untouched this task.
+
+**Commits:** `d0f385e` (manifest), `[TASK-06] new-run derivation tooling
+(phase 1)`, `[TASK-06B] recipe-identity correction (part 1)`.
+
+**Pending from HPC (combined TASK-06 P2 + 06B Part 2):** derivation job over
+the 6 completed runs; provenance harvest of the 12 legacy resolved configs
+(ViT-B nomix grep decides `recipe_actual`); canon τ compute+apply; two HPC
+commits + push. The four TRUE-NOMIX chains submitted (commands printed).
+Then 06B Part 3 locally (pooled stats keyed by recipe_actual, grad-φ, 4-way
+gate agreement, e2r_first_look note).

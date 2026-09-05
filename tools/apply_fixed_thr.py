@@ -32,7 +32,19 @@ from pathlib import Path
 import numpy as np
 
 FIELDS = {"v1": ("sink_fixed_thr", "fixed_thr_value"),
-          "v2": ("sink_fixed_v2", "fixed_thr_v2_value")}
+          "v2": ("sink_fixed_v2", "fixed_thr_v2_value"),
+          "canon": ("sink_fixed_canon", "canon_thr_value")}
+
+# recipe_actual for the LEGACY dirname-recipes (results/notes/recipe_erratum.md:
+# the legacy config loader never applied the nomix block, so every legacy
+# ViT-S run trained WITH mixup; the ViT-B "nomix" trio came from uncommitted
+# configs and stays PENDING until the Part-2 provenance harvest).
+LEGACY_RECIPE_ACTUAL = {
+    ("vit_small", "mixup"): "mixup",
+    ("vit_small", "nomix"): "mixup",
+    ("vit_base", "mixup"): "mixup",
+    ("vit_base", "nomix"): None,      # pending
+}
 
 
 def fixed_count_mean(norms: np.ndarray, tau: float) -> float:
@@ -47,6 +59,39 @@ def recipe_from_stem(stem: str):
     return parts[3] if len(parts) == 7 else None
 
 
+def recipe_from_run_dir(json_path: Path):
+    """diag JSON inside results/runs/<run>/diag/ -> the run's own recipe
+    (which IS recipe_actual for e2r runs, by construction)."""
+    run_dir = json_path.parent.parent
+    cfg_path = run_dir / "config.resolved.yaml"
+    if json_path.parent.name != "diag" or not cfg_path.exists():
+        return None
+    import yaml
+    return yaml.safe_load(open(cfg_path)).get("recipe")
+
+
+def resolve_key(json_path: Path, arch: str, version: str):
+    """Threshold key for this diag file, or (None, reason)."""
+    if version == "v1":
+        return arch, None
+    dirname_recipe = recipe_from_stem(json_path.stem)
+    run_recipe = None if dirname_recipe else recipe_from_run_dir(json_path)
+    if version == "v2":
+        recipe = dirname_recipe or run_recipe
+        if recipe is None:
+            return None, "cannot parse recipe from filename"
+        return f"{arch}|{recipe}", None
+    # canon: cell identity = recipe_actual, never the directory name
+    if dirname_recipe is not None:
+        actual = LEGACY_RECIPE_ACTUAL.get((arch, dirname_recipe))
+        if actual is None:
+            return None, "recipe_actual pending (legacy ViT-B nomix trio)"
+        return f"{arch}|{actual}", None
+    if run_recipe is not None:
+        return f"{arch}|{run_recipe}", None
+    return None, "cannot resolve recipe_actual"
+
+
 def apply_to_file(json_path: Path, thresholds: dict,
                   version: str = "v1") -> str:
     npz_path = json_path.with_name(json_path.stem + "_norms.npz")
@@ -57,13 +102,9 @@ def apply_to_file(json_path: Path, thresholds: dict,
         diag = json.load(f)
 
     arch = diag.get("arch")
-    if version == "v1":
-        key = arch
-    else:
-        recipe = recipe_from_stem(json_path.stem)
-        if recipe is None:
-            return "cannot parse recipe from filename"
-        key = f"{arch}|{recipe}"
+    key, reason = resolve_key(json_path, arch, version)
+    if key is None:
+        return reason
     if key not in thresholds:
         return f"key {key!r} not in thresholds"
 
@@ -90,14 +131,22 @@ def main():
     parser.add_argument("--diag-dir", default="results/legacy/diag")
     parser.add_argument("--thresholds", "--thr-file", dest="thresholds",
                         default="results/diagsplit/fixed_thresholds.json")
-    parser.add_argument("--version", choices=["v1", "v2"], default="v1")
+    parser.add_argument("--version", choices=["v1", "v2", "canon"],
+                        default="v1")
+    parser.add_argument("--runs-root", default=None,
+                        help="ALSO apply to every results/runs/<run>/diag/ "
+                             "under this root (e.g. results/runs)")
     args = parser.parse_args()
 
     with open(args.thresholds) as f:
         thresholds = json.load(f)
 
+    targets = sorted(Path(args.diag_dir).glob("*.json"))
+    if args.runs_root:
+        targets += sorted(Path(args.runs_root).glob("*/diag/*.json"))
+
     updated = skipped = 0
-    for json_path in sorted(Path(args.diag_dir).glob("*.json")):
+    for json_path in targets:
         if json_path.name.endswith("_normstats.json"):
             continue
         status = apply_to_file(json_path, thresholds, version=args.version)
