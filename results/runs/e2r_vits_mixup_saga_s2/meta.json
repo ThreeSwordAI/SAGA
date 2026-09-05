@@ -1,0 +1,32 @@
+{
+  "run_id": "e2r_vits_mixup_saga_s2",
+  "git_sha": "9ee1d26c53da5700609e247faad295bc0232130a",
+  "git_dirty": true,
+  "cmd": "classification/tools/train.py --matrix configs/e2r_matrix.yaml --run e2r_vits_mixup_saga_s2 --data_root /scratch/iwi5359h/imagenet_4139052 --resume auto",
+  "seed": 2,
+  "world_size": 4,
+  "hostname": "a0603.nhr.fau.de",
+  "gpu_names": [
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "torch": "2.10.0+cu128",
+  "timm": "1.0.26",
+  "python": "3.12.13",
+  "cuda": "12.8",
+  "start_time": "2026-09-04T06:43:24.535229+00:00",
+  "end_time": "2026-09-04T22:08:42.438924+00:00",
+  "knobs": {
+    "gate_init_logit": 0.0,
+    "wd_phi_zero": false,
+    "drop_path_rate": 0.0
+  },
+  "resumes": [
+    {
+      "cmd": "classification/tools/train.py --matrix configs/e2r_matrix.yaml --run e2r_vits_mixup_saga_s2 --data_root /scratch/iwi5359h/imagenet_4139053 --resume auto",
+      "world_size": 4
+    }
+  ]
+}
