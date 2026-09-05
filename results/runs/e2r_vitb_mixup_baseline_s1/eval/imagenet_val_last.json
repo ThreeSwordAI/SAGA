@@ -1,0 +1,16 @@
+{
+  "top1": 77.114,
+  "top5": 91.898,
+  "loss": 1.262209390886128,
+  "n_images": 50000,
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vitb_mixup_baseline_s1/ckpt/last.pth",
+  "ckpt_sha256": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339",
+  "git_sha": "7923d24272d065c3727e2f4d2f954c05e90b15d8",
+  "arch": "vit_base",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-05T07:58:13.722319+00:00"
+}

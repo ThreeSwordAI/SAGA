@@ -1,0 +1,16 @@
+{
+  "top1": 79.352,
+  "top5": 94.374,
+  "loss": 0.9436788528564106,
+  "n_images": 50000,
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vits_mixup_saga_s1/ckpt/last.pth",
+  "ckpt_sha256": "5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5",
+  "git_sha": "7923d24272d065c3727e2f4d2f954c05e90b15d8",
+  "arch": "vit_small",
+  "variant": "saga",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-05T08:21:23.724743+00:00"
+}
