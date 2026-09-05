@@ -52,5 +52,7 @@
   "seed": 0,
   "timestamp": "2026-08-27T21:37:13.955404+00:00",
   "sink_fixed_v2": 10.9478,
-  "fixed_thr_v2_value": 19.859375
+  "fixed_thr_v2_value": 19.859375,
+  "sink_fixed_canon": 9.6784,
+  "canon_thr_value": 20.8515625
 }

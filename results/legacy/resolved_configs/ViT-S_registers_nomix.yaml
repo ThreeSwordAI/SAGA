@@ -1,0 +1,61 @@
+augmentation:
+  cutmix_alpha: 1.0
+  mixup_alpha: 0.8
+  rand_aug: true
+  rand_aug_layers: 2
+  rand_aug_magnitude: 9
+  random_erase_prob: 0.25
+data:
+  input_size: 224
+  num_workers: 8
+  pin_memory: true
+gate:
+  enabled: true
+logging:
+  log_freq: 100
+  save_freq: 25
+model:
+  arch: vit_small_patch16_224
+  gate: false
+  img_size: 224
+  num_classes: 1000
+  patch_size: 16
+  pretrained: false
+  registers: 4
+name: ViT-S_registers_nomix
+paths:
+  cluster: alex
+  code:
+    root: /home/hpc/iwi5/iwi5359h/my_repos/SAGA
+  data:
+    train_tars:
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_0.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_1.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_2.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_3.tar.gz
+    - /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/train_images_4.tar.gz
+    val_tar: /home/janus/iwi5-datasets/imagenet/imagenet-1k/data/val_images.tar.gz
+  outputs:
+    checkpoints: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints
+    figures: /home/woody/iwi5/iwi5359h/saga_e2_figures
+    logs: /home/vault/iwi5/iwi5359h/SAGA/e2/logs
+    results: /home/vault/iwi5/iwi5359h/SAGA/e2/results
+  scratch:
+    base: /scratch/iwi5359h
+train:
+  amp: true
+  batch_size: 1024
+  betas:
+  - 0.9
+  - 0.999
+  epochs: 300
+  grad_clip: 1.0
+  label_smoothing: 0.1
+  lr: 0.001
+  lr_scaling: true
+  min_lr: 1.0e-06
+  optimizer: adamw
+  warmup_epochs: 20
+  weight_decay: 0.05
+variant_id: 1
+variant_name: ViT-S_registers_nomix

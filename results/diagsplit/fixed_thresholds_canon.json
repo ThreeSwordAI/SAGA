@@ -1,0 +1,15 @@
+{
+  "definition": "per (arch, recipe_actual) cell \u2014 cell identity from the RESOLVED training config, never a directory name (see results/notes/recipe_erratum.md): tau = median over images of (median(v_i) + k*MAD(v_i)) on last_block_patch_norms of the cell's designated baseline last checkpoint (the seeded s1 baseline when one exists, else the legacy designated baseline), k=5.0; all medians are LOWER medians, matching torch.median as used by saga.metrics.sink_counts_mad",
+  "k": 5.0,
+  "source_ckpt_sha256": {
+    "vit_small|mixup": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+    "vit_base|mixup": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339"
+  },
+  "source_run": {
+    "vit_small|mixup": "e2r_vits_mixup_baseline_s1",
+    "vit_base|mixup": "e2r_vitb_mixup_baseline_s1"
+  },
+  "vit_small|mixup": 20.8515625,
+  "vit_base|mixup": 127.3125,
+  "timestamp": "2026-09-05T08:48:06.918509+00:00"
+}

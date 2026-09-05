@@ -50,5 +50,7 @@
   ],
   "reg_norm_mean": null,
   "seed": 0,
-  "timestamp": "2026-09-05T08:13:29.996165+00:00"
+  "timestamp": "2026-09-05T08:13:29.996165+00:00",
+  "sink_fixed_canon": 19.6771,
+  "canon_thr_value": 20.8515625
 }
