@@ -1,0 +1,16 @@
+{
+  "top1": 72.874,
+  "top5": 89.618,
+  "loss": 1.406708451478876,
+  "n_images": 50000,
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vits_nomix_baseline_s2/ckpt/last.pth",
+  "ckpt_sha256": "50acc743467a51828d2bf24e84f241705e33b1cf6a68a8e7f3a46413ed95d086",
+  "git_sha": "291006060c31e913aeb9dce509e41be3e8f9b283",
+  "arch": "vit_small",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-06T16:38:13.038964+00:00"
+}

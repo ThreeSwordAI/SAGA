@@ -3,13 +3,16 @@
   "k": 5.0,
   "source_ckpt_sha256": {
     "vit_small|mixup": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
-    "vit_base|mixup": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339"
+    "vit_base|mixup": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339",
+    "vit_small|nomix": "207a5e907fab6e3bf23abafce51b2bc55687b10ae70e65bf72c84b78fbe63c95"
   },
   "source_run": {
     "vit_small|mixup": "e2r_vits_mixup_baseline_s1",
-    "vit_base|mixup": "e2r_vitb_mixup_baseline_s1"
+    "vit_base|mixup": "e2r_vitb_mixup_baseline_s1",
+    "vit_small|nomix": "e2r_vits_nomix_baseline_s1"
   },
   "vit_small|mixup": 20.8515625,
   "vit_base|mixup": 127.3125,
-  "timestamp": "2026-09-05T08:48:06.918509+00:00"
+  "timestamp": "2026-09-06T20:51:18.147480+00:00",
+  "vit_small|nomix": 22.859375
 }
