@@ -1,0 +1,54 @@
+model:
+  img_size: 224
+  patch_size: 16
+  num_classes: 1000
+  pretrained: false
+  arch: vit_small_patch16_224
+  gate: true
+  registers: 0
+train:
+  epochs: 300
+  warmup_epochs: 20
+  batch_size: 1024
+  optimizer: adamw
+  lr: 0.001
+  lr_scaling: true
+  min_lr: 1.0e-06
+  weight_decay: 0.05
+  betas:
+  - 0.9
+  - 0.999
+  grad_clip: 1.0
+  amp: true
+  label_smoothing: 0.1
+augmentation:
+  rand_aug: true
+  rand_aug_magnitude: 9
+  rand_aug_layers: 2
+  mixup_alpha: 0.0
+  cutmix_alpha: 0.0
+  random_erase_prob: 0.25
+data:
+  input_size: 224
+  num_workers: 8
+  pin_memory: true
+logging:
+  log_freq: 100
+  save_freq: 25
+gate:
+  enabled: true
+run_id: e2r_vits_nomix_saga_s1
+variant: saga
+recipe: nomix
+seed: 1
+knobs:
+  gate_init_logit: 0.0
+  wd_phi_zero: false
+  drop_path_rate: 0.0
+instrumentation:
+  log_grad_phi: true
+  diag_freq: 10
+  diag_split: results/diagsplit/val_diag_split.json
+  diag_n_effrank: 10000
+  grad_log_every: 100
+  grad_log_epochs: 31
