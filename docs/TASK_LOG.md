@@ -552,3 +552,53 @@ best.pth selected on it, eval every 5 epochs; legacy +2.19 Aircraft /
 **Pending from HPC (Phase B):** build+commit the two ftsplit JSONs → smoke
 → submit 16 → sync cadence (block printed at end of task). Then Phase C
 locally (T3 tables + finegrained.md) after 16× test_final.json are back.
+
+---
+
+## 2026-09-07 — TASK 07, PHASE A (sink-address tool + optional-run prep)
+
+Ran in parallel with the TASK-08 Phase-A session in the same worktree
+(its commit `1a11988` landed mid-session); each task committed only its
+own explicit paths, and neither commit contains the other's files.
+
+**Done (local, by Claude Code):**
+- A1 `tools/sink_address.py` — CPU pass over every `<stem>_norms.npz`
+  under `results/legacy/diag/` + `results/runs/*/diag/` (expected on the
+  HPC: 24 legacy best+last, 20 e2r final best+last = 44). Writes a small
+  committable `<stem>_addr.json`: `freq_canon[196]` (cell canon τ; key
+  resolved via `apply_fixed_thr.resolve_key`, erratum remap included),
+  `freq_mad[196]` (per-image median+5·MAD, lower-median convention),
+  `mean_norm`/`p99_norm[196]`, concentration stats per freq map (entropy
+  bits vs log2(196) + normalized, Gini, top-5/top-20 mass share, top-10
+  indices), provenance (ckpt sha, n_images, τ, k, git sha). Idempotent
+  (skip iff sha+τ+k+n_images match), atomic writes, HARD cross-check
+  `mass_canon == sibling sink_fixed_canon` (same npz + τ ⇒ exact; ERROR
+  otherwise), soft MAD cross-check recorded (fp16 npz vs fp32 in-model).
+  Gini/entropy verified against independent definitions (pairwise-MAD
+  formula, scipy.stats.entropy) and an end-to-end synthetic-population
+  CLI run (remaps, rerun-skips, planted addresses recovered).
+- A2 `configs/e2r_matrix.yaml` + 4 OPTIONAL runs (S/B mixup registers s1,
+  B mixup baseline/saga s2); `gen_slurm_chain.py --only` (existing 10 job
+  files stay byte-identical; new chains at ports 29750-53) + refuses an
+  implicit full regen (`--all` required — matrix growth reshuffles ports);
+  `scripts/saga_e2r_registers_smoke.sh` (2-epoch ViT-S registers smoke,
+  port 29698). Registers has NEVER run through the new trainer; smoke
+  precondition stated in the protocol. NOTHING submitted by Claude —
+  all four are the human's call.
+- Adversarial review (2 agents): 0 confirmed numeric defects; 3 noted
+  hardenings applied + tested (crosscheck re-engages after a late canon
+  backfill; n_images in the skip guard; N≥2 shape guard) + the implicit-
+  regen refusal. Accepted gap, stated in the protocol: a 2-epoch smoke
+  cannot reach run_diag (first diag fires at epoch 9; prefix-token
+  handling for reg models is already test-covered).
+- `pytest -q`: **143 passed** = 96 pre-existing + 26 TASK-07 + 21 TASK-08
+  (the parallel session's suite, already committed by then).
+
+**Commit:** `[TASK-07] sink-address tool + optional-run prep (phase A)`
+
+**Pending from HPC (Phase B):** `python tools/sink_address.py` over both
+diag roots (expect 44 written / 0 partial / 0 errors) → commit the
+`*_addr.json` files + push. OPTIONAL: the four submissions, registers
+chains only after the registers smoke + contract check. Then Phase C
+locally (`analysis/address_analysis.py`, `plotting/plot_address.py`,
+`results/notes/sink_address.md`).

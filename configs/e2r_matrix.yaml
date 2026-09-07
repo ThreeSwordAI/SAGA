@@ -34,3 +34,12 @@ runs:
   e2r_vits_mixup_saga_s2:     {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 2}
   e2r_vitb_mixup_baseline_s1: {arch: vit_base_patch16_224, recipe: mixup, variant: baseline, seed: 1}
   e2r_vitb_mixup_saga_s1:     {arch: vit_base_patch16_224, recipe: mixup, variant: saga, seed: 1}
+
+  # ── TASK-07 A2: optional strengthening runs — prepared only; the HUMAN ──────
+  # decides whether to submit them. Registers has NEVER run through this
+  # trainer: run the 2-epoch smoke scripts/saga_e2r_registers_smoke.sh and
+  # check the contract files BEFORE submitting either registers chain.
+  e2r_vits_mixup_registers_s1: {arch: vit_small_patch16_224, recipe: mixup, variant: registers, seed: 1}
+  e2r_vitb_mixup_registers_s1: {arch: vit_base_patch16_224, recipe: mixup, variant: registers, seed: 1}
+  e2r_vitb_mixup_baseline_s2: {arch: vit_base_patch16_224, recipe: mixup, variant: baseline, seed: 2}
+  e2r_vitb_mixup_saga_s2:     {arch: vit_base_patch16_224, recipe: mixup, variant: saga, seed: 2}

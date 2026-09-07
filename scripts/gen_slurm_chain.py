@@ -14,9 +14,22 @@ by TASK-05 design).
 Emits: scripts/jobs/e2r_<run_id>.sbatch and scripts/submit_<run_id>.sh.
 The #SBATCH header and environment/staging lines copy the known-good
 patterns of classification/scripts/e2_train_alex.sh and How to Run.md.
+
+`--only id1,id2` (TASK-07 A2) generates ONLY the named runs' files and
+leaves every other run's existing files byte-identical. Ports are then
+assigned within the selected set from --base-port, so pass a base that
+does not collide with previously generated job files (the original 10
+runs hold 29700..29709, the TASK-07 additions 29750..29753; the smoke
+scripts hold 29698/29699).
+
+Since TASK-07 grew the matrix, a full regeneration would REWRITE every
+existing job file with reshuffled ports (ports follow the sorted index).
+To keep that from happening by accident, the tool now refuses to run
+without either --only (incremental) or --all (explicit full regen).
 """
 
 import argparse
+import sys
 from pathlib import Path
 
 import yaml
@@ -90,7 +103,23 @@ def main():
     parser.add_argument("--matrix", default="configs/e2r_matrix.yaml")
     parser.add_argument("--out-dir", default="scripts")
     parser.add_argument("--base-port", type=int, default=29700)
+    parser.add_argument("--only", default=None,
+                        help="comma-separated run ids: generate only these, "
+                             "leaving other runs' files untouched (pick a "
+                             "non-colliding --base-port)")
+    parser.add_argument("--all", action="store_true",
+                        help="regenerate every run in the matrix (rewrites "
+                             "existing job files; ports reshuffle with the "
+                             "sorted index)")
     args = parser.parse_args()
+
+    if not args.only and not args.all:
+        sys.exit("refusing to regenerate ALL job files implicitly: the "
+                 "matrix has grown, so a full regen reshuffles the ports of "
+                 "existing runs. Use --only id1,id2 for new runs, or --all "
+                 "to rewrite everything deliberately.")
+    if args.only and args.all:
+        sys.exit("--only and --all are mutually exclusive")
 
     matrix = yaml.safe_load(open(args.matrix))
     chain = matrix.get("chain", {})
@@ -98,7 +127,15 @@ def main():
     jobs_dir = out_dir / "jobs"
     jobs_dir.mkdir(parents=True, exist_ok=True)
 
-    for i, (run_id, run) in enumerate(sorted(matrix["runs"].items())):
+    runs = sorted(matrix["runs"].items())
+    if args.only:
+        wanted = sorted({s.strip() for s in args.only.split(",") if s.strip()})
+        unknown = [r for r in wanted if r not in matrix["runs"]]
+        if unknown:
+            sys.exit(f"--only run ids not in the matrix: {unknown}")
+        runs = [(rid, matrix["runs"][rid]) for rid in wanted]
+
+    for i, (run_id, run) in enumerate(runs):
         n = int(chain.get(run["arch"], 2))
         port = args.base_port + i
         job_path = jobs_dir / f"{run_id}.sbatch"
@@ -114,7 +151,7 @@ def main():
         print(f"{run_id}: chain of {n} (port {port}) -> "
               f"{submit_path.name} + jobs/{job_path.name}")
 
-    print(f"\n{len(matrix['runs'])} chains generated. Submit with e.g.:")
+    print(f"\n{len(runs)} chains generated. Submit with e.g.:")
     print("  bash scripts/submit_e2r_vits_nomix_baseline_s1.sh")
 
 
