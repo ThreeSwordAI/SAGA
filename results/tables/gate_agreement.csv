@@ -1,0 +1,16 @@
+pair,group,spearman_pooled,spearman_layer_mean,spearman_layer_min,spearman_layer_max,n_layers_defined
+mixup:legacy-mixupdir vs mixup:legacy-nomixdir,within-mixup,0.9298,0.5901,0.0093,0.8361,11
+mixup:legacy-mixupdir vs mixup:s1,within-mixup,0.9242,0.4261,-0.321,0.8689,11
+mixup:legacy-mixupdir vs mixup:s2,within-mixup,0.9213,0.585,0.1287,0.934,11
+mixup:legacy-mixupdir vs nomix:s1,cross-recipe,0.8776,0.3703,-0.4509,0.8977,11
+mixup:legacy-mixupdir vs nomix:s2,cross-recipe,0.8481,0.3981,-0.4315,0.8357,11
+mixup:legacy-nomixdir vs mixup:s1,within-mixup,0.9445,0.3877,-0.1713,0.8412,11
+mixup:legacy-nomixdir vs mixup:s2,within-mixup,0.951,0.4307,0.0798,0.7492,11
+mixup:legacy-nomixdir vs nomix:s1,cross-recipe,0.9347,0.3793,-0.3755,0.8086,11
+mixup:legacy-nomixdir vs nomix:s2,cross-recipe,0.9146,0.3418,-0.3832,0.7898,11
+mixup:s1 vs mixup:s2,within-mixup,0.9582,0.4842,0.1363,0.8396,11
+mixup:s1 vs nomix:s1,cross-recipe,0.9286,0.2889,-0.579,0.765,11
+mixup:s1 vs nomix:s2,cross-recipe,0.9033,0.4915,-0.5284,0.7902,11
+mixup:s2 vs nomix:s1,cross-recipe,0.9341,0.3036,-0.099,0.8166,11
+mixup:s2 vs nomix:s2,cross-recipe,0.9265,0.5152,-0.0954,0.771,11
+nomix:s1 vs nomix:s2,within-nomix,0.9716,0.5559,0.1143,0.9109,11

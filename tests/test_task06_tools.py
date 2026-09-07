@@ -160,7 +160,18 @@ def test_canon_remaps_legacy_nomix_to_mixup(tmp_path):
     assert d["sink_fixed_v2"] == 2.0 and d["fixed_thr_v2_value"] == 8.0
 
 
-def test_canon_skips_pending_vitb_nomix(tmp_path):
+def test_canon_vitb_nomix_resolved_to_mixup(tmp_path):
+    # Part-2 harvest resolved the legacy ViT-B nomix trio to mixup
+    jp = _legacy_diag(tmp_path, "vit_base", "nomix", [[1.0, 50.0]])
+    status = apply_to_file(jp, {"vit_base|mixup": 5.0}, version="canon")
+    assert status.startswith("sink_fixed_canon")
+    assert json.loads(jp.read_text())["canon_thr_value"] == 5.0
+
+
+def test_canon_pending_mechanism_still_skips(tmp_path, monkeypatch):
+    # the None-means-pending path stays live for future unresolved cells
+    import tools.apply_fixed_thr as afx
+    monkeypatch.setitem(afx.LEGACY_RECIPE_ACTUAL, ("vit_base", "nomix"), None)
     jp = _legacy_diag(tmp_path, "vit_base", "nomix", [[1.0]])
     status = apply_to_file(jp, {"vit_base|mixup": 5.0}, version="canon")
     assert "pending" in status

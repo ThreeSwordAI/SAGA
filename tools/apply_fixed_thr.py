@@ -37,13 +37,16 @@ FIELDS = {"v1": ("sink_fixed_thr", "fixed_thr_value"),
 
 # recipe_actual for the LEGACY dirname-recipes (results/notes/recipe_erratum.md:
 # the legacy config loader never applied the nomix block, so every legacy
-# ViT-S run trained WITH mixup; the ViT-B "nomix" trio came from uncommitted
-# configs and stays PENDING until the Part-2 provenance harvest).
+# ViT-S run trained WITH mixup). The ViT-B "nomix" trio was RESOLVED by the
+# TASK-06B Part-2 provenance harvest: all three dumped configs in
+# results/legacy/resolved_configs/ViT-B_*_nomix.yaml show mixup_alpha 0.8 /
+# cutmix_alpha 1.0 -> recipe_actual = mixup. (A value of None means
+# pending/unresolvable and makes canon application skip the file.)
 LEGACY_RECIPE_ACTUAL = {
     ("vit_small", "mixup"): "mixup",
     ("vit_small", "nomix"): "mixup",
     ("vit_base", "mixup"): "mixup",
-    ("vit_base", "nomix"): None,      # pending
+    ("vit_base", "nomix"): "mixup",   # resolved by the Part-2 harvest
 }
 
 

@@ -404,3 +404,56 @@ the 6 completed runs; provenance harvest of the 12 legacy resolved configs
 commits + push. The four TRUE-NOMIX chains submitted (commands printed).
 Then 06B Part 3 locally (pooled stats keyed by recipe_actual, grad-φ, 4-way
 gate agreement, e2r_first_look note).
+
+---
+
+## 2026-09-07 — TASK 06B PART 3 (pooled stats + mechanism first look)
+
+All four true-nomix runs complete and derived; the human's amendments
+folded in: nomix as its own recipe_actual cell (n=2, SEs flagged
+unreliable), grad-φ mixup-vs-nomix comparison, gate structure extended to
+all SIX ViT-S SAGA sets, train_loss overfitting line in the note.
+
+**Done (local):**
+- `analysis/build_pooled_tables.py` → `results/tables/e2_pooled.csv`
+  (71 rows). Cells keyed (arch, recipe_actual); legacy repeats join via
+  the erratum remap; VOID ViT-B mixup-dir trio appears nowhere. Repeats
+  listed individually + mean/std + per-tag paired deltas + SE +
+  significant_2xSE + Welch. MISSING never averaged (n=1 → std MISSING;
+  Welch needs n≥2 per side).
+- Headline (exact fp32 eval, top1_last): S/mixup SAGA Δ = **+0.456**
+  (SE 0.2124, significant at 2×SE; deltas −0.126/+0.570/+0.490/+0.890 —
+  human's arithmetic verified, s1's +0.52 was the bf16 log value);
+  S/nomix SAGA Δ = +0.327 (n=2); B/mixup SAGA Δ = +0.438 (n=2, not
+  significant); registers negative in both cells that have it.
+- `analysis/collect_gradphi.py` + `plotting/plot_gradphi.py` →
+  `figures_data/gradphi.csv` (9672 rows) + `figures/gradphi_draft.pdf`.
+  Median ‖∂L/∂φ‖: mixup 6.112e-04, nomix 8.652e-04 — ratio 1.42.
+- `analysis/gate_structure.py` → gate_agreement.csv (15 pairs),
+  gate_spatial_std.csv, `figures/gate_agreement_draft.pdf` (layer-8
+  six-map row). Pooled Spearman: within-mixup 0.921..0.958 (6 pairs),
+  within-nomix 0.972, cross-recipe 0.848..0.935 (8 pairs). Constant
+  final layer (φ≈init) excluded from per-layer stats, counted in
+  n_layers_defined. nomix spatial std ~1.5× mixup's.
+- `analysis/build_e2r_first_look.py` → `results/notes/e2r_first_look.md`
+  (ViT-B resolution, consistency + bf16-vs-fp32 cause, pooled tables,
+  verified deltas, canon-vs-MAD ViT-B reversal REPRODUCES on clean seeded
+  runs, train_loss gap 2.6546 vs 1.4678 while nomix val sits 5.69 pts
+  lower, grad-φ, gate agreement, open items).
+- `tools/apply_fixed_thr.py`: ViT-B legacy remap pending → **mixup**
+  (Part-2 harvest); manifest updated (`e5200fe`). Legacy ViT-B nomix-dir
+  diags still need the canon backfill — one idempotent HPC apply, in the
+  protocol block.
+- Review workflow findings, all fixed with regression tests:
+  **operator-precedence bug in gate pooling** (computed harmonic-style
+  head pooling, not sigmoid-then-mean; all first-pass gate numbers were
+  wrong — regenerated), hardcoded "~5.5 pts" regime gap (now computed
+  from pooled means), hardcoded τ=127.31 (now read from canon file).
+- `pytest -q`: **96 passed**.
+
+**Commits:** `e5200fe` (manifest), `[TASK-06B] pooled stats + mechanism
+first look (part 3)`.
+
+**Pending from HPC:** only the legacy ViT-B canon backfill (6 diag JSONs,
+non-blocking). Open decisions for the human: optional ViT-B true-nomix
+pair; registers seeded reruns; PROJECT.md milestone rewrite.
