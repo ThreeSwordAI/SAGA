@@ -553,6 +553,38 @@ best.pth selected on it, eval every 5 epochs; legacy +2.19 Aircraft /
 → submit 16 → sync cadence (block printed at end of task). Then Phase C
 locally (T3 tables + finegrained.md) after 16× test_final.json are back.
 
+**Update 2026-09-07 (Phase B, attempt 1 — 2/16 completed, node fault):**
+- Splits built + committed on the HPC (`d43a182`): CUB 5994 → 5394 train +
+  600 val (3/class, 200 classes); Aircraft 6667 → 5967 + 700 (7/class,
+  100 classes). Both re-verified locally: duplicate-free, disjoint, sums
+  exact, every class covered. `saga_ft_smoke` COMPLETED twice (jobs
+  4196869, 4196916) — the protocol runs end-to-end on real hardware.
+- Array 4196932 (`--array=0-15`): tasks 8,9 COMPLETED (34-36 min on
+  a0804/a0805); the other 14 FAILED at elapsed 00:00:00, ExitCode 1:0.
+  **Cause: the a0801 TaskProlog fault** (see the TASK-07 entry below for
+  the stderr). Node-correlated exactly — `Node list` is a0801 for all 14
+  failures and only for those. Nothing repo-side to fix; the trainer
+  never ran (no `meta.json` written for any of the 14, which is itself
+  the proof they died before `create_run`).
+- First real fine-grained numbers (commit `2d2c525`, both verified
+  against their own log.csv — 100 rows, cosine LR 1e-5 → 1.02e-7, logged
+  val peak == `best_epoch`, backbone sha matches the matrix, n_test 3333
+  counted once):
+  `ft_aircraft_vits_baseline_bs1_f2` TEST **72.247** (top5 92.859), val
+  peak 73.857 @ epoch 55; `ft_aircraft_vits_saga_bs1_f0` TEST **73.687**
+  (top5 93.129), val peak 76.000 @ epoch 59. **NOT a paired comparison**
+  (different ft-seeds) — no delta may be quoted until the matching seeds
+  land. Protocol working as designed: val peaks mid-run (55/59) and
+  decays to 73.0/74.4 by epoch 99, so val-selection caught the true peak;
+  val→test gap 1.6/2.3 pts is the honest generalization drop B7 hid.
+- Resubmitted as job **4198114** with `sbatch --exclude=a0801
+  scripts/jobs/ft_finegrained_array.sbatch` (queued, PD/Priority). The
+  requeue guard skips tasks 8,9 via their `test_final.json` markers, so
+  only the 14 outstanding runs burn GPU — the idempotency design paying
+  off in production for the first time.
+- Quota watch: hpc 86.1G of 104.9G soft; the 14 remaining runs add
+  ≈9-10 GB of ft checkpoints under `results/runs/<id>/ckpt/`.
+
 ---
 
 ## 2026-09-07 — TASK 07, PHASE A (sink-address tool + optional-run prep)
