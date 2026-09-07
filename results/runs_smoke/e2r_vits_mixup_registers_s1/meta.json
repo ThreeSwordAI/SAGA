@@ -1,0 +1,26 @@
+{
+  "run_id": "e2r_vits_mixup_registers_s1",
+  "git_sha": "30d72f606dfd96fb56e7754799901a3378439004",
+  "git_dirty": true,
+  "cmd": "classification/tools/train.py --matrix configs/e2r_matrix.yaml --run e2r_vits_mixup_registers_s1 --data_root /scratch/iwi5359h/imagenet_4198112 --resume auto --out_root results/runs_smoke --max_epochs 2",
+  "seed": 1,
+  "world_size": 4,
+  "hostname": "a0905.nhr.fau.de",
+  "gpu_names": [
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "torch": "2.10.0+cu128",
+  "timm": "1.0.26",
+  "python": "3.12.13",
+  "cuda": "12.8",
+  "start_time": "2026-09-07T22:19:33.252396+00:00",
+  "end_time": "2026-09-07T22:25:53.691343+00:00",
+  "knobs": {
+    "gate_init_logit": 0.0,
+    "wd_phi_zero": false,
+    "drop_path_rate": 0.0
+  }
+}

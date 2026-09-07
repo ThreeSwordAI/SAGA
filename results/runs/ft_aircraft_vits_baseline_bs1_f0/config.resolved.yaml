@@ -1,0 +1,28 @@
+epochs: 100
+batch_size: 64
+workers: 4
+backbone_lr: 1.0e-05
+head_lr: 0.001
+weight_decay: 0.05
+eta_min: 1.0e-07
+label_smoothing: 0.1
+grad_clip: 1.0
+img_size: 224
+split_seed: 0
+val_frac: 0.1
+run_id: ft_aircraft_vits_baseline_bs1_f0
+dataset: aircraft
+arch: vit_small_patch16_224
+variant: baseline
+ft_seed: 0
+val_split: results/ftsplit/aircraft_val_split.json
+data_tar: /home/woody/iwi5/iwi5359h/Data/FGVC-Aircraft/fgvc-aircraft-2013b.tar.gz
+expected_counts:
+  official_train: 6667
+  test: 3333
+  n_classes: 100
+backbone:
+  run: e2r_vits_mixup_baseline_s1
+  ckpt: results/runs/e2r_vits_mixup_baseline_s1/ckpt/last.pth
+  sha256: 3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac
+epochs_configured: 100
