@@ -602,3 +602,37 @@ diag roots (expect 44 written / 0 partial / 0 errors) → commit the
 chains only after the registers smoke + contract check. Then Phase C
 locally (`analysis/address_analysis.py`, `plotting/plot_address.py`,
 `results/notes/sink_address.md`).
+
+**Addendum (2026-09-07, A1 back + smoke blocked by cluster fault):**
+- A1 outputs returned (`7ad53a1`): all 44 `_addr.json` present (24 legacy
+  best+last, 20 e2r final best+last). Verified locally against their
+  sources: every `tau_canon` matches `fixed_thresholds_canon.json` for
+  its resolved key, the HARD cross-check engaged on 44/44 with
+  `abs_diff <= 1e-8` vs the sibling `sink_fixed_canon`, mass identities
+  (`sum(freq) == mass`) hold for both maps, all freqs in [0,1], all
+  10000x196, concentration stats within their references, and the soft
+  fp16-vs-fp32 MAD drift spans only −0.0142..−0.0036. **Phase C is
+  unblocked.**
+- The registers smoke was submitted TWICE (jobs 4196865 18:40:47,
+  4196890 18:46:57) and both died at elapsed 00:00:00 on the SAME node
+  `a0801` with, in stderr: `slurm task_prolog can not be executed
+  (/etc/slurm/slurm.taskprolog) Permission denied` → `TaskProlog failed
+  status=1`. `/etc/slurm/slurm.taskprolog` is site-administered and runs
+  BEFORE the job script; the job `.log` contains only the epilogue stats
+  block, so not one line of our script executed. **Cluster-side node
+  fault, NOT a defect in the smoke script, the matrix entry, or
+  env_alex.sh** — nothing to fix in this repo. The same signature (FAILED,
+  00:00:00, ExitCode 1:0) hit TASK-08 array 4196932 tasks 6,7,10-15,
+  while tasks 8,9 COMPLETED in 34-36 min on a0804/a0805 — i.e. the fault
+  is node-correlated, not task-correlated. Human commit `2d2c525` added a
+  commented-out `#module load python` to `scripts/env_alex.sh`: a no-op
+  line, and irrelevant here since the job script never ran.
+- Registers smoke therefore STILL PENDING: resubmit (likely lands on a
+  healthy node); the standard sbatch flag `--exclude=a0801` avoids the
+  bad node if it recurs (flag is NOT in `How to Run.md`). Neither
+  registers chain may be submitted until a smoke passes.
+- Quota watch (from the job epilogue, 2026-09-07): vault 1021.0G of
+  1048.6G soft (97.4%), 146K of 200K files; hpc 85.9G of 104.9G soft.
+  e2r checkpoints land on **hpc** (`results/runs/<id>/ckpt/`), and per
+  the manifest a ViT-B pair (last+best) is 2.08 GB, a ViT-S pair 0.52 GB
+  → the four optional runs would add ≈6.8 GB to hpc's ≈19 GB headroom.
