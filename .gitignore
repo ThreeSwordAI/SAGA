@@ -22,6 +22,8 @@ __pycache__/
 results/**/ckpt/
 results/**/attn/
 results/**/*_norms.npz
+# [TASK-08] smoke-run outputs never become results
+results/smoke/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/

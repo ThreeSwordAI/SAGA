@@ -469,3 +469,86 @@ changed, note-vs-CSV exact. Fact now in the CSV: the canon-vs-MAD
 ordering reversal also holds on the LEGACY ViT-B pair (canon 4.886 vs
 5.5211; MAD 15.1858 vs 10.3115). pytest -q: 96 passed. Nothing pending
 from HPC.
+
+---
+
+## 2026-09-07 — TASK 08, PHASE A (fine-grained clean protocol)
+
+Replaces the VOID legacy e6 protocol (B7: official TEST split used as val,
+best.pth selected on it, eval every 5 epochs; legacy +2.19 Aircraft /
++1.29 CUB are never cited). Legacy trainer/datasets untouched (provenance).
+
+**Done (local, by Claude Code):**
+- `evaluation/e6_finegrained/data/ft_meta.py` — ONE parsing path for the
+  official CUB/Aircraft splits + label conventions (CUB cls−1, Aircraft
+  variants.txt file order — both legacy-identical), shared by builder and
+  trainer so split-file labels can never drift; metadata readable straight
+  from the tarballs (no image extraction); legacy transforms verbatim.
+- `evaluation/e6_finegrained/tools/build_ft_split.py` — frozen stratified
+  10% val carve from the OFFICIAL train split (per class max(1,
+  round-half-up(0.1·n)), random.Random(seed)); full items_train+items_val
+  stored (relpaths+labels); disjointness enforced as raises (incl. official
+  train∩test); provenance (git sha, source tar sha256); WRITE-ONCE output.
+- `evaluation/e6_finegrained/tools/train_ft.py` — clean single-GPU
+  fine-tune: hyperparameters MIRROR legacy e6 (AdamW backbone 1e-5 / head
+  1e-3, wd 0.05, cosine eta_min 1e-7, 100 ep, batch 64, ls 0.1, clip 1.0,
+  fp16 AMP, legacy transforms, 224 — any other img_size refused;
+  adversarial mirror review: zero unintended math deviations). Protocol:
+  val every epoch, best.pth selected on val, TEST touched EXACTLY ONCE at
+  the end (only construction site + marker refusal) → eval/test_final.json
+  (top1/top5, n_images, backbone+finetuned sha256, seed, git sha,
+  smoke flag). Strict backbone load via model_factory (zero
+  missing/unexpected) + matrix-pinned sha256 assert. Hygiene: ft_seed
+  seeding (backbone fixed at e2r s1), run_registry, append-safe 4-field
+  log.csv (epoch, lr-trained-with, train_loss, val_top1), atomic
+  everything (fsync marker), NO resume (runs 1–3 h; restart-fresh with
+  evidence-preserving cleanup after env validation). Idempotency: marker
+  checked with VALIDITY (torn marker quarantined + redone), run.lock with
+  atomic stale takeover (unique-rename), ownership-checked release,
+  post-lock marker recheck, staging sentinel (requeue-safe), split-carve
+  pinning (seed/frac), duplicate/count guards.
+- `configs/ft_matrix.yaml` — 16 runs (`ft_<ds>_<arch>_<variant>_bs1_f<s>`):
+  CUB-S/Aircraft-S {baseline,saga}×f{0,1,2}, CUB-B/Aircraft-B ×f0.
+  Backbones = e2r mixup s1 last.pth, sha256 test-pinned to the committed
+  eval JSONs.
+- `scripts/gen_ft_jobs.py` → `scripts/jobs/ft_finegrained_array.sbatch`
+  (16-task single-GPU array, per-task /scratch staging, set -u, positional
+  mapping append-only) + `ft_smoke.sbatch` (2-epoch CUB-S saga f0 into
+  gitignored results/smoke). All SLURM elements verified against
+  How to Run.md + committed e2r job files (review verdict: nothing
+  invented). `.gitattributes`: *.sbatch forced LF.
+- `tests/test_task08_ft.py` — 21 tests (fake data, CPU): split determinism
+  ×2 builds/stratification/disjointness/tar==root, label conventions,
+  strict-load raises, sha mismatch refusal, non-224 refusal, real-matrix
+  contract (naming/seeds/sha-vs-eval-JSONs/no-overrides), e2e contract +
+  exact log schema + requeue skip + test-touched-once + fresh-restart
+  determinism, torn-marker recovery, lock ownership + stale takeover,
+  builder write-once, jobs-in-sync-with-matrix (order-exact).
+- Review workflow (4 agents: protocol, hyperparameter mirror, idempotency,
+  HPC): 15+ confirmed findings ALL fixed (lock races, marker validity,
+  train∩test gap, carve pinning, evidence-destroying cleanup order,
+  lr-logged-after-step, sbatch guards, …). Known+accepted: run_registry's
+  non-atomic meta write (pre-existing e2r-wide), GPU kernels not forced
+  deterministic (meta-noted, e2r policy), ft outputs on hpc FS (e2r
+  precedent), smoke touches the test split once (flagged smoke:true,
+  quarantined in results/smoke).
+- `pytest -q`: **143 passed** (incl. another session's in-tree TASK-07
+  tests). No edits outside e6 + new tooling/tests; TASK-07 worktree files
+  left untouched and uncommitted.
+
+**Reconciliations (task file vs reality):**
+- Split files are a Phase-A deliverable on paper but can only be BUILT on
+  the HPC (tars live on woody) — building+committing them is HPC step 1,
+  before the smoke (CPU, login node, seconds; reads only tar metadata).
+- "MIRROR their hyperparameters": legacy ran BOTH 100 ep (tool default,
+  original ViT-B) and 30 ep (reruns, "peak at 15-20"). Matrix pins 100
+  (val-selection makes late overfitting harmless; matches the task's
+  1–3 h/run estimate) — flagged for explicit human sign-off.
+- Array job used without asking: sbatch --array is documented verbatim in
+  How to Run.md §0/§6 — "if supported" is settled, not unclear.
+
+**Commit:** `[TASK-08] fine-grained clean protocol (phase A)`
+
+**Pending from HPC (Phase B):** build+commit the two ftsplit JSONs → smoke
+→ submit 16 → sync cadence (block printed at end of task). Then Phase C
+locally (T3 tables + finegrained.md) after 16× test_final.json are back.

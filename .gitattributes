@@ -1,0 +1,3 @@
+# [TASK-08] sbatch scripts execute on the Linux HPC — force LF regardless of
+# the Windows-side working tree (a CRLF sbatch fails with cryptic errors).
+*.sbatch text eol=lf

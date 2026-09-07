@@ -1,0 +1,82 @@
+# configs/ft_matrix.yaml — TASK-08 fine-grained clean-protocol matrix (16 runs)
+# =============================================================================
+# Consumed by evaluation/e6_finegrained/tools/train_ft.py
+# (--matrix ... --run <run_id>) and scripts/gen_ft_jobs.py.
+#
+# Defaults MIRROR the legacy e6 trainer's hyperparameters (its tool defaults,
+# used by evaluation/e6_finegrained/scripts/e6_run_tinyx.sh); what changes is
+# the PROTOCOL (bug B7): frozen committed val split carved from the official
+# train split, best.pth selected on val (checked every epoch), official test
+# split evaluated exactly once at the end. img_size must stay 224 (backbone
+# grid; trainer refuses anything else).
+#
+# backbones: the seeded e2r mixup s1 checkpoints. sha256 values are copied
+# from the committed results/runs/<run>/eval/imagenet_val_last.json and
+# CROSS-CHECKED BY TEST (tests/test_task08_ft.py) — the trainer refuses a
+# backbone file whose hash does not match.
+
+defaults:
+  epochs: 100            # legacy e6 tool default (e6_run_tinyx.sh)
+  batch_size: 64         # legacy
+  workers: 4             # legacy
+  backbone_lr: 1.0e-5    # legacy: two AdamW param groups
+  head_lr: 1.0e-3        # legacy
+  weight_decay: 0.05     # legacy
+  eta_min: 1.0e-7        # legacy CosineAnnealingLR floor
+  label_smoothing: 0.1   # legacy
+  grad_clip: 1.0         # legacy
+  img_size: 224          # legacy; also the only grid the backbones support
+  split_seed: 0          # the frozen carve: trainer refuses any split file
+  val_frac: 0.1          # whose recorded seed/val_frac differ from these
+
+splits:
+  cub: results/ftsplit/cub_val_split.json
+  aircraft: results/ftsplit/aircraft_val_split.json
+
+data:
+  # HPC (woody) tarballs — same sources the legacy e6 runs staged from
+  cub_tar: /home/woody/iwi5/iwi5359h/Data/CUB-200/CUB_200_2011.tgz
+  aircraft_tar: /home/woody/iwi5/iwi5359h/Data/FGVC-Aircraft/fgvc-aircraft-2013b.tar.gz
+
+expected_counts:
+  cub: {official_train: 5994, test: 5794, n_classes: 200}
+  aircraft: {official_train: 6667, test: 3333, n_classes: 100}
+
+backbones:
+  vits_baseline:
+    run: e2r_vits_mixup_baseline_s1
+    ckpt: results/runs/e2r_vits_mixup_baseline_s1/ckpt/last.pth
+    sha256: 3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac
+  vits_saga:
+    run: e2r_vits_mixup_saga_s1
+    ckpt: results/runs/e2r_vits_mixup_saga_s1/ckpt/last.pth
+    sha256: 5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5
+  vitb_baseline:
+    run: e2r_vitb_mixup_baseline_s1
+    ckpt: results/runs/e2r_vitb_mixup_baseline_s1/ckpt/last.pth
+    sha256: 316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339
+  vitb_saga:
+    run: e2r_vitb_mixup_saga_s1
+    ckpt: results/runs/e2r_vitb_mixup_saga_s1/ckpt/last.pth
+    sha256: a4e0e0ccd3b4cd4d40b9f46417d602d8eed4913a29b36f5b3bce78e1dfe77229
+
+# run_id = ft_<dataset>_<arch>_<variant>_bs1_f<ft_seed>   (bs1 = backbone seed 1)
+# CUB-S / Aircraft-S: {baseline, saga} x ft-seeds {0,1,2};
+# CUB-B / Aircraft-B: {baseline, saga} x ft-seed {0}  ->  16 runs.
+runs:
+  ft_cub_vits_baseline_bs1_f0:      {dataset: cub, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 0}
+  ft_cub_vits_baseline_bs1_f1:      {dataset: cub, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 1}
+  ft_cub_vits_baseline_bs1_f2:      {dataset: cub, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 2}
+  ft_cub_vits_saga_bs1_f0:          {dataset: cub, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 0}
+  ft_cub_vits_saga_bs1_f1:          {dataset: cub, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 1}
+  ft_cub_vits_saga_bs1_f2:          {dataset: cub, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 2}
+  ft_aircraft_vits_baseline_bs1_f0: {dataset: aircraft, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 0}
+  ft_aircraft_vits_baseline_bs1_f1: {dataset: aircraft, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 1}
+  ft_aircraft_vits_baseline_bs1_f2: {dataset: aircraft, arch: vit_small_patch16_224, variant: baseline, backbone: vits_baseline, ft_seed: 2}
+  ft_aircraft_vits_saga_bs1_f0:     {dataset: aircraft, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 0}
+  ft_aircraft_vits_saga_bs1_f1:     {dataset: aircraft, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 1}
+  ft_aircraft_vits_saga_bs1_f2:     {dataset: aircraft, arch: vit_small_patch16_224, variant: saga, backbone: vits_saga, ft_seed: 2}
+  ft_cub_vitb_baseline_bs1_f0:      {dataset: cub, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, ft_seed: 0}
+  ft_cub_vitb_saga_bs1_f0:          {dataset: cub, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, ft_seed: 0}
+  ft_aircraft_vitb_baseline_bs1_f0: {dataset: aircraft, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, ft_seed: 0}
+  ft_aircraft_vitb_saga_bs1_f0:     {dataset: aircraft, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, ft_seed: 0}

@@ -20,6 +20,8 @@ results/
     checkpoint_manifest.csv
     eval/   diag/   attn/
   diagsplit/val_diag_split.json   # frozen 10k diagnostic images (committed)
+  ftsplit/<ds>_val_split.json     # frozen fine-tune val splits, carved from
+                                  # the OFFICIAL train splits (committed)
   probe/probe_set.json            # frozen probe images (committed, later task)
   tables/*.csv              # generated tables — the paper reads only these
   figures_data/*            # one file per paper figure
