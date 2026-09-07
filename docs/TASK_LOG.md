@@ -457,3 +457,15 @@ first look (part 3)`.
 **Pending from HPC:** only the legacy ViT-B canon backfill (6 diag JSONs,
 non-blocking). Open decisions for the human: optional ViT-B true-nomix
 pair; registers seeded reruns; PROJECT.md milestone rewrite.
+
+**Addendum (2026-09-07, post-backfill):** HPC canon backfill returned
+(`c81d1f0`, 6 legacy ViT-B nomix-dir diags, tau=127.3125). Pooled table +
+note regenerated: 13 sink_fixed_canon cells MISSING→value, 3 aggregates
+recomputed n=1→n=2 (baseline mean 8.4035, saga mean 4.5336, saga
+paired-delta mean −3.8699, now not significant at 2×SE); open item
+resolved and removed. 3-agent adversarial verify: every value matches its
+source JSON, no *_best contamination, nothing outside the intended cells
+changed, note-vs-CSV exact. Fact now in the CSV: the canon-vs-MAD
+ordering reversal also holds on the LEGACY ViT-B pair (canon 4.886 vs
+5.5211; MAD 15.1858 vs 10.3115). pytest -q: 96 passed. Nothing pending
+from HPC.

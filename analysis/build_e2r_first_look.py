@@ -316,16 +316,12 @@ def sec_open_items():
         "",
         "1. Optional ViT-B true-nomix pair (baseline+saga, ~2.5 job-days) — "
         "recommended, awaiting the human's yes.",
-        "2. Legacy ViT-B nomix-dir diag JSONs still lack `sink_fixed_canon` "
-        "(they were skipped while `pending`; the remap is now resolved) — "
-        "one idempotent `apply_fixed_thr --version canon` on the HPC "
-        "backfills them; command in the protocol.",
-        "3. Registers has NO clean-protocol (seeded) runs — it appears only "
+        "2. Registers has NO clean-protocol (seeded) runs — it appears only "
         "as legacy repeats; a rerun pair per cell is a decision for the "
         "human.",
-        "4. n=2 cells (true-nomix; ViT-B/mixup) carry SEs flagged "
+        "3. n=2 cells (true-nomix; ViT-B/mixup) carry SEs flagged "
         "unreliable; an extra seed pair would firm them up.",
-        "5. PROJECT.md full rewrite queued for the milestone (erratum stub "
+        "4. PROJECT.md full rewrite queued for the milestone (erratum stub "
         "in place).",
         "",
     ]
