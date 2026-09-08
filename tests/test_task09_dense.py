@@ -1842,10 +1842,11 @@ def test_ckpt_root_matrix_key_redirects_every_launcher(tmp_path):
     from scripts import gen_dense_jobs as gen
     matrix = yaml.safe_load(open(MATRIX_PATH))
     assert "ckpt_root" in matrix, "the escape hatch must be in the matrix"
-    assert matrix["ckpt_root"] is None, "default must stay the run dir"
 
+    # null must emit no flag at all (the pre-redirect default, still the
+    # behaviour anyone gets by clearing the key)
     plain = tmp_path / "plain"
-    gen.render(matrix, plain, DENSE_BASE_PORT)
+    gen.render(dict(matrix, ckpt_root=None), plain, DENSE_BASE_PORT)
     for f in sorted(plain.rglob("*.sbatch")):
         assert "--ckpt_root" not in f.read_text(), f
 
@@ -1928,3 +1929,58 @@ def test_class_names_parse_the_REAL_objectInfo150_txt_layout(tmp_path):
     by_name = {r["name"].split(",")[0]: int(r["class_index"]) for r in rows}
     assert by_name["wall"] == 0 and by_name["sky"] == 2
     assert by_name["floor"] == 3          # the rows Phase C must surface
+
+
+def test_generated_jobs_stage_to_node_local_scratch_and_always_release_it():
+    """The project's data policy: unzip to node-local scratch, train from
+    there, release it. `cleanup_*` at the end of the script only covers a
+    NORMAL exit — but a chain job being killed at the 24 h wall is the
+    EXPECTED ending (up to 3 times per detection run), so the release has to
+    be a trap. Verified against bash: the EXIT trap fires on SIGTERM, on a
+    normal exit, and on the count-guard's exit 1."""
+    jobs = sorted((REPO_ROOT / "scripts" / "jobs").glob("*.sbatch"))
+    dense = [j for j in jobs if j.name.startswith(("det_vitb_", "seg_vitb_",
+                                                   "dense_smoke_"))]
+    assert len(dense) == 8, [j.name for j in dense]
+    for job in dense:
+        text = job.read_text()
+        coco = "stage_coco" in text
+        stage_fn = "stage_coco" if coco else "stage_ade20k"
+        cleanup_fn = "cleanup_coco" if coco else "cleanup_ade20k"
+
+        # staged from the COMMITTED env/stage scripts, never a hand-written path
+        assert f"source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/" in text
+        assert f"{stage_fn}\n" in text, job.name
+        # trained from the staged copy, not from woody directly
+        assert ("--data_root $STAGE_DIR" in text
+                or "--data_root $DATA_ROOT" in text), job.name
+        # released on EVERY exit path
+        assert f"trap '{cleanup_fn}' EXIT" in text, job.name
+        # and the trap is the only release, so it cannot double-run
+        assert text.count(cleanup_fn) == 1, job.name
+        assert text.rstrip().endswith("# the EXIT trap above releases the "
+                                      "staged data"), job.name
+
+
+def test_generated_jobs_keep_checkpoints_off_the_over_quota_filesystem():
+    """hpc measured 101G of a 100G soft quota; ckpt/ must not default there
+    for ~10 GiB of dense checkpoints. The committed matrix redirects to the
+    filesystem How to Run.md §1 designates for bulk data, and every launcher
+    -- chains AND smokes -- must carry the flag."""
+    matrix = yaml.safe_load(open(MATRIX_PATH))
+    root = matrix["ckpt_root"]
+    assert root and str(root).startswith("/home/woody/iwi5/iwi5359h/"), root
+    # the same filesystem the committed dataset archives live on, i.e. one
+    # already proven mounted on the compute nodes
+    data_paths = [
+        line.split("=", 1)[1].strip()
+        for line in (REPO_ROOT / "segmentation" / "scripts"
+                     / "env_alex.sh").read_text().splitlines()
+        if line.startswith("export ADE_ZIP=")]
+    assert data_paths and data_paths[0].startswith("/home/woody/iwi5/iwi5359h/")
+
+    jobs = [j for j in (REPO_ROOT / "scripts" / "jobs").glob("*.sbatch")
+            if j.name.startswith(("det_vitb_", "seg_vitb_", "dense_smoke_"))]
+    assert len(jobs) == 8
+    for job in jobs:
+        assert f"--ckpt_root {root} \\" in job.read_text(), job.name

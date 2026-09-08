@@ -44,6 +44,9 @@ fi
 
 stage_ade20k
 
+# release the node-local copy on every exit path (see the chain job files)
+trap 'cleanup_ade20k' EXIT
+
 echo "===================== smoke run ====================="
 /home/vault/iwi5/iwi5359h/envs/saga/bin/python -m torch.distributed.run \
     --nproc_per_node=4 \
@@ -59,8 +62,8 @@ echo "===================== smoke run ====================="
         --max_epochs 3 \
         --max_steps 17 \
         --max_eval_images 64 \
+        --ckpt_root /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt \
         --resume none
 STATUS=$?
 
-cleanup_ade20k
-exit $STATUS
+exit $STATUS   # the EXIT trap above releases the staged data

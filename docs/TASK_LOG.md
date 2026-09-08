@@ -881,7 +881,7 @@ here had to preserve a previous result — only the committed TRAINING MATH.
   chosen so the LAST smoke epoch trains with the backbone UNFROZEN. Smoke
   output goes to `results/smoke/` (git-ignored) and every JSON it writes
   carries `"smoke": true`.
-- `tests/test_task09_dense.py` — 81 tests (CPU, fake data, tiny real models
+- `tests/test_task09_dense.py` — 83 tests (CPU, fake data, tiny real models
   at REAL dense resolutions): B5 (identity transform, single-normalized
   backbone input, padded mixed-size batch, and the bug's reintroduction
   detected), B6 (3800 = 50x76 tokens at 800x1216 for all three variants,
@@ -1108,7 +1108,7 @@ real defects, all fixed:
    Both trainers therefore accept `--ckpt_root` to redirect `ckpt/` off the
    repo filesystem; the default stays the repo run dir (e2r precedent). The
    human decides.
-- `pytest -q`: **243 passed** — 81 TASK-09 tests + 143 pre-existing + 19
+- `pytest -q`: **245 passed** — 83 TASK-09 tests + 143 pre-existing + 19
   from a parallel TASK-07 Phase-C session working in the same worktree
   (`tests/test_task07_address_analysis.py`, `analysis/address_analysis.py`,
   `plotting/plot_address.py`, `results/{tables,notes,figures_data}/…addr…`).
@@ -1269,18 +1269,47 @@ class-name file located):**
 - Smoke checkpoints deleted (2.51 GiB reclaimed from the over-quota hpc
   filesystem).
 
+**Update 2026-09-08 (data-staging policy + ckpt_root settled; chains ready):**
+- The human asked whether the "unzip to /tmp, train, then close it" policy was
+  honoured. It was, via the COMMITTED scripts: each job sources
+  `<task>/scripts/env_alex.sh` (which sets
+  `STAGE_DIR=/scratch/iwi5359h/{coco,ade20k}_${SLURM_JOB_ID}` — node-local,
+  keyed by job id so chain/array jobs cannot collide) and
+  `stage_{coco,ade20k}.sh`, unzips there, trains with
+  `--data_root $STAGE_DIR`, and releases it. That is How to Run.md §5's
+  pattern and the 2026-09-08 smokes proved it end to end (both count guards
+  fired with the exact expected counts).
+  **But the question exposed a real gap:** the release was a plain
+  `cleanup_*` call at the END of the script, which only runs on a NORMAL
+  exit — while a chain job being killed at the 24 h wall is the EXPECTED
+  ending, up to 3 times per detection run, and would have left ~21 GB of
+  extracted COCO on the node's scratch each time. Release is now
+  `trap '<cleanup_fn>' EXIT`, installed immediately after staging, and the
+  count guards no longer clean up themselves (so it cannot double-run).
+  Verified against bash on all three paths: SIGTERM (the wall-clock case),
+  a normal exit, and the count-guard's `exit 1` — the trap fired in all
+  three. Pinned by a test that also asserts the staged copy is what training
+  reads and that the cleanup function appears exactly once per job file.
+- **`ckpt_root` decided from the repo's own evidence** (the human did not
+  know the path and delegated it):
+  `/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt`. Reasons, all file-sourced:
+  How to Run.md §1 designates `/home/woody/iwi5/iwi5359h` as the BULK
+  filesystem (~1 T soft); the committed COCO/ADE20K/CUB/Aircraft archives
+  already live there, so it is demonstrably mounted on the compute nodes
+  (the smokes read their datasets from it); and the 2026-09-08 quota output
+  put it at 226G of 954G (~728 G free) against hpc's 101G of 100G and
+  vault's 974G of 1000G — vault's ~26 G of space headroom is too thin for
+  ~10 GiB of dense checkpoints even though its ~200K file limit is
+  irrelevant to a handful of large files. All six chains AND both smokes now
+  carry `--ckpt_root`; `meta.json` records the resolved `ckpt_dir`, and
+  `atomic_torch_save`'s tmp file stays in the same directory so the rename
+  is still atomic.
+
 **Pending from HPC (Phase B, remaining):**
-1. DECIDE `ckpt_root`. hpc measured 101G of a 100G soft quota (in grace); the
-   six chains write ~7.6 GiB of checkpoints there by default and the two
-   smokes already wrote 2.51 GiB. `configs/dense_matrix.yaml` now has a
-   `ckpt_root:` key (null = the old default) and
-   `scripts/gen_dense_jobs.py` puts `--ckpt_root` into all six chains AND
-   both smokes when it is set. Confirm a bulk path (the quota output's
-   226G-of-954G filesystem is the one How to Run.md §1 maps to woody), then
-   regenerate: `python scripts/gen_dense_jobs.py`.
-2. `rm -rf results/smoke/*/*/ckpt` — the smoke checkpoints are 2.51 GiB on
-   the over-quota filesystem and `tools/check_smoke.py` has already read
-   everything it needs from them.
+1. DONE — `ckpt_root` set to `/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt`
+   and all eight launchers regenerated (see above).
+2. DONE — the 2.51 GiB of smoke checkpoints were deleted from the
+   over-quota filesystem after check_smoke.py had read them.
 3. DONE — the names ship as `objectInfo150.txt` and the trainer already
    looks for it; only its parse needs the one-off verification noted above.
    `class_names_file` in the matrix stays null unless that verification

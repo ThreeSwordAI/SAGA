@@ -40,7 +40,18 @@ n_register_tokens: 4
 # `--ckpt_root <path>` to all six chains AND both smokes; the trainers then
 # put ckpt/ under <ckpt_root>/<run_id>/ and record `ckpt_dir` in meta.json.
 # Regenerate after changing it:  python scripts/gen_dense_jobs.py
-ckpt_root: null
+# Chosen 2026-09-08 from the repo's own evidence, not invented: How to Run.md
+# §1 designates /home/woody/iwi5/iwi5359h as the BULK/working filesystem
+# (~1 T soft), it is where the committed COCO/ADE20K/CUB/Aircraft archives
+# already live (so it is demonstrably mounted on the compute nodes — the
+# 2026-09-08 smokes read their datasets from it), and the quota output that
+# day showed it at 226G of 954G (~728 G free) while hpc was at 101G of 100G
+# and vault at 974G of 1000G. Checkpoints are a handful of large files, so
+# vault's ~200K file limit is irrelevant here but its ~26 G of space
+# headroom is; woody has room for the ~10 GiB these runs write. The tmp file
+# atomic_torch_save renames sits in the same directory, so the rename stays
+# atomic.
+ckpt_root: /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt
 
 # ADE20K class names for per_class_iou.csv's `name` column (Phase C surfaces
 # the sky/wall/floor rows by name). The 2026-09-08 smoke found the committed

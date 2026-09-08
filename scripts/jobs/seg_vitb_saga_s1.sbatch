@@ -46,13 +46,19 @@ fi
 
 stage_ade20k
 
+# Node-local scratch is per job ($STAGE_DIR is keyed by SLURM_JOB_ID), and it
+# must be released on EVERY exit path — including the SIGTERM SLURM sends at
+# the 24 h wall, which for a chain job is the EXPECTED ending (up to 3 times
+# per detection run). The explicit call at the end of the script only covers
+# a normal exit, so cleanup is a trap instead.
+trap 'cleanup_ade20k' EXIT
+
 # The committed stage function enforces only the VAL count. A truncated
 # train extraction would otherwise train 80 epochs silently on partial
 # data; the expected count is the one that stage function itself prints.
 N_TRAIN=$(find $DATA_ROOT/images/training -name "*.jpg" | wc -l)
 if [ "$N_TRAIN" -ne 20210 ]; then
     echo "ERROR: ADE20K training has $N_TRAIN images, expected 20210" >&2
-    cleanup_ade20k
     exit 1
 fi
 
@@ -66,8 +72,8 @@ fi
         --matrix configs/dense_matrix.yaml \
         --run seg_vitb_saga_s1 \
         --data_root $DATA_ROOT \
+        --ckpt_root /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt \
         --resume auto
 STATUS=$?
 
-cleanup_ade20k
-exit $STATUS
+exit $STATUS   # the EXIT trap above releases the staged data

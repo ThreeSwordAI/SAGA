@@ -58,14 +58,12 @@ ADE_TRAIN_COUNT = 20210       # the count stage_ade20k.sh prints as expected
 DET_COUNT_GUARD = f"""N_TRAIN=$(find $STAGE_DIR/train2017 -name "*.jpg" | wc -l)
 if [ "$N_TRAIN" -ne {COCO_TRAIN_COUNT} ]; then
     echo "ERROR: train2017 has $N_TRAIN images, expected {COCO_TRAIN_COUNT}" >&2
-    cleanup_coco
     exit 1
 fi"""
 
 SEG_COUNT_GUARD = f"""N_TRAIN=$(find $DATA_ROOT/images/training -name "*.jpg" | wc -l)
 if [ "$N_TRAIN" -ne {ADE_TRAIN_COUNT} ]; then
     echo "ERROR: ADE20K training has $N_TRAIN images, expected {ADE_TRAIN_COUNT}" >&2
-    cleanup_ade20k
     exit 1
 fi"""
 
@@ -148,6 +146,13 @@ fi
 
 {stage_fn}
 
+# Node-local scratch is per job ($STAGE_DIR is keyed by SLURM_JOB_ID), and it
+# must be released on EVERY exit path — including the SIGTERM SLURM sends at
+# the 24 h wall, which for a chain job is the EXPECTED ending (up to 3 times
+# per detection run). The explicit call at the end of the script only covers
+# a normal exit, so cleanup is a trap instead.
+trap '{cleanup_fn}' EXIT
+
 # The committed stage function enforces only the VAL count. A truncated
 # train extraction would otherwise train {epochs_note} silently on partial
 # data; the expected count is the one that stage function itself prints.
@@ -166,8 +171,7 @@ fi
         --resume auto
 STATUS=$?
 
-{cleanup_fn}
-exit $STATUS
+exit $STATUS   # the EXIT trap above releases the staged data
 """
 
 SUBMIT_TEMPLATE = """\
@@ -241,6 +245,9 @@ fi
 
 {stage_fn}
 
+# release the node-local copy on every exit path (see the chain job files)
+trap '{cleanup_fn}' EXIT
+
 echo "===================== smoke run ====================="
 {python} -m torch.distributed.run \\
     --nproc_per_node=4 \\
@@ -259,8 +266,7 @@ echo "===================== smoke run ====================="
         --resume none
 STATUS=$?
 
-{cleanup_fn}
-exit $STATUS
+exit $STATUS   # the EXIT trap above releases the staged data
 """
 
 # task -> (run_id, port, epochs, steps_per_epoch, eval_images, freeze_epochs)
