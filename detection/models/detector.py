@@ -5,6 +5,19 @@ Full detection model: ViT backbone + SFP neck + Faster R-CNN head.
 
 Assembles DetectionBackbone + SimpleFPN + torchvision FasterRCNN.
 torchvision handles the RPN, RoI pooling, and detection head.
+
+TASK-09 bug B5 — double normalization:
+    detection/data/transforms.py already applies the ImageNet Normalize,
+    and torchvision's GeneralizedRCNNTransform (inside FasterRCNN) applies
+    its OWN normalization with ImageNet statistics by default. Every image
+    was therefore shifted and scaled twice, i.e. the backbone never saw the
+    distribution it was pretrained on. Every pre-fix detection number is
+    void.
+    THE ONE FIX (never both): FasterRCNN is constructed with the IDENTITY
+    normalization (image_mean=[0,0,0], image_std=[1,1,1]) so the dataloader
+    Normalize in transforms.py stays the single normalization step.
+    `ViTDetector.check_normalization()` asserts this on real batches, on
+    the device the training runs on.
 """
 
 import torch
@@ -19,6 +32,15 @@ from torchvision.ops import MultiScaleRoIAlign
 
 from .backbone import DetectionBackbone
 from .neck     import SimpleFPN
+
+# B5: the detector's own normalization is the identity — transforms.py owns
+# the (single) ImageNet normalization.
+IDENTITY_MEAN = (0.0, 0.0, 0.0)
+IDENTITY_STD  = (1.0, 1.0, 1.0)
+# the statistics transforms.py normalizes with (kept here only so the
+# normalization check can report what a double shift would have looked like)
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD  = (0.229, 0.224, 0.225)
 
 
 class ViTDetector(nn.Module):
@@ -76,7 +98,10 @@ class ViTDetector(nn.Module):
             def forward(self, x):
                 raise NotImplementedError  # not called directly
 
-        # Build Faster R-CNN
+        # Build Faster R-CNN.
+        # B5: identity normalization — the dataloader (transforms.py) is the
+        # ONLY place ImageNet mean/std is applied. Do not "also" remove the
+        # dataloader Normalize; exactly one of the two must normalize.
         self.frcnn = FasterRCNN(
             backbone          = _FPNWrapper(),
             num_classes       = num_classes,
@@ -84,11 +109,109 @@ class ViTDetector(nn.Module):
             box_roi_pool      = roi_pooler,
             min_size          = min_size,
             max_size          = max_size,
+            image_mean        = list(IDENTITY_MEAN),
+            image_std         = list(IDENTITY_STD),
         )
 
         # Replace the dummy backbone with our real one (not used by FRCNN directly)
         # We override forward() below to handle the full pipeline
         self.num_classes = num_classes
+
+    @torch.no_grad()
+    def check_normalization(self, images: List[torch.Tensor],
+                            atol: float = 1e-4) -> Dict:
+        """B5 guard, meant to run ON THE DEVICE the training runs on, on a
+        real batch: the tensor the backbone receives must be the dataloader's
+        already-normalized image, NOT that image normalized a second time.
+
+        Runs the detector's own GeneralizedRCNNTransform on `images` and
+        compares the (unpadded) result with the input elementwise. Returns a
+        dict of statistics for meta.json; raises AssertionError on failure.
+        """
+        if not images:
+            raise ValueError("check_normalization needs at least one image")
+
+        # fork_rng: in training mode GeneralizedRCNNTransform draws from the
+        # CPU RNG to pick min_size, so running this check must not shift the
+        # training run's random stream
+        with torch.random.fork_rng(devices=[]):
+            imgs_tl, _ = self.frcnn.transform([img.detach().clone()
+                                               for img in images], None)
+        got_batch = imgs_tl.tensors
+
+        mean = torch.as_tensor(IMAGENET_MEAN, dtype=got_batch.dtype,
+                               device=got_batch.device).view(3, 1, 1)
+        std = torch.as_tensor(IMAGENET_STD, dtype=got_batch.dtype,
+                              device=got_batch.device).view(3, 1, 1)
+
+        max_abs_diff = 0.0
+        obs_means, obs_stds, exp_means, dbl_means = [], [], [], []
+        for i, img in enumerate(images):
+            h, w = imgs_tl.image_sizes[i]
+            got = got_batch[i][:, :h, :w]
+            exp = img.detach().to(got.device, got.dtype)
+            if got.shape != exp.shape:
+                raise AssertionError(
+                    f"image {i}: the detector transform changed the shape "
+                    f"{tuple(exp.shape)} -> {tuple(got.shape)}; the "
+                    f"normalization check cannot compare them. The "
+                    f"dataloader must resize to the detector's "
+                    f"min_size/max_size (it did until now).")
+            max_abs_diff = max(max_abs_diff,
+                               float((got - exp).abs().max().item()))
+            obs_means.append(got.mean(dim=(1, 2)))
+            obs_stds.append(got.std(dim=(1, 2)))
+            exp_means.append(exp.mean(dim=(1, 2)))
+            dbl_means.append(((exp - mean) / std).mean(dim=(1, 2)))
+
+        obs_mean = torch.stack(obs_means).mean(0)
+        obs_std = torch.stack(obs_stds).mean(0)
+        exp_mean = torch.stack(exp_means).mean(0)
+        dbl_mean = torch.stack(dbl_means).mean(0)
+
+        d_single = float((obs_mean - exp_mean).abs().max().item())
+        d_double = float((obs_mean - dbl_mean).abs().max().item())
+        # how far apart the two hypotheses are for THIS batch; if they are
+        # indistinguishable the comparison below carries no information
+        separation = float((exp_mean - dbl_mean).abs().max().item())
+
+        stats = {
+            "n_images": len(images),
+            "max_abs_elementwise_diff": round(max_abs_diff, 8),
+            "backbone_input_channel_mean": [round(v, 5)
+                                            for v in obs_mean.tolist()],
+            "backbone_input_channel_std": [round(v, 5)
+                                           for v in obs_std.tolist()],
+            "dataloader_channel_mean": [round(v, 5)
+                                        for v in exp_mean.tolist()],
+            "double_normalized_channel_mean": [round(v, 5)
+                                               for v in dbl_mean.tolist()],
+            "dist_to_single_normalized": round(d_single, 8),
+            "dist_to_double_normalized": round(d_double, 8),
+            "hypothesis_separation": round(separation, 8),
+            "detector_image_mean": list(self.frcnn.transform.image_mean),
+            "detector_image_std": list(self.frcnn.transform.image_std),
+            "atol": atol,
+        }
+
+        if list(self.frcnn.transform.image_mean) != list(IDENTITY_MEAN) or \
+                list(self.frcnn.transform.image_std) != list(IDENTITY_STD):
+            raise AssertionError(
+                f"B5: the detector's GeneralizedRCNNTransform normalizes with "
+                f"mean={self.frcnn.transform.image_mean} "
+                f"std={self.frcnn.transform.image_std}; it must be the "
+                f"identity because transforms.py already normalized. {stats}")
+        if max_abs_diff > atol:
+            raise AssertionError(
+                f"B5: the tensor reaching the backbone differs from the "
+                f"dataloader's normalized image by {max_abs_diff:.6g} "
+                f"(> atol {atol}). {stats}")
+        if separation > 10 * atol and d_double <= d_single:
+            raise AssertionError(
+                f"B5: the backbone input's channel means are no further from "
+                f"the DOUBLE-normalized prediction than from the single-"
+                f"normalized one — normalization is applied twice. {stats}")
+        return stats
 
     def forward(
         self,
@@ -146,17 +269,25 @@ class ViTDetector(nn.Module):
             return detections
 
 
-def build_detector(cfg: dict, paths: dict) -> ViTDetector:
+def build_detector(cfg: dict, paths: dict = None) -> ViTDetector:
     """
-    Build a ViTDetector from config and paths dicts.
+    Build a ViTDetector from a resolved config.
 
     Args:
-        cfg    Merged config (from load_config in train.py)
-        paths  Paths config (from paths.yaml)
+        cfg    Merged config. TASK-09 form: cfg['backbone'] = {'ckpt': ...,
+               'sha256': ...} and optional cfg['model']['model_kwargs'].
+        paths  LEGACY only (detection/tools/{evaluate,analyze}.py): a
+               paths.yaml dict whose ['backbones'][cfg['backbone_key']] holds
+               the checkpoint path. Omit it for the TASK-09 path.
     """
-    m            = cfg['model']
-    backbone_key = cfg.get('backbone_key', 'baseline')
-    ckpt_path    = paths['backbones'][backbone_key]
+    m = cfg['model']
+    if paths is not None:
+        ckpt_path = paths['backbones'][cfg.get('backbone_key', 'baseline')]
+        expected_sha = None
+    else:
+        bb = cfg['backbone']
+        ckpt_path = bb['ckpt']
+        expected_sha = bb.get('sha256')
 
     backbone = DetectionBackbone(
         arch        = m['arch'],
@@ -165,10 +296,20 @@ def build_detector(cfg: dict, paths: dict) -> ViTDetector:
         ckpt_path   = ckpt_path,
         fpn_indices = m['fpn_indices'],
         img_size    = m['img_size'],
+        expected_sha256 = expected_sha,
+        model_kwargs    = m.get('model_kwargs'),
     )
 
+    # in_channels comes from the BUILT backbone (identical to the configured
+    # embed_dim for the real archs; shrunken test models would otherwise
+    # desync). A silent mismatch is refused.
+    if (m.get('embed_dim') is not None and not m.get('model_kwargs')
+            and int(m['embed_dim']) != int(backbone.embed_dim)):
+        raise ValueError(
+            f"config embed_dim {m['embed_dim']} != backbone embed_dim "
+            f"{backbone.embed_dim} for arch {m['arch']!r}")
     neck = SimpleFPN(
-        in_channels  = m['embed_dim'],
+        in_channels  = backbone.embed_dim,
         out_channels = m['fpn_out_channels'],
         grid_size    = backbone.grid_size,
     )

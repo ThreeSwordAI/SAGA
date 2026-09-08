@@ -2,9 +2,23 @@
 """
 segmentation/tools/evaluate.py
 ================================
-Standalone mIoU evaluation on a saved checkpoint.
+SUPERSEDED (TASK-09) — REFUSES TO RUN. Kept for provenance only.
 
-Usage:
+Its `evaluate()` takes an `ignore_index=255` argument and then NEVER USES IT
+(bug B4: the 255 unlabelled pixels land in every class's union), and it
+averages per-IMAGE IoU instead of computing dataset-level IoU — two
+different reasons its mIoU is not the metric anyone means. It also depends
+on segmentation/configs/paths.yaml, which is a stale copy of the e6
+fine-grained paths file and carries no ADE20K entries at all.
+
+The mIoU that Gate 2 uses is produced by segmentation/tools/train.py, which
+accumulates a confusion matrix over `gt != 255` pixels only and writes
+miou_ss.json / miou_ms.json / per_class_iou.csv / conf_matrix.npz. To
+re-evaluate a checkpoint, resume that run (its outputs are idempotent)
+rather than reviving this script — reviving it would need the B4 fix and the
+dataset-level metric ported over first.
+
+Original usage (no longer functional):
     python3 segmentation/tools/evaluate.py \
         --config    segmentation/configs/variants.yaml \
         --id        2 \
@@ -87,6 +101,21 @@ def evaluate(model, loader, device, num_classes=150, ignore_index=255):
 
 
 def main():
+    # TASK-09: this entry point is disabled on purpose. Its metric is bug
+    # B4 (ignore_index accepted and never applied) PLUS a per-image IoU
+    # average, so any number it printed would be void — and "numbers are
+    # sacred" means a runnable path to a void number is a defect, not a
+    # convenience. See the module docstring.
+    raise SystemExit(
+        "segmentation/tools/evaluate.py is SUPERSEDED (TASK-09) and refuses "
+        "to run: its mIoU ignores ignore_index=255 (bug B4) and averages "
+        "per-image IoU. Use segmentation/tools/train.py (--matrix "
+        "configs/dense_matrix.yaml --run seg_vitb_<variant>_s1), which "
+        "writes miou_ss.json / miou_ms.json / per_class_iou.csv / "
+        "conf_matrix.npz from a confusion matrix over labelled pixels only.")
+
+
+def _disabled_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config',    required=True)
     parser.add_argument('--id',        type=int, required=True)

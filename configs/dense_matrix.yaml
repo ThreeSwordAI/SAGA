@@ -1,0 +1,106 @@
+# configs/dense_matrix.yaml — TASK-09 dense prediction toward GATE 2
+# ===================================================================
+# Six runs: COCO detection and ADE20K segmentation x {baseline, saga,
+# registers}, all on the SEEDED e2r ViT-B mixup s1 backbones.
+#
+# Consumed by detection/tools/train.py, segmentation/tools/train.py
+# (--matrix ... --run <run_id>) and scripts/gen_dense_jobs.py.
+#
+# HYPERPARAMETERS ARE NOT RESTATED HERE. Each run resolves onto the
+# COMMITTED task config named in `task_configs` (detection/configs/base.yaml,
+# segmentation/configs/base.yaml) and only the variant switches (gate /
+# registers) are merged in — the "legacy 1x schedule, hyperparameters as
+# committed" requirement is therefore verifiable by reading those two files,
+# and tests/test_task09_dense.py pins the resolved values against them.
+# `warmup_epochs` appears in both base configs but the committed trainers
+# never implemented warmup; it stays unimplemented (adding it would change
+# the schedule, i.e. the numbers).
+#
+# run_id = <det|seg>_vitb_<variant>_s1   —  s1 = the BACKBONE's e2r seed;
+# the dense trainer's own seed is the `seed` field below (also 1) and is
+# recorded in every output JSON.
+
+task_configs:
+  detection: detection/configs/base.yaml
+  segmentation: segmentation/configs/base.yaml
+
+out_roots:
+  detection: results/detection
+  segmentation: results/segmentation
+
+n_register_tokens: 4
+
+# Extra eval knobs the committed base configs do not carry. Multi-scale is
+# TTA on the 512x512 val tensor the committed val pipeline produces (that
+# pipeline resizes every val image to 512x512), NOT whole-image multi-scale
+# testing — miou_ms.json records the scales so the distinction is on record.
+common_overrides:
+  eval:
+    ms_scales: [0.5, 0.75, 1.0, 1.25, 1.5]
+    ms_flip: true
+
+# SLURM chain lengths (24 h walltime each). Detection is ~2.5-3 days per
+# backbone at 25 epochs, segmentation ~15 h; every job runs the SAME
+# `--resume auto` command, so a surplus job exits in seconds.
+chain:
+  detection: 4
+  segmentation: 2
+
+backbones:
+  # ── baseline / saga: the seeded e2r ViT-B mixup s1 runs. sha256 values are
+  # copied from the committed results/runs/<run>/eval/imagenet_val_last.json
+  # and cross-checked by tests/test_task09_dense.py; the trainer refuses a
+  # backbone file whose hash does not match.
+  vitb_baseline:
+    run: e2r_vitb_mixup_baseline_s1
+    ckpt: results/runs/e2r_vitb_mixup_baseline_s1/ckpt/last.pth
+    sha256: 316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339
+  vitb_saga:
+    run: e2r_vitb_mixup_saga_s1
+    ckpt: results/runs/e2r_vitb_mixup_saga_s1/ckpt/last.pth
+    sha256: a4e0e0ccd3b4cd4d40b9f46417d602d8eed4913a29b36f5b3bce78e1dfe77229
+  # ── registers: per TASK-09, the seeded e2r ViT-B registers run IF it has
+  # FINISHED by launch time, ELSE the legacy ViT-B registers checkpoint. As
+  # of 2026-09-08 that e2r run has never been submitted (its smoke is still
+  # blocked, see docs/TASK_LOG.md), so the fallback is what will be used.
+  # `resolve_backbone()` records which one won as
+  # `backbone_source: primary|fallback` in meta.json and in every results
+  # JSON, and it accepts the primary ONLY when that run is complete
+  # (require_complete/require_epochs below: the e2r trainer rewrites
+  # last.pth every epoch, so file existence alone would hand the dense runs
+  # a mid-training checkpoint) AND its sha256 is pinned here.
+  # TO SWITCH TO THE e2r REGISTERS BACKBONE: once that run finishes, copy
+  # its ckpt_sha256 out of
+  # results/runs/e2r_vitb_mixup_registers_s1/eval/imagenet_val_last.json
+  # into `sha256` below. Until then every rejection reason is printed and
+  # the fallback is used.
+  vitb_registers:
+    run: e2r_vitb_mixup_registers_s1
+    ckpt: results/runs/e2r_vitb_mixup_registers_s1/ckpt/last.pth
+    sha256: null
+    require_complete: results/runs/e2r_vitb_mixup_registers_s1
+    require_epochs: 300     # classification/configs/base.yaml train.epochs
+    fallback:
+      run: legacy_e2_vitb_registers_nomixdir
+      ckpt: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth
+      sha256: 82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1
+      note: >-
+        legacy e2 ViT-B registers, "nomix" DIRECTORY but recipe_actual=mixup
+        (results/notes/recipe_erratum.md — the legacy nomix config never
+        applied its augmentation block, so this checkpoint was trained with
+        mixup 0.8 / cutmix 1.0, matching the baseline/saga backbones' recipe).
+        Path and sha256 are row
+        /home/vault/.../e2/checkpoints/ViT-B_registers_nomix/last.pth of
+        results/legacy/checkpoint_manifest.csv. UNSEEDED (seed "rlast"), so
+        the registers rows are one repeat with no seed control.
+
+runs:
+  det_vitb_baseline_s1:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1}
+  det_vitb_saga_s1:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1}
+  det_vitb_registers_s1: {task: detection, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1}
+  seg_vitb_baseline_s1:  {task: segmentation, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1}
+  seg_vitb_saga_s1:      {task: segmentation, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1}
+  seg_vitb_registers_s1: {task: segmentation, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1}
+
+# Test-time-registers dense rows (registers bolted onto a trained
+# baseline/SAGA at inference) are a LATER task — noted here, not built.

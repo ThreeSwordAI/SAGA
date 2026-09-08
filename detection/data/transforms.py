@@ -84,6 +84,15 @@ class ResizeDetection:
         if target['boxes'].numel() > 0:
             target['boxes'] = target['boxes'] * scale
 
+        # TASK-09: record the EXACT scalar the boxes were multiplied by.
+        # The evaluator has to undo this to score against COCO's
+        # original-frame ground truth, and dividing by `scale` is exact,
+        # whereas re-deriving a per-axis ratio from the rounded image size
+        # (orig/round(orig*scale)) differs from 1/scale by the rounding
+        # residual — a systematic sub-pixel stretch that costs a perfect
+        # detector several points of AP_S, the very number Gate 2 turns on.
+        target['resize_scale'] = torch.tensor([scale], dtype=torch.float64)
+
         return img, target
 
 

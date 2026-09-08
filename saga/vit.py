@@ -106,10 +106,32 @@ class SAGAViT(nn.Module):
 
     Adds forward_intermediates() for detection tasks — returns feature
     maps from specified intermediate blocks for use in the feature pyramid.
+
+    NOTE (TASK-09, bug B6): this wrapper copies exactly ONE prefix token
+    (cls_token) and its pos-embed layout assumes `pos_embed = [1, 1+HW, C]`.
+    A timm model with register tokens (`reg_tokens>0` -> num_prefix_tokens=5,
+    `pos_embed = [1, 5+HW, C]`, plus a `reg_token` parameter) is therefore
+    NOT wrappable: the register parameter would be silently dropped and the
+    pos-embed reshape would either crash or misalign. Such models are
+    REFUSED in __init__ — use the timm model directly and call its own
+    `forward_intermediates()` (see detection/models/backbone.py).
     """
 
     def __init__(self, timm_model: nn.Module):
         super().__init__()
+        # ── B6 guard: single-prefix-token models only ─────────────────────
+        n_prefix = getattr(timm_model, "num_prefix_tokens", 1)
+        has_reg = getattr(timm_model, "reg_token", None) is not None
+        if n_prefix != 1 or has_reg:
+            raise ValueError(
+                f"SAGAViT supports single-prefix-token (CLS-only) ViTs; got "
+                f"num_prefix_tokens={n_prefix}, reg_token="
+                f"{'present' if has_reg else 'absent'}. Wrapping a register-"
+                f"token model here drops its reg_token parameter and breaks "
+                f"pos-embed interpolation (bug B6). Use the timm model "
+                f"directly with timm's forward_intermediates() instead "
+                f"(detection/models/backbone.py does this).")
+        self.num_prefix_tokens = 1
         # Copy all components from the timm model
         self.patch_embed = timm_model.patch_embed
         self.cls_token   = timm_model.cls_token
@@ -138,6 +160,14 @@ class SAGAViT(nn.Module):
         Interpolate position embeddings to match actual input size.
         Required when input is not 224×224 (e.g. detection at 800×1333).
         """
+        # B6 hard-assert: the [:1] / [1:] split below is only correct for a
+        # single prefix token. __init__ refuses anything else, so this is
+        # unreachable — it stays as a tripwire against future edits.
+        if getattr(self, "num_prefix_tokens", 1) != 1:
+            raise RuntimeError(
+                f"pos-embed interpolation assumes exactly 1 prefix token, "
+                f"model reports {self.num_prefix_tokens} (bug B6)")
+
         N_curr = x.shape[1] - 1  # subtract CLS token
         N_orig = self.pos_embed.shape[1] - 1
 
@@ -149,12 +179,28 @@ class SAGAViT(nn.Module):
         patch_pe  = self.pos_embed[:, 1:, :]     # [1, N_orig, C]
 
         # Reshape to 2D grid
-        gs_orig = int(N_orig ** 0.5)
+        gs_orig = int(round(N_orig ** 0.5))
         C       = patch_pe.shape[-1]
+        if gs_orig * gs_orig != N_orig:
+            # a non-square source grid (or extra prefix tokens hiding in
+            # pos_embed) would make the reshape below silently wrong
+            raise RuntimeError(
+                f"pos_embed carries {N_orig} patch positions, which is not a "
+                f"square grid — cannot reshape for interpolation. A register-"
+                f"token model reaching this point is bug B6.")
         patch_pe = patch_pe.reshape(1, gs_orig, gs_orig, C).permute(0, 3, 1, 2)
 
         # Target grid — use last_patch_grid for non-square detection inputs
+        if getattr(self, "last_patch_grid", None) is None:
+            raise RuntimeError(
+                "last_patch_grid is unset — _interpolate_pos_embed must be "
+                "called from forward()/forward_intermediates() after "
+                "patch_embed")
         gh, gw = self.last_patch_grid
+        if gh * gw != N_curr:
+            raise RuntimeError(
+                f"patch grid {gh}x{gw}={gh * gw} disagrees with the "
+                f"{N_curr} patch tokens actually in the sequence")
         patch_pe = torch.nn.functional.interpolate(
             patch_pe, size=(gh, gw),
             mode='bicubic', align_corners=False)
@@ -262,6 +308,7 @@ def build_saga_vit(
     patch_size:  int  = 16,
     num_classes: int  = 1000,
     pretrained:  bool = False,
+    **timm_kwargs,
 ) -> SAGAViT:
     """
     Build a ViT with or without the SAGA spatial gate.
@@ -274,21 +321,40 @@ def build_saga_vit(
         patch_size  Patch size. Must match arch name.
         num_classes Number of output classes.
         pretrained  Load timm pretrained weights.
+        timm_kwargs Extra kwargs forwarded verbatim to timm.create_model.
+                    Production callers pass NONE of these (the legacy
+                    construction must stay bit-identical); tests and CPU
+                    smokes use them to shrink the model (depth/embed_dim/
+                    num_heads) while exercising this exact code path.
+                    `reg_tokens` is refused — see SAGAViT's B6 guard.
 
     Returns:
         SAGAViT wrapping the timm model.
     """
+    if timm_kwargs.get("reg_tokens"):
+        raise ValueError(
+            "build_saga_vit cannot build register-token models: SAGAViT "
+            "supports one prefix token only (bug B6). Build the timm model "
+            "directly for the registers variant.")
     model = timm.create_model(
         arch,
         pretrained       = pretrained,
         num_classes      = num_classes,
         img_size         = img_size,
         dynamic_img_size = True,   # allows non-224 input sizes (needed for detection)
+        **timm_kwargs,
     )
 
-    # Compute patch grid dimensions
-    grid_h = img_size // patch_size
-    grid_w = img_size // patch_size
+    # Compute patch grid dimensions — read back from the built model so an
+    # overridden patch size (timm_kwargs) cannot desync the gate grid.
+    # At the legacy defaults this is identical to img_size // patch_size.
+    grid_h, grid_w = model.patch_embed.grid_size
+    ps = model.patch_embed.patch_size
+    ps = ps[0] if isinstance(ps, (tuple, list)) else ps
+    if patch_size is not None and int(ps) != int(patch_size):
+        raise ValueError(
+            f"patch_size={patch_size} disagrees with the built model's "
+            f"patch size {ps} (arch {arch!r})")
     num_heads = model.blocks[0].attn.num_heads
 
     if gate:

@@ -9,3 +9,8 @@ numpy>=1.24.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 pandas>=2.0.0
+# [TASK-09] COCO detection scoring (detection/tools/train.py, and the
+# category-id tests in tests/test_task09_dense.py). The HPC env already has
+# it (the legacy e3 runs used it) — pinned here because it was never
+# declared. Prebuilt wheels exist for cp312 on both Linux and Windows.
+pycocotools>=2.0.7

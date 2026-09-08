@@ -2,9 +2,20 @@
 """
 detection/tools/analyze.py
 ============================
-Deep analysis of detection results for the paper.
+SUPERSEDED (TASK-09) — REFUSES TO RUN. Kept for provenance only.
 
-Produces:
+It re-runs inference and computes exactly the numbers Gate 2 turns on
+(per-category AP, AP_S/AP_M/AP_L) through the pre-fix pipeline: predictions
+scored in the dataloader's RESIZED coordinate frame against original-frame
+COCO ground truth, a backbone built before the B6 registers fix, and
+double-normalized input (B5). Every number it produced was void.
+
+Phase C reads `results/detection/<run_id>/coco_eval_best.json` (six APs +
+ARs + per-category AP/AP50/AP_S) and `detections_val.json` instead — which
+is exactly why TASK-09 mandates those two artifacts: no re-inference, and
+no second implementation of the metric to keep correct.
+
+Originally produced:
   1. Per-category AP breakdown (which classes benefit most from SAGA)
   2. AP_S / AP_M / AP_L comparison across all three variants
   3. Sink score vs AP_S correlation (if E2 results available)
@@ -218,6 +229,18 @@ def plot_category_comparison(cat_ap_dict, cat_names, out_dir, variant_names):
 
 
 def main():
+    # TASK-09: disabled on purpose — see the module docstring. This script
+    # would print per-category AP and AP_S/AP_M/AP_L computed from
+    # resized-frame predictions against original-frame ground truth.
+    raise SystemExit(
+        "detection/tools/analyze.py is SUPERSEDED (TASK-09) and refuses to "
+        "run: it scores boxes in the resized frame against original-frame "
+        "COCO ground truth, so its per-category AP and AP_S/AP_M/AP_L were "
+        "void. Phase C reads coco_eval_best.json + detections_val.json from "
+        "results/detection/<run_id>/ instead.")
+
+
+def _disabled_main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config',    required=True)
     parser.add_argument('--paths',     required=True)

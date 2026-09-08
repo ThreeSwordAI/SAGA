@@ -24,6 +24,8 @@ results/**/attn/
 results/**/*_norms.npz
 # [TASK-08] smoke-run outputs never become results
 results/smoke/
+# [TASK-09] per-rank prediction shards are transient eval scratch
+results/**/eval_shards/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/

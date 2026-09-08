@@ -2,11 +2,20 @@
 """
 detection/tools/evaluate.py
 ============================
-Standalone COCO evaluation on a saved checkpoint.
-Use this after training to re-run evaluation or evaluate best.pth
-on a different split.
+SUPERSEDED (TASK-09) — REFUSES TO RUN. Kept for provenance only.
 
-Usage:
+Every AP it printed was void, for the same reasons the trainer was rewritten:
+predictions are scored in the DATALOADER's resized coordinate frame against
+ground truth in original image coordinates (the trainer now maps back with
+`boxes_to_original_frame`), its backbone construction predates the B6
+registers fix, and it ran against the double-normalized input (B5).
+
+The AP that Gate 2 uses comes from detection/tools/train.py, which writes
+coco_eval_best.json (six APs + ARs + per-category) and detections_val.json.
+Re-scoring needs no re-inference: detections_val.json is already in official
+COCO format, so `COCOeval` can be pointed straight at it.
+
+Original usage (no longer functional):
     python3 detection/tools/evaluate.py \
         --config  detection/configs/variants.yaml \
         --id      2 \
@@ -122,6 +131,21 @@ def run_evaluation(detector, loader, device):
 
 
 def main():
+    # TASK-09: disabled on purpose. This path scores predictions that are in
+    # the dataloader's RESIZED coordinate frame against ground truth in
+    # original image coordinates, so its AP is meaningless (the same bug the
+    # rewritten trainer fixes with boxes_to_original_frame). Its backbone
+    # construction also predates the B6 registers fix.
+    raise SystemExit(
+        "detection/tools/evaluate.py is SUPERSEDED (TASK-09) and refuses to "
+        "run: it scores boxes in the resized frame against original-frame "
+        "COCO ground truth, so every AP it printed was void. Use "
+        "detection/tools/train.py (--matrix configs/dense_matrix.yaml "
+        "--run det_vitb_<variant>_s1), which maps predictions back to the "
+        "original frame and writes coco_eval_best.json + detections_val.json.")
+
+
+def _disabled_main():
     parser = argparse.ArgumentParser(
         description='Standalone COCO evaluation on a detection checkpoint.')
     parser.add_argument('--config',    required=True,

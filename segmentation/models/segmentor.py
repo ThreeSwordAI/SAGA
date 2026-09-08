@@ -169,11 +169,21 @@ class ViTSegmentor(nn.Module):
         return logits.argmax(dim=1)
 
 
-def build_segmentor(cfg: dict, paths: dict) -> ViTSegmentor:
-    """Build ViTSegmentor from merged config and paths."""
-    m            = cfg['model']
-    backbone_key = cfg.get('backbone_key', 'baseline')
-    ckpt_path    = paths['backbones'][backbone_key]
+def build_segmentor(cfg: dict, paths: dict = None) -> ViTSegmentor:
+    """Build ViTSegmentor from a resolved config.
+
+    TASK-09 form: cfg['backbone'] = {'ckpt': ..., 'sha256': ...}.
+    `paths` is the LEGACY route (segmentation/tools/evaluate.py) that reads
+    the checkpoint from paths.yaml's ['backbones'][cfg['backbone_key']].
+    """
+    m = cfg['model']
+    if paths is not None:
+        ckpt_path = paths['backbones'][cfg.get('backbone_key', 'baseline')]
+        expected_sha = None
+    else:
+        bb = cfg['backbone']
+        ckpt_path = bb['ckpt']
+        expected_sha = bb.get('sha256')
 
     backbone = DetectionBackbone(
         arch        = m['arch'],
@@ -182,10 +192,18 @@ def build_segmentor(cfg: dict, paths: dict) -> ViTSegmentor:
         ckpt_path   = ckpt_path,
         fpn_indices = m['fpn_indices'],
         img_size    = m['img_size'],
+        expected_sha256 = expected_sha,
+        model_kwargs    = m.get('model_kwargs'),
     )
 
+    if (m.get('embed_dim') is not None and not m.get('model_kwargs')
+            and int(m['embed_dim']) != int(backbone.embed_dim)):
+        raise ValueError(
+            f"config embed_dim {m['embed_dim']} != backbone embed_dim "
+            f"{backbone.embed_dim} for arch {m['arch']!r}")
+
     neck = SimpleFPN(
-        in_channels  = m['embed_dim'],
+        in_channels  = backbone.embed_dim,
         out_channels = m['fpn_out_channels'],
         grid_size    = backbone.grid_size,
     )

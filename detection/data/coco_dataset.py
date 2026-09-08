@@ -53,6 +53,11 @@ class COCODetectionDataset(Dataset):
         ann_file      Path to instances JSON (instances_train2017.json)
         transforms    Optional torchvision transform applied to image
         min_area      Skip annotations with area below this threshold
+        include_empty Keep images with zero valid annotations. False (the
+                      committed default) is what training uses; the TASK-09
+                      dense val loader passes True so COCO AP is computed
+                      over the STANDARD 5000-image val2017 split rather than
+                      the 4952 annotated ones.
     """
 
     def __init__(
@@ -61,10 +66,14 @@ class COCODetectionDataset(Dataset):
         ann_file:   str,
         transforms  = None,
         min_area:   float = 1.0,
+        include_empty: bool = False,
     ):
         self.img_dir    = Path(img_dir)
+        self.ann_file   = Path(ann_file)
         self.transforms = transforms
         self.min_area   = min_area
+        self.include_empty = include_empty
+        self._coco_gt   = None
 
         print(f"  Loading COCO annotations from {Path(ann_file).name}...")
         with open(ann_file) as f:
@@ -73,6 +82,10 @@ class COCODetectionDataset(Dataset):
         # Build category mapping
         self.coco_id_to_idx, self.idx_to_name = build_coco_label_map(
             data['categories'])
+        # inverse map: model label (1-80) -> official COCO category id (1-90).
+        # Predictions MUST be translated back through this before COCO
+        # scoring — the official GT carries the original ids.
+        self.idx_to_coco_id = {v: k for k, v in self.coco_id_to_idx.items()}
         self.num_classes = len(self.coco_id_to_idx)  # 80
 
         # Build image id → image info mapping
@@ -94,12 +107,14 @@ class COCODetectionDataset(Dataset):
                 self.img_to_anns[img_id].append(ann)
 
         # Keep only images that have at least one valid annotation
+        # (include_empty=True keeps all of them — standard COCO val protocol)
         self.img_ids = [
             img_id for img_id in self.img_info
-            if len(self.img_to_anns[img_id]) > 0
+            if self.include_empty or len(self.img_to_anns[img_id]) > 0
         ]
 
-        print(f"  Images with annotations: {len(self.img_ids):,}")
+        print(f"  Images kept: {len(self.img_ids):,} "
+              f"(include_empty={self.include_empty})")
         print(f"  Annotations skipped (crowd/tiny): {n_skipped:,}")
         print(f"  Categories: {self.num_classes}")
 
@@ -130,11 +145,21 @@ class COCODetectionDataset(Dataset):
             areas.append(ann['area'])
 
         target = {
-            'boxes':    torch.tensor(boxes,  dtype=torch.float32),
-            'labels':   torch.tensor(labels, dtype=torch.int64),
-            'areas':    torch.tensor(areas,  dtype=torch.float32),
+            # reshape(-1, 4): an image with no valid annotation (possible with
+            # include_empty=True) would otherwise get a (0,)-shaped boxes
+            # tensor, which breaks any boxes[:, k] indexing downstream
+            'boxes':    torch.tensor(boxes,  dtype=torch.float32).reshape(-1, 4),
+            'labels':   torch.tensor(labels, dtype=torch.int64).reshape(-1),
+            'areas':    torch.tensor(areas,  dtype=torch.float32).reshape(-1),
             'image_id': torch.tensor([img_id]),
             'iscrowd':  torch.zeros(len(boxes), dtype=torch.int64),
+            # TRUE original image size (h, w), before this pipeline's resize.
+            # Predictions come out in the RESIZED frame; COCO ground truth
+            # lives in this one, so the evaluator has to map back through it.
+            # torchvision ignores target keys it does not know.
+            'orig_size': torch.tensor([int(img_info['height']),
+                                       int(img_info['width'])],
+                                      dtype=torch.int64),
         }
 
         if self.transforms is not None:
@@ -142,26 +167,59 @@ class COCODetectionDataset(Dataset):
 
         return img, target
 
+    def official_coco_gt(self):
+        """The OFFICIAL annotation file as a pycocotools COCO object (cached).
+
+        This is the ground truth the TASK-09 dense trainer scores against:
+        original category ids (1-90), all images, crowd annotations intact
+        (COCOeval ignores them itself). Predictions must be mapped back to
+        official ids with `idx_to_coco_id` first.
+        """
+        if self._coco_gt is None:
+            from pycocotools.coco import COCO
+            self._coco_gt = COCO(str(self.ann_file))
+        return self._coco_gt
+
     def get_coco_api(self):
-        """Return a COCO API object for evaluation with pycocotools."""
+        """Legacy helper (used by detection/tools/{evaluate,analyze}.py).
+
+        FIXED in TASK-09: the annotation `category_id`s are now remapped to
+        the SAME contiguous 1-80 label space the model predicts in. Before
+        this fix the declared categories were contiguous while the copied
+        annotations kept their original 1-90 ids, so COCOeval silently
+        compared predictions of class k against ground truth of a different
+        class (and dropped every annotation whose original id was > 80) —
+        any AP produced through this path was meaningless.
+        Prefer `official_coco_gt()` + `idx_to_coco_id` for new code.
+        """
         from pycocotools.coco import COCO
-        import tempfile, json
-        # Build minimal annotation file for pycocotools
+        import copy
+        import json
+        import os
+        import tempfile
+        remapped = []
+        for anns in self.img_to_anns.values():
+            for ann in anns:
+                a = copy.deepcopy(ann)
+                a['category_id'] = self.coco_id_to_idx[ann['category_id']]
+                remapped.append(a)
         ann_data = {
             'images':      list(self.img_info.values()),
             'categories':  [{'id': v, 'name': n}
                             for v, n in self.idx_to_name.items()],
-            'annotations': [
-                ann for anns in self.img_to_anns.values()
-                for ann in anns
-            ]
+            'annotations': remapped,
         }
-        # Write to temp file and load via COCO API
         tmp = tempfile.NamedTemporaryFile(mode='w', suffix='.json',
                                           delete=False)
-        json.dump(ann_data, tmp)
-        tmp.close()
-        return COCO(tmp.name)
+        try:
+            json.dump(ann_data, tmp)
+            tmp.close()
+            return COCO(tmp.name)
+        finally:
+            try:
+                os.unlink(tmp.name)   # COCO() has already parsed it
+            except OSError:
+                pass
 
 
 def collate_fn(batch):

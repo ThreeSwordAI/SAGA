@@ -743,3 +743,394 @@ locally (`analysis/address_analysis.py`, `plotting/plot_address.py`,
   e2r checkpoints land on **hpc** (`results/runs/<id>/ckpt/`), and per
   the manifest a ViT-B pair (last+best) is 2.08 GB, a ViT-S pair 0.52 GB
   → the four optional runs would add ≈6.8 GB to hpc's ≈19 GB headroom.
+
+---
+
+## 2026-09-08 — TASK 09, PHASE A (dense prediction fixes + launchers)
+
+First task to touch the detection and segmentation pipelines. All prior
+dense numbers are void (B5/B6 in detection, B4 in segmentation), so nothing
+here had to preserve a previous result — only the committed TRAINING MATH.
+
+**Done (local, by Claude Code):**
+- **B5 double normalization** (`detection/models/detector.py`): FasterRCNN is
+  now built with `image_mean=[0,0,0], image_std=[1,1,1]`, so the dataloader
+  Normalize in `detection/data/transforms.py` is the single normalization
+  (the ONE fix, never both). New `ViTDetector.check_normalization()` runs the
+  detector's own GeneralizedRCNNTransform on a real batch and asserts the
+  tensor reaching the backbone equals the dataloader's image elementwise,
+  that the observed channel means sit at the single- not the
+  double-normalized prediction, and that the transform's mean/std are the
+  identity. It compares only the UNPADDED region of each image, and runs
+  inside `torch.random.fork_rng` so the transform's min_size draw cannot
+  shift the run's RNG stream. The trainer calls it at step 0 of EVERY job
+  (fresh and resumed), on device, and records the statistics in `meta.json`
+  and in `coco_eval_best.json`.
+- **B6 registers backbone** (`detection/models/backbone.py`, rewritten): for
+  `registers > 0` the timm `reg_tokens=4` model is used DIRECTLY and its own
+  `forward_intermediates()` supplies the intermediates (it strips all 5
+  prefix tokens and resamples the pos-embed for the actual grid). It is no
+  longer wrapped in `SAGAViT`, which copied only `cls_token`/`pos_embed` and
+  therefore DROPPED `reg_token` (surviving only because the load was
+  `strict=False`). Loading is now strict=True with a sha256 assert.
+  `SAGAViT.__init__` REFUSES any model with `num_prefix_tokens != 1` or a
+  `reg_token`, and `_interpolate_pos_embed` gained tripwires (prefix count,
+  square source grid, grid-vs-token agreement).
+  `segmentation/models/backbone.py` was a byte-identical COPY carrying the
+  same bug; it is now a re-export, so there is ONE implementation.
+  Verified compatibility: adding `dynamic_img_size=True` changes no parameter
+  name or shape and is value-identical at 224, so the classification
+  checkpoints strict-load into the dense backbones.
+- **B4 mIoU ignore** (`segmentation/tools/train.py`): the metric is now a
+  confusion matrix accumulated only over `gt != 255` pixels; intersection and
+  union are both derived from it, so ignored pixels are structurally absent
+  from both. The old formula counted ignore pixels into the union of every
+  class the model happened to predict there, biasing mIoU downward by a
+  variant-dependent amount. The matrix is written out (`conf_matrix.npz`), so
+  the per-class table, the JSON and Phase C all read the SAME evaluation.
+- **A fourth bug, found while wiring the eval and also fixed**: the COCO
+  scoring compared predictions in the contiguous 1-80 label space against
+  ground truth that had kept its original 1-90 category ids (and dropped
+  every annotation whose original id was > 80). Predictions are now mapped
+  back through `idx_to_coco_id` and scored against the OFFICIAL
+  `instances_val2017.json`; the legacy `get_coco_api()` helper was fixed the
+  other way (annotations remapped into the model label space) so
+  `detection/tools/analyze.py` stops being silently wrong.
+  Pinned by a test in which correctly mapped predictions score AP 100.0 and
+  unmapped ones do not.
+- **A FIFTH bug — the worst of them — found and fixed in the same session
+  (independently confirmed by the adversarial review with an end-to-end
+  measurement): every predicted box was scored in the DATALOADER's resized
+  coordinate frame against ground truth in original image coordinates.**
+  This pipeline resizes in the dataloader (`ResizeDetection`, which also
+  scales the train boxes), so by the time torchvision's `postprocess` runs,
+  its `original_image_sizes` are already the resized ones and its rescaling
+  is a no-op — nothing ever mapped predictions back. A 640x480 COCO image is
+  resized by 1.667, so a perfect detector's boxes miss their ground truth at
+  every IoU threshold: measured AP **0.0** for an oracle prediction set,
+  **100.0** for the same set divided by the dataloader scale. All six APs
+  (and `detections_val.json`, and Phase C's small-object crops) would have
+  been meaningless after ~3 GPU-days per backbone. Fix: the dataset now
+  carries the true `orig_size` in every target and
+  `boxes_to_original_frame()` inverts the resize per axis (torchvision's
+  `resize_boxes` convention) before anything is written or scored. Pinned by
+  a test where a stub perfect detector scores AP 100 through the REAL
+  pipeline (dataset -> transforms -> infer_val_shard -> score_coco), verified
+  to FAIL when the mapping is removed. This bug was live in the committed
+  code too (its GT came from `get_coco_api()`, also original-frame), so no
+  pre-fix detection number was ever meaningful.
+- **Registers/SAGA feature-list asymmetry** (found by a production-resolution
+  test): timm's `forward_intermediates` appends ONE entry per matching block
+  in block order, so a repeated or descending `fpn_indices` came back with the
+  wrong length while `SAGAViT`'s honoured the request literally — the neck
+  then got too few feature maps and the anchor generator raised. The
+  registers path now asks for the unique indices and re-expands to the
+  requested order/multiplicity, and both paths assert one feature map per
+  index. (Production uses `[3, 6, 9, 11]`, so this never reached a run.)
+- Both trainers rewritten with the TASK-05/TASK-08 hygiene: `run_registry`
+  provenance, append-safe `log.csv` with resume-time row sanitisation, atomic
+  per-epoch `ckpt/last.pth` carrying per-rank RNG + schedule geometry,
+  `--resume auto` (one command fresh-starts and resumes) with a
+  steps-per-epoch drift guard, exact `rank::world_size` val sharding (no
+  padded sampler; coverage asserted), completion marker LAST (`meta.json`'s
+  `end_time`) and a fast-path exit for a surplus job in the dependency chain.
+  Every rank-divergent decision (already-complete, resuming, whether the
+  multi-scale eval still has to run) is decided by rank 0 and BROADCAST —
+  ranks disagreeing on a lazily-cached network FS would otherwise hang the
+  job on the next collective until the wall clock.
+  New shared module `tools/dense_runtime.py` holds all of it.
+- Outputs (`results/detection/<run_id>/`, `results/segmentation/<run_id>/`):
+  `coco_eval_best.json` (six APs + six ARs + per-category AP/AP50/AP_S) and
+  `detections_val.json` (raw COCO-format predictions, written FIRST, with its
+  size and sha256 recorded in the JSON that follows); `miou_ss.json`,
+  `miou_ms.json` (multi-scale+flip TTA, run ONCE at the end from the
+  val-selected weights), `per_class_iou.csv`, `conf_matrix.npz`,
+  `preds_fixed20/<stem>_{pred,gt}.png` + `<stem>_img.jpg`. COCOeval's -1
+  "no ground truth in this slice" sentinel is written as `null`, never as
+  -100.0. Segmentation evals first sync BatchNorm buffers from rank 0, so a
+  reported mIoU cannot depend on which val images landed on which rank.
+- `results/probe/ade20k_fixed20.json` COMMITTED NOW (before any ADE20K
+  number exists), built by `segmentation/tools/build_fixed20.py` from the
+  canonical `ADE_val_%08d` naming with `sorted(random.Random(0).sample(
+  range(1, 2001), 20))`; write-once. The trainer re-resolves every stem
+  against the staged split and hard-errors on a mismatch.
+- `configs/dense_matrix.yaml` (6 runs: `det_vitb_{baseline,saga,registers}_s1`,
+  `seg_vitb_{...}_s1`) resolves each run ONTO the committed
+  `detection/configs/base.yaml` / `segmentation/configs/base.yaml` — no
+  hyperparameter is restated, and tests diff the resolved config against
+  those files. Backbones: the seeded e2r ViT-B mixup s1 baseline/saga
+  (sha256 taken from their own committed eval JSONs, test-pinned); registers
+  = the e2r registers run IF it has FINISHED at launch (completion marker +
+  a pinned hash, see the review round below), ELSE the legacy ViT-B
+  registers `nomix`-dir `last.pth` (`recipe_actual=mixup`, sha256 from the
+  manifest) — `resolve_backbone` records which in `meta.json`
+  (`backbone_source: primary|fallback`).
+- `scripts/gen_dense_jobs.py` → 6 sbatch + 6 submit chains (singleton +
+  afterany; detection 4x24h, segmentation 2x24h) + `dense_smoke_{det,seg}.sbatch`.
+  Every SLURM element copied from `How to Run.md` and the committed
+  e2r/e3/e4 scripts (env + staging come from
+  `detection/scripts/{env_alex,stage_coco}.sh` and
+  `segmentation/scripts/{env_alex,stage_ade20k}.sh` — the COCO/ADE zip paths
+  are theirs, nothing invented). Ports 29850-29855 + 29860/29861, asserted
+  collision-free against every committed launcher (including the
+  array-computed ones). Each job checks `tools/dense_done.py` BEFORE staging,
+  so a surplus chain job does not unzip 18 GB of COCO to be told there is
+  nothing to do. The smokes verify pycocotools/timm/torch, then run
+  `pytest -q tests/test_task09_dense.py` ON THE COMPUTE NODE, then
+  2x25 (det) / 3x17 (seg) train iterations + one capped eval — epoch counts
+  chosen so the LAST smoke epoch trains with the backbone UNFROZEN. Smoke
+  output goes to `results/smoke/` (git-ignored) and every JSON it writes
+  carries `"smoke": true`.
+- `tests/test_task09_dense.py` — 77 tests (CPU, fake data, tiny real models
+  at REAL dense resolutions): B5 (identity transform, single-normalized
+  backbone input, padded mixed-size batch, and the bug's reintroduction
+  detected), B6 (3800 = 50x76 tokens at 800x1216 for all three variants,
+  gate+pos-embed interpolation, SAGAViT refusal, strict load with reg_token
+  verified, sha mismatch refused, fpn_indices fidelity), B4 (hand-computed
+  IoU on a 6x6 image with an ignore border, and the old formula proved
+  different), COCO scoring (bijective id map, AP 100 mapped vs < 100
+  unmapped, per-category extraction, -1 sentinel, include_empty), the matrix
+  contracts (resolved == committed config, backbone shas == the eval JSONs,
+  fallback == the manifest row, job files byte-identical to the generator,
+  port uniqueness), the runtime helpers, the probe list, and two end-to-end
+  run contracts asserting the full artifact set, the exact log schema and the
+  provenance fields (plus the resubmission no-op).
+- `requirements.txt` gained `pycocotools>=2.0.7` (never declared, though the
+  legacy e3 runs used it). `.gitignore` ignores `results/**/eval_shards/`.
+  `scripts/sync_results.sh` extended for the dense artifacts; above
+  `DENSE_DETECTIONS_MB` (25) it gzips `detections_val.json` and commits the
+  `.gz` instead, so Phase C gets the data without a ~44 MB blob per run in
+  git. `results/README.md`
+  documents the two new trees. The legacy `e3_train_alex.sh` /
+  `e4_train_alex.sh` launchers carry a SUPERSEDED — DO NOT SUBMIT banner
+  (their trainers' CLI no longer exists).
+
+**Adversarial review round (8 review agents + 2-lens verification, then a
+6-lane attack on the fixes).** One CONFIRMED critical — the frame bug above,
+which had already been found and fixed in-session; the review reproduced it
+independently end to end (oracle predictions: AP 0.0 unmapped, AP 100.0
+mapped). One confirmed-mechanism split finding. 24 verifier agents died on a
+session limit, so the remaining claims were checked by hand; the real ones
+are fixed:
+- **Port collision (would have broken a running job):** the dense chains used
+  29800-29805, but `classification/scripts/e2_nomix_alex.sh` computes
+  `29800 + SLURM_ARRAY_TASK_ID`. The first port test only globbed `scripts/`
+  and could not see an arithmetic port. Dense ports moved to 29850-29855
+  (+ 29860/29861 smokes); the test now derives every port in the repo,
+  expanding each `$((BASE + SLURM_ARRAY_TASK_ID))` over that file's own
+  `--array` range, and pins that 29800 still belongs to e2_nomix so the
+  reason for the move stays on record.
+- **`resolve_backbone` tested "file exists", not "run finished":** the e2r
+  trainer rewrites `ckpt/last.pth` every epoch, so an in-flight registers run
+  would have silently become the dense backbone — with `sha256: null` making
+  the hash guard inert. A candidate now needs its file, a completion marker
+  on that run (`require_complete` + `require_epochs`, the latter test-pinned
+  to `classification/configs/base.yaml`'s 300) AND a pinned hash; every
+  rejection prints its reason. Switching to the e2r registers backbone is now
+  one deliberate edit (paste its hash from its own eval JSON).
+- **`detections_val.json` carried fabricated segmentation polygons:**
+  pycocotools' `loadRes` mutates the dicts it is handed (adding a box-outline
+  `segmentation`, `area`, `id`, `iscrowd`) and the artifact was serialized
+  from those same dicts — a mask-shaped value the model never predicted, in a
+  results file, at ~2.2x the size. `score_coco` now hands loadRes a per-entry
+  copy; a test asserts the artifact's keyset is exactly
+  {image_id, category_id, bbox, score}.
+- **`per_class_iou.csv` used `",".join`** while ADE20K class names contain
+  commas ("person, individual, someone, somebody, mortal, soul") — that would
+  have spliced extra columns and shifted every number in the row one field
+  right. Now `csv.writer`; and `load_class_names` sniffs the delimiter (the
+  official `objectInfo150.csv` is TAB-separated precisely because of those
+  commas) and reports why names are unavailable instead of silently writing
+  150 MISSING rows and blocking Phase C's sky/wall/floor lines.
+- **A stale `miou_ms.json` survived a fresh start** (the multi-scale eval is
+  gated on that file's existence), so a run could finalize carrying an mIoU
+  produced by weights that no longer existed. Fresh starts now clear the
+  previous attempt's artifacts — and, per TASK-08's ordering, ONLY AFTER the
+  environment validates. Verified end to end: a run that aborts on a backbone
+  hash mismatch leaves the previous attempt's files untouched, and the next
+  valid run clears them.
+- **A torn `meta.json` killed the whole chain:** `finalize_run` writes it
+  non-atomically (pre-existing, e2r-wide, recorded as accepted in TASK-08)
+  and the resume path did an unguarded `json.load`. Under
+  `--dependency=afterany` that one exception would have taken every remaining
+  job of the run with it. `read_meta()` now quarantines the torn bytes and
+  rebuilds the record.
+- **Rank-divergence hangs:** the already-complete / resuming / run-the-MS-eval
+  decisions are read off a shared filesystem. Rank 0 now decides and
+  broadcasts all three; ranks that disagreed would have blocked on the next
+  collective until the wall clock.
+- **Surplus chain jobs unzipped 18 GB of COCO** before reaching the
+  in-process fast path. New `tools/dense_done.py` (exit 0/1/2) runs in the
+  sbatch before staging. The smokes also check `pycocotools`/`timm`/`torch`
+  explicitly, since a missing pycocotools would only SKIP tests and report
+  green; the detection trainer now import-checks it at startup too.
+- **Segmentation mIoU was shard-dependent:** DDP syncs BatchNorm buffers per
+  forward, but each rank then updates its own, so at epoch end the ranks
+  differ by one momentum step and the reported mIoU depended on which images
+  landed where (and differed from the saved weights' own metric).
+  `sync_buffers_from_rank0` runs before every eval; training math untouched.
+- **Three legacy dense scripts now REFUSE TO RUN**
+  (`segmentation/tools/evaluate.py`, `detection/tools/evaluate.py`,
+  `detection/tools/analyze.py`). The first takes `ignore_index=255` and never
+  applies it (B4) and averages per-image IoU; the other two score
+  resized-frame boxes against original-frame GT — and `analyze.py` computes
+  exactly the per-category AP and AP_S/AP_M/AP_L numbers Gate 2 turns on. A
+  runnable path to a void number is a defect, not a convenience; the bodies
+  are kept as `_disabled_main` for provenance. Phase C reads
+  `coco_eval_best.json` + `detections_val.json` instead, which is why the
+  task mandates them.
+- Two review claims were checked and REJECTED: the frame bug is not caused by
+  the B5 fix (the resize half of `GeneralizedRCNNTransform` was already a
+  no-op), and the resize scale IS recoverable post hoc from the annotation
+  sizes, so nothing would have been unrecoverable.
+- Also hardened while there: `repo_path` keeps POSIX-absolute HPC paths
+  absolute on Windows (it would otherwise rebase `/home/vault/...` under the
+  repo and could load a same-named local file); COCOeval's -1 "no ground
+  truth in this slice" sentinel is written as `null`, never as -100.0; the
+  registers and SAGA backbones now answer any `fpn_indices` list identically
+  (timm collapses repeated indices, SAGAViT does not — caught by a
+  production-resolution test); and the mandated log/JSON schemas are pinned
+  LITERALLY in tests rather than against the constants that wrote them.
+
+**Second review round — a 6-lane adversarial attack on those fixes**, each
+lane told to break one and to MEASURE rather than reason. It found nine more
+real defects, all fixed:
+- **The box mapping was not the exact inverse of the resize.** It divided by
+  the per-axis size ratio `orig/round(orig*scale)`, while the forward
+  transform multiplied by the scalar `scale` — the rounding residual is a
+  systematic sub-pixel stretch (measured up to 0.39 px / 4.9e-4 relative)
+  that costs a perfect detector several points of **AP_S**, the number Gate 2
+  turns on; my roundtrip test's 1.0 px tolerance was 2.6x too loose to see
+  it. `ResizeDetection` now RECORDS the scalar it applied
+  (`target['resize_scale']`) and the evaluator divides by that; the test
+  asserts 1e-9 over eleven shapes including rounding-worst ones, and also
+  asserts the size-ratio inversion is measurably worse (so the two can never
+  silently converge again).
+- **A resumed run re-attributed its results to a backbone that contributed
+  nothing.** `resolve_backbone` runs fresh in every chain job, but the
+  checkpoint's weights overwrite whatever was just loaded — so pinning the
+  registers hash mid-flight (which the matrix explicitly invites) would have
+  produced results JSONs naming a backbone that never trained. Both trainers
+  now compare the resolved hash against the checkpoint's own
+  `backbone_sha256` and refuse, naming both digests.
+- **A globbed submit instruction submits only the FIRST chain** (verified:
+  bash runs the first matched file and passes the rest as positional
+  arguments, which the submit scripts ignore) — two of the three Gate-2
+  detection rows would silently never have been queued. Every instruction is now one command per line, and
+  a test scans the repo for that shape.
+- **The best-artifact set was not a transaction and no resume reconciled
+  it.** A kill inside the write block left a half-updated pair; since the
+  best metric comes back from the checkpoint, a re-run of that epoch is not a
+  new best and would never have rewritten it — the run would finalize with
+  two results files describing different epochs. New
+  `check_best_artifacts()` reconciles on resume (discarding a stale set so
+  the next eval rewrites it) and re-checks before `finalize_run`, refusing to
+  mark a run complete otherwise. Verified end to end by deleting
+  `coco_eval_best.json` mid-run.
+- **`load_class_names` trusted row order** and never checked the `Idx` column
+  it had already parsed: a re-sorted `objectInfo150.csv` would have attached
+  every ADE20K name in the committed table to the wrong IoU. It now requires
+  Idx == 1..150 in order and reports MISSING instead.
+- **`per_class_iou.csv` was written in the node's locale encoding**
+  (`atomic_write_text` had no `encoding=`), so a non-ASCII class name would
+  land in a committed results file that Phase C's UTF-8 read would reject.
+  Now UTF-8 explicitly.
+- **mIoU units were ambiguous**: the JSONs report mIoU/pixel_acc/mean_acc as
+  PERCENTAGES while `iou_per_class` and the CSV column are FRACTIONS, with
+  nothing recording that. A 100x error in T5_ade20k.csv would have looked
+  plausible. The CSV column is now `iou_frac`, both JSONs carry a `units`
+  block, and results/README.md says so.
+- **`atomic_torch_save`/`atomic_npz_save` skipped the fsync** the module
+  docstring promised — on `ckpt/last.pth`, the one file the whole chain's
+  recovery depends on. Both now fsync before the rename. And an unreadable
+  `last.pth` no longer kills the chain: it is quarantined so the NEXT job
+  fresh-starts.
+- **`--dependency=singleton` lived only in `submit_<run>.sh`**, so `sbatch
+  scripts/jobs/<run>.sbatch` — the documented way to add one more job to a
+  chain — carried no serialization and could have run concurrently with a
+  job of the same run, overwriting its checkpoint (exactly how the legacy e2
+  repeats were lost). It is now in the job header too.
+- Also from this round: the sbatch files run `tools/dense_done.py
+  --require_backbone` BEFORE staging (so a surplus job does not unzip 18 GB,
+  and a moved registers checkpoint aborts in seconds rather than minutes into
+  a 4x24h chain — neither smoke covers the registers backbone); the
+  generated jobs enforce the TRAIN image count too (the committed stage
+  functions enforce only the val count, so a truncated extraction would have
+  trained 25/80 epochs on partial data); and `sync_results.sh` compares
+  bytes rather than truncated megabytes, keeps the raw and gzip dumps
+  mutually exclusive in the index, and only ships the dump once its run is
+  complete (it is rewritten at every new best, so syncing mid-run pushed the
+  same blob into history repeatedly).
+- Lane verdicts worth recording, all backed by their own measurements: the
+  mIoU definition matched an independent confusion-matrix-free reference on
+  40 randomized trials (worst delta 4.8e-5); the multi-scale TTA with
+  scales=[1.0] reproduces the single-scale matrix bit for bit and the flip is
+  correctly un-flipped; int64 accumulation uses 5.7e-11 of its range at
+  ADE20K scale; per-shard sums are bit-identical to a single pass; the
+  pre-eval buffer sync provably cannot move a training number (DDP
+  re-imposes rank 0's buffers on the next forward anyway); and per-rank
+  collective sequences were byte-identical across ten restart states in
+  2-rank gloo runs (fresh, fast-path exit, resume-with-MS-owed,
+  resume-with-nothing-owed, capped-eval smoke).
+
+**Reconciliations (task file / repo vs reality) — stated, not improvised:**
+1. "legacy 1x schedule per the repo's configs": COCO convention calls 12
+   epochs 1x, but the committed `detection/configs/base.yaml` says **25**
+   epochs. The instruction was "keep hyperparameters as committed", so 25 is
+   what the matrix resolves — flagged for explicit human sign-off, since it
+   is ~2x the GPU time of a literal 1x.
+2. `warmup_epochs` exists in both committed base configs but neither
+   committed trainer ever implemented warmup. It stays unimplemented;
+   implementing it now would change the LR schedule, i.e. the numbers.
+3. COCO val protocol: the committed dataset drops images with no annotation
+   (4952 of 5000). The new val loader passes `include_empty=True` so AP is
+   computed over the STANDARD 5000-image split, and the ground truth is the
+   official annotation file. This changes no training math; it is recorded in
+   every `coco_eval_best.json` under `val_protocol`. Flagged for sign-off.
+4. `segmentation/configs/paths.yaml{,.template}` are a stale COPY of the e6
+   fine-grained paths file (CUB/Aircraft tarballs, e6 output dirs — no
+   ADE20K entries at all). The new trainers do not use paths.yaml (backbones
+   come from the matrix, data from `--data_root`), so the stale file was left
+   untouched for provenance and called out in the e4 SUPERSEDED banner.
+5. `evaluation/e5_lost/tools/extract_features.py` wraps the timm registers
+   model in `SAGAViT` too — the same B6 bug. The new guard turns that silent
+   corruption into a loud `ValueError`. Out of scope here and not in flight;
+   when e5 is revisited, its registers path must move to
+   `forward_intermediates` the same way.
+5b. The three legacy dense scripts were disabled (see the review round). The
+   task named only the two trainers, so this is a deliberate overreach on
+   "numbers are sacred" grounds — one line each to revert if the human
+   disagrees.
+6. Detection checkpoints are 103.7M params → `last.pth` ≈ 1.16 GiB per run;
+   segmentation 91.8M → `last.pth` ≈ 1.03 GiB + weights-only
+   `best_model.pth` ≈ 0.34 GiB. Six runs ≈ 7.6 GiB, against the hpc soft
+   quota's ≈19 GiB headroom which TASK-08's remaining ft runs also draw on.
+   Both trainers therefore accept `--ckpt_root` to redirect `ckpt/` off the
+   repo filesystem; the default stays the repo run dir (e2r precedent). The
+   human decides.
+- `pytest -q`: **239 passed** — 77 TASK-09 tests + 143 pre-existing + 19
+  from a parallel TASK-07 Phase-C session working in the same worktree
+  (`tests/test_task07_address_analysis.py`, `analysis/address_analysis.py`,
+  `plotting/plot_address.py`, `results/{tables,notes,figures_data}/…addr…`).
+  Those files are LEFT UNTOUCHED AND UNCOMMITTED here; this commit contains
+  only TASK-09 paths. One combined run showed their
+  `test_build_end_to_end` failing while their session was concurrently
+  regenerating its own results files; it passes alone, after my file, and in
+  the next full run (235/235) — a race between the two sessions, unrelated
+  to anything TASK-09 changed (that test references none of it).
+  No results file was written or edited by this task.
+
+**Commit:** `[TASK-09] dense fixes + launchers (phase A)`
+
+**Pending from HPC (Phase B):** confirm the COCO and ADE20K paths exist →
+`sbatch scripts/jobs/dense_smoke_det.sbatch` and `dense_smoke_seg.sbatch` →
+on green, submit the six chains with SIX SEPARATE COMMANDS, detection first
+(a glob or brace form would run only the FIRST script and pass the other
+two as positional arguments, silently leaving two Gate-2 rows unsubmitted —
+verified, and pinned by a test that scans the repo for such instructions):
+`bash scripts/submit_det_vitb_baseline_s1.sh`,
+`bash scripts/submit_det_vitb_saga_s1.sh`,
+`bash scripts/submit_det_vitb_registers_s1.sh`, then the same three with
+`submit_seg_vitb_*` → `bash scripts/sync_results.sh` every day or two. Then
+Phase C locally (T4/T5 tables, F7 figure,
+`results/notes/gate2_report.md`) once the six runs' JSONs are back.
