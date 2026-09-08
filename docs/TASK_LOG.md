@@ -1337,3 +1337,111 @@ only the JSON pair (coco_eval_best.json + detections_val.json), which is all
 Phase C reads. If `best_epoch != 24` the best detector's weights are not
 recoverable — relevant if the "test-time-registers dense rows" task wants to
 re-infer from the best model rather than the last.
+
+---
+
+## 2026-09-08 — TASK 07, PHASE C (sink-address analysis)
+
+Phase B came back complete: all 44 `_addr.json` (commit `7ad53a1`), plus
+the registers smoke PASSED (`fd98185`, run dir `results/runs_smoke/
+e2r_vits_mixup_registers_s1`: gate false / registers 4, epochs 0-1,
+val top1 2.834 -> 6.284, no gates//grads//diag/ as predicted, 1251
+steps/epoch derived from img_per_sec x wall_time). **Both registers chains
+are therefore unblocked; still unsubmitted, still the human's call.**
+
+**Provenance warning (not mine):** commit `efd4f9d "Task 9"` (human,
+12:42) contains ONLY these seven TASK-07 Phase-C files — a repo-wide add
+swept my in-progress work under a Task-9 label. It is already pushed, so
+history was left alone. That snapshot is the PRE-REVIEW version and its
+registers numbers have the WRONG SIGN; `17ccb2a` supersedes it. Do not
+read numbers out of `efd4f9d`.
+
+**Done (local):**
+- C1 `analysis/address_analysis.py` -> `results/tables/sink_address.csv`
+  (3348 rows) + `results/figures_data/Faddr.npz`. Cell membership
+  IMPORTED from `build_pooled_tables.py` (erratum remap; VOID legacy
+  ViT-B mixup-dir trio excluded — pinned by a decoy test). 19 maps, last
+  checkpoint only, all sha-matched (legacy vs manifest, run dirs vs
+  sibling diag), zero gaps; the 5 never-trained e2r registers runs are
+  reported as ABSENT, not as gaps. Stored concentration blocks
+  re-derived through an independent implementation (pairwise-difference
+  Gini) on all 38 member-basis pairs.
+- C2 `plotting/plot_address.py` -> `results/figures/Faddr_draft.{pdf,png}`
+  (committed -f): per cell a row of 14x14 freq maps (shared colorbar) +
+  the extremal gate layer (shared colorbar on its TRUE range, labelled
+  "NOT 0..1", with Bonferroni p and spatial std per panel), plus an
+  excess-concentration bar page with noise-flagged bars hatched.
+- C3 `analysis/build_sink_address_note.py` ->
+  `results/notes/sink_address.md` (generated; every number, including
+  prose ranges, read from the CSV — pinned by a test that re-renders the
+  note from the committed table).
+
+**Two references that are NOT zero (adversarial review, 11 findings, all
+CONFIRMED and all fixed — the first two had inverted a result):**
+- **Finite-sample floor.** A spatially UNIFORM ground truth does not give
+  Gini 0 from 10000 images: verified null Gini 0.0167 at mass 19.7 but
+  0.4886 at mass 0.023. Mass spans 3 orders of magnitude across members,
+  so raw Gini/entropy/top-k are NOT comparable. Now every statistic
+  carries `_null` (binomial, 400 sims, seed 0) and `_excess`, and Q4
+  differences PAIRED excess values. **ViT-B/mixup registers d_Gini:
+  +0.1857 (raw, unpaired) -> -0.3570 (excess, paired) — sign inverted.**
+  ViT-S/nomix saga also flips (+0.0147 -> -0.0125). SAGA's headline
+  survives: S/mixup +0.0937, B/mixup +0.0655.
+- **n is not 196.** The maps are spatially smooth, so the iid Spearman
+  reference (sd 0.0716) is far too generous; the exact permutation null
+  over 8 dihedral x 196 torus rolls (1568 transforms, deterministic, no
+  seed) has sd 0.157-0.342, i.e. n_eff ~ 10-42. Every correlation now
+  carries that p and null sd.
+- Also fixed: Q5 extremal layers are an argmax over 12 layers -> Bonferroni
+  p + the opposite-sign extreme now reported; Q5 rendered for BOTH bases
+  (it was canon-only while OPEN ITEMS claimed both); Q4 deltas paired (the
+  unpaired version inflated ViT-B registers 1.9x); the degenerate-map
+  caveat re-diagnosed from ties (mid-rank spread is 94.8% of maximal, so
+  ties were NOT the mechanism) to per-position Monte-Carlo error
+  (`position_rel_se`); hand-typed prose ranges now computed (one was
+  wrong: 1.79x should have been 1.71x); `verify_stored_concentration` now
+  fails on a one-sided NaN, verifies `top10_positions`, and refuses
+  zero-mass; unpaired SAGA runs emit explicit MISSING rows instead of
+  vanishing; the CSV layer-profile pointer now names the layers/comparators
+  that actually exist.
+
+**ANSWERS (canon maps; full tables in the note):**
+1. **Address exists, but it is diffuse.** H/H_uniform 0.936-0.990 (close
+   to uniform) yet top-5 share is 1.71x-4.96x its uniform reference;
+   excess Gini 0.143 (S/nomix) / 0.245 (S/mixup) / 0.400 (B/mixup).
+2. **Seed-stable — the make-or-break number holds.** Baseline pair
+   Spearman: S/mixup 0.9121 (n=6, p 0.0006-0.0019), B/mixup 0.8505
+   (n=1, p 0.0013), S/nomix 0.7107 (n=1, p 0.0038). **8/8 pairs p<0.05.**
+   S/mixup pairs span legacy runs AND fresh seeded reruns (0.8919-0.9365).
+3. **NOT recipe-stable.** Cross-recipe mean 0.3051 canon (2/8 pairs
+   p<0.05) and 0.1342 mad (0/8) vs within-recipe 0.9121 (8/8). The
+   cross-recipe value sits largely inside its own spatial null.
+4. **SAGA does not relocate the address, it consolidates it.** rho vs
+   matched baseline 0.79-0.91 (all pairs p<0.05 in all 3 cells) while
+   mass falls (-8.08 S/mixup, -3.87 B/mixup, -2.62 S/nomix) and excess
+   Gini rises in the two mixup cells. Registers DOES relocate
+   (S/mixup 0.4773, B/mixup 0.0063 with p=0.93) and de-concentrates.
+5. **The gate tracks the address only in ViT-S/mixup, and negatively.**
+   There rho = -0.518..-0.594 at layer 7/8, all negative in BOTH bases,
+   4/4 repeats Bonferroni p<0.05 — the gate is suppressed exactly on the
+   border ring where sinks form (visible in the figure). B/mixup: 0/2
+   Bonferroni-significant and mad disagrees in sign. S/nomix: canon signs
+   disagree between the two repeats. Layer-mean rho is near zero
+   everywhere, partly by cancellation.
+- **Geometry (extra, not in the task):** the address is a RING one patch
+  inside the border — peak ring 1 for every mixup member (ring1 0.1377 vs
+  ring0 0.0590 for S/mixup baseline) — and FLAT for true-nomix
+  (0.0168..0.0265, peak ring 6). The border address is created by the
+  mixup recipe; this is the same fact Q3 reports as a correlation.
+
+`pytest -q`: **257 passed** (53 of them TASK-07: 26 sink_address +
+27 address_analysis). Three headline numbers independently recomputed
+from the source JSONs (Q2 mean/min/max, Q3 mean, Q5 s1 layer 8) — exact.
+
+**Commits:** `17ccb2a` (this phase; supersedes `efd4f9d`).
+
+**Pending from HPC:** nothing for TASK 07. Optional and unblocked: the
+four A2 chains (registers smoke passed) — `bash scripts/submit_e2r_*.sh`,
+S ~17 h / B ~29 h. Open for the human: whether to run
+e2r_vitb_mixup_{baseline,saga}_s2 to take ViT-B seed-stability from 1 pair
+to 3, which is the weakest number in the whole analysis.
