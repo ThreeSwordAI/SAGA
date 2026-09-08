@@ -11,11 +11,15 @@ import numpy as np
 import pytest
 import yaml
 
-from analysis.address_analysis import (border_rings, build,
+from scipy.stats import spearmanr
+
+from analysis.address_analysis import (border_rings, build, build_perm,
+                                       concentration_null,
                                        concentration_recompute, gini_pairwise,
                                        head_mean_gate, load_manifest,
-                                       load_member, rho, save_npz,
-                                       verify_stored_concentration)
+                                       load_member, position_rel_se, rho,
+                                       rho_spatial, save_npz,
+                                       verify_stored_concentration, zrank)
 from analysis.build_sink_address_note import Table, build_note
 from tools.sink_address import concentration as tool_concentration
 
@@ -111,22 +115,25 @@ def make_tree(root: Path, seed=0):
         w.writeheader()
         w.writerows(man_rows)
 
-    for variant in ("baseline", "saga"):
-        run = root / f"results/runs/e2r_vits_mixup_{variant}_s1"
-        (run / "diag").mkdir(parents=True)
-        (run / "gates").mkdir(parents=True)
-        (run / "config.resolved.yaml").write_text(
-            yaml.safe_dump({"recipe": "mixup", "variant": variant}))
-        sha = f"sha_run_{variant}"
-        freq = ring_map(1) + rng.rand(N_POS) * 0.01
-        (run / "diag/diag_final_last_addr.json").write_text(
-            json.dumps(addr_payload(freq, sha=sha, variant=variant)))
-        (run / "diag/diag_final_last.json").write_text(
-            json.dumps({"arch": "vit_small", "ckpt_sha256": sha}))
-        if variant == "saga":
-            phi = rng.randn(12, 6, N_POS) * 0.1
-            phi[11] = 0.0
-            np.savez(run / "gates/phi_e299.npz", phi=phi)
+    # seeded runs: the mixup cell (s1) and the true-nomix cell (s1), the
+    # latter so Q3's cross-recipe comparison has both sides
+    for recipe, peak in (("mixup", 1), ("nomix", 4)):
+        for variant in ("baseline", "saga"):
+            run = root / f"results/runs/e2r_vits_{recipe}_{variant}_s1"
+            (run / "diag").mkdir(parents=True)
+            (run / "gates").mkdir(parents=True)
+            (run / "config.resolved.yaml").write_text(
+                yaml.safe_dump({"recipe": recipe, "variant": variant}))
+            sha = f"sha_run_{recipe}_{variant}"
+            freq = ring_map(peak) + rng.rand(N_POS) * 0.01
+            (run / "diag/diag_final_last_addr.json").write_text(
+                json.dumps(addr_payload(freq, sha=sha, variant=variant)))
+            (run / "diag/diag_final_last.json").write_text(
+                json.dumps({"arch": "vit_small", "ckpt_sha256": sha}))
+            if variant == "saga":
+                phi = rng.randn(12, 6, N_POS) * 0.1
+                phi[11] = 0.0
+                np.savez(run / "gates/phi_e299.npz", phi=phi)
     return man
 
 
@@ -164,6 +171,104 @@ def test_verify_stored_concentration_catches_tampering():
     payload["concentration_canon"]["gini"] += 0.01
     with pytest.raises(SystemExit, match="disagrees"):
         verify_stored_concentration(payload, "canon", "tampered")
+
+
+def test_verify_rejects_one_sided_nan():
+    """`abs(nan - x) > tol` is False, so a naive check waves a NaN through."""
+    payload = addr_payload(ring_map(1))
+    payload["concentration_canon"]["gini"] = float("nan")
+    with pytest.raises(SystemExit, match="finiteness"):
+        verify_stored_concentration(payload, "canon", "nan")
+
+
+def test_verify_checks_top10_positions():
+    payload = addr_payload(ring_map(1))
+    payload["concentration_canon"]["top10_positions"] = [999] * 10
+    with pytest.raises(SystemExit, match="top10_positions"):
+        verify_stored_concentration(payload, "canon", "bad-top10")
+
+
+def test_concentration_recompute_rejects_zero_mass():
+    with pytest.raises(ValueError, match="zero-mass"):
+        concentration_recompute(np.zeros(N_POS))
+
+
+# ── the finite-sample null (the F1 mechanism) ────────────────────────────────
+
+def test_concentration_null_floor_moves_with_mass():
+    """A spatially UNIFORM ground truth does not give Gini 0 when estimated
+    from a finite number of images: the floor is ~0.017 at mass 20 but
+    ~0.5 at mass 0.02, which is why raw Gini is not comparable across
+    members and Q4 must difference EXCESS values."""
+    high = concentration_null(20.0, 10000, N_POS)["gini"][0]
+    low = concentration_null(0.02, 10000, N_POS)["gini"][0]
+    assert high < 0.05
+    assert low > 0.4
+    assert low > 8 * high
+    # the null entropy is near-uniform at high mass, well below it at low
+    assert concentration_null(20.0, 10000, N_POS)["entropy_normalized"][0] > 0.999
+    assert concentration_null(0.02, 10000, N_POS)["entropy_normalized"][0] < 0.95
+
+
+def test_concentration_null_is_deterministic():
+    a = concentration_null(5.0, 10000, N_POS)
+    b = concentration_null(5.0, 10000, N_POS, seed=0)
+    assert a["gini"] == b["gini"]
+
+
+def test_position_rel_se_known_values():
+    # p = mass/196; rel SE = sqrt((1-p)/(n*p))
+    assert position_rel_se(19.7, 10000, N_POS) == pytest.approx(0.0299, abs=1e-3)
+    assert position_rel_se(0.0233, 10000, N_POS) == pytest.approx(0.917, abs=1e-2)
+    assert position_rel_se(0.0, 10000, N_POS) is None
+
+
+# ── the exact spatial permutation null (the F2 mechanism) ────────────────────
+
+def test_build_perm_is_a_complete_transform_set():
+    perm = build_perm(14)
+    assert perm.shape == (8 * 196, 196)
+    assert any((perm[i] == np.arange(196)).all() for i in range(len(perm)))
+    for i in range(0, len(perm), 61):
+        assert len(np.unique(perm[i])) == 196
+
+
+def test_rho_matches_scipy_including_heavy_ties():
+    rng = np.random.RandomState(0)
+    for trial in range(6):
+        a, b = rng.rand(N_POS), rng.rand(N_POS)
+        if trial > 2:
+            a, b = np.round(a * 3), np.round(b * 2)      # heavy tie groups
+        assert rho(a, b) == pytest.approx(spearmanr(a, b).statistic,
+                                          abs=1e-12)
+    assert zrank(np.ones(N_POS)) is None
+
+
+def test_rho_spatial_p_is_exact_and_bounded():
+    rng = np.random.RandomState(1)
+    a = rng.rand(N_POS)
+    r, p, sd, n = rho_spatial(a, a)
+    assert r == pytest.approx(1.0)
+    assert n == 8 * 196
+    assert p == pytest.approx(1.0 / n)          # floor: identity is in the set
+    assert p > 0                                 # never reported as zero
+
+    # genuinely SPATIALLY SMOOTH maps (low-frequency, so neighbouring
+    # positions are correlated): the spatial null is then far wider than
+    # the iid reference 1/sqrt(195) = 0.0716, which is the whole point
+    idx = np.arange(14)
+    yy, xx = np.meshgrid(idx, idx, indexing="ij")
+    smooth_a = (np.sin(2 * np.pi * yy / 14) + np.cos(2 * np.pi * xx / 14)).ravel()
+    smooth_b = (np.cos(2 * np.pi * yy / 14)
+                + np.sin(4 * np.pi * xx / 14)).ravel()
+    _, _, sd_spatial, _ = rho_spatial(smooth_a, smooth_b)
+    assert sd_spatial > 3 * (1 / (N_POS - 1) ** 0.5), sd_spatial
+
+    # ... whereas white noise really does sit near the iid reference
+    _, _, sd_iid, _ = rho_spatial(rng.rand(N_POS), rng.rand(N_POS))
+    assert sd_iid < 2 * (1 / (N_POS - 1) ** 0.5)
+
+    assert rho_spatial(a, np.ones(N_POS)) is None
 
 
 @pytest.mark.parametrize("addr_file", [
@@ -369,6 +474,129 @@ def test_build_end_to_end(tmp_path, monkeypatch):
 
 # ── note generation ──────────────────────────────────────────────────────────
 
+def test_q4_deltas_use_excess_not_raw_and_are_paired(tmp_path, monkeypatch):
+    """REGRESSION (adversarial review F1+F5): a sparse variant map looks
+    highly concentrated purely from Monte-Carlo noise, so differencing RAW
+    concentration reports the wrong SIGN. Q4 must difference EXCESS values,
+    paired by provenance.
+
+    Fixture: the baseline is genuinely concentrated at high mass; the
+    variant is spatially UNIFORM but very sparse. Raw Gini says the variant
+    is MORE concentrated; excess Gini must say LESS.
+    """
+    rng = np.random.RandomState(5)
+    (tmp_path / "results/legacy/diag").mkdir(parents=True)
+    n_img = 10000
+
+    # baseline: real structure, high mass (~20 sinks/image)
+    base_freq = ring_map(1, high=0.30, low=0.05)
+    # variant: NO structure at all, tiny mass (~0.02 sinks/image), drawn
+    # from the uniform null itself
+    var_freq = rng.binomial(n_img, 0.02 / N_POS, size=N_POS) / n_img
+
+    raw_base = tool_concentration(base_freq)["gini"]
+    raw_var = tool_concentration(var_freq)["gini"]
+    assert raw_var > raw_base, "fixture must show the raw-Gini illusion"
+
+    man_rows = []
+    for variant, freq in (("baseline", base_freq), ("saga", var_freq)):
+        sha = f"sha_{variant}"
+        stem = f"e2_vit_small_mixup_{variant}_rlast_last"
+        (tmp_path / f"results/legacy/diag/{stem}_addr.json").write_text(
+            json.dumps(addr_payload(freq, sha=sha, variant=variant,
+                                    n_images=n_img)))
+        man_rows.append({"path": f"/x/{stem}.pth", "filename": "last.pth",
+                         "size_bytes": "1", "mtime_iso": "", "sha256": sha,
+                         "exp": "e2", "arch": "vit_small", "recipe": "mixup",
+                         "recipe_actual": "mixup", "variant": variant,
+                         "seed": "rlast"})
+    man = tmp_path / "results/legacy/checkpoint_manifest.csv"
+    with open(man, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(man_rows[0]))
+        w.writeheader()
+        w.writerows(man_rows)
+
+    monkeypatch.chdir(tmp_path)
+    rows, members, _, _ = build(man)
+    t = Table(rows)
+
+    delta = t.num(question="Q4_relocation", arch="vit_small",
+                  recipe_actual="mixup", map_basis="canon", variant="saga",
+                  subject="MEAN", comparator="baseline-matched",
+                  statistic="delta_gini_excess")
+    assert delta is not None
+    assert delta < 0, (f"excess-Gini delta must be NEGATIVE (the sparse "
+                       f"variant is less concentrated than its own null), "
+                       f"got {delta}; raw would have said "
+                       f"{raw_var - raw_base:+.4f}")
+
+    # and no RAW delta may be emitted, so nobody can read the wrong sign
+    assert not t.find(question="Q4_relocation", statistic="delta_gini")
+    # the paired delta is over provenance-matched repeats only
+    mean_row = t.one(question="Q4_relocation", arch="vit_small",
+                     recipe_actual="mixup", map_basis="canon",
+                     variant="saga", subject="MEAN",
+                     statistic="delta_gini_excess")
+    assert int(mean_row["n"]) == 1
+    # the sparse map must be noise-flagged
+    rel_se = t.num(question="Q1_concentration", arch="vit_small",
+                   recipe_actual="mixup", map_basis="canon", variant="saga",
+                   subject="legacy-mixupdir", statistic="position_rel_se")
+    assert rel_se is not None and rel_se > 0.5
+
+
+def test_correlations_carry_a_spatial_p_value(tmp_path, monkeypatch):
+    """Every reported correlation must be accompanied by its exact
+    permutation p and the null's sd — n=196 alone overstates the evidence."""
+    man = make_tree(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    rows, _, _, _ = build(man)
+    t = Table(rows)
+    for question in ("Q2_seed_stability", "Q3_recipe_stability",
+                     "Q4_relocation"):
+        corr = [r for r in t.find(question=question, statistic="spearman")
+                if r["value"] != "MISSING"]
+        assert corr, question
+        for r in corr:
+            assert t.num(question=question, arch=r["arch"],
+                         recipe_actual=r["recipe_actual"],
+                         map_basis=r["map_basis"], variant=r["variant"],
+                         subject=r["subject"],
+                         statistic="spearman_p_spatial") is not None
+            assert "spatial-permutation p=" in r["note"]
+    # Q5 extremal layers carry a Bonferroni correction for the 12-layer argmax
+    absmax = [r for r in t.find(question="Q5_gate_address",
+                                statistic="spearman_layer_absmax")
+              if r["value"] != "MISSING"]
+    assert absmax
+    for r in absmax:
+        assert "Bonferroni p=" in r["note"] and "layer=" in r["note"]
+
+
+def test_q5_emits_missing_when_no_matched_baseline(tmp_path, monkeypatch):
+    """A SAGA run without a same-provenance baseline must leave a MISSING
+    row, never silently vanish from Q5 (which would let the headline count
+    'all N repeats' over a subset)."""
+    man = make_tree(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    # remove the ViT-S mixup-dir BASELINE, keeping its saga partner
+    (tmp_path / "results/legacy/diag"
+     / "e2_vit_small_mixup_baseline_rlast_last_addr.json").unlink()
+    rows, _, _, gaps = build(man)
+    t = Table(rows)
+    assert any("baseline|legacy-mixupdir" in g for g in gaps)
+    miss = t.find(question="Q5_gate_address", arch="vit_small",
+                  recipe_actual="mixup", subject="legacy-mixupdir",
+                  comparator="baseline-matched",
+                  statistic="spearman_layer_absmax")
+    assert miss and all(r["value"] == "MISSING" for r in miss)
+    assert all("no same-provenance baseline" in r["note"] for r in miss)
+    q4miss = t.find(question="Q4_relocation", arch="vit_small",
+                    recipe_actual="mixup", subject="legacy-mixupdir",
+                    statistic="spearman")
+    assert q4miss and all("EXCLUDED" in r["note"] for r in q4miss)
+
+
 def test_note_numbers_come_from_the_csv(tmp_path, monkeypatch):
     man = make_tree(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -408,15 +636,14 @@ def test_note_reports_sign_disagreement_instead_of_a_range():
 
     disagree = build_note(gate_rows([("s1", 3, 0.492), ("s2", 7, -0.641)]),
                           Path("t.csv"), Path("t.npz"))
-    assert "DISAGREE" in disagree
-    assert "s1 +0.492 (layer 3)" in disagree
-    assert "s2 -0.641 (layer 7)" in disagree
+    assert "SIGNS DISAGREE" in disagree
+    assert "1 negative of 2" in disagree
 
     agree = build_note(gate_rows([("s1", 7, -0.5), ("s2", 8, -0.6)]),
                        Path("t.csv"), Path("t.npz"))
-    assert "DISAGREE" not in agree
-    assert "all 2 repeats negative" in agree
-    assert "layers 7, 8" in agree
+    assert "SIGNS DISAGREE" not in agree
+    assert "all negative" in agree
+    assert "layer(s) 7, 8" in agree
 
 
 # ── the committed artifacts stay in sync ─────────────────────────────────────

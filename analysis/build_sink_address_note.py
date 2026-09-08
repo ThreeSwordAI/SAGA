@@ -6,10 +6,17 @@ TASK-07 C3: render results/notes/sink_address.md from
 results/tables/sink_address.csv.
 
 Every number in the note is READ FROM THE CSV — nothing is hand-typed and
-nothing is recomputed here, so the note cannot drift from the table. The
-note states values and how they sit relative to the explicit references
-(uniform for concentration, zero for correlations); it draws no further
-conclusions.
+nothing is recomputed here, so the note cannot drift from the table. That
+includes the ranges quoted in prose, which are computed from the same rows
+the tables render.
+
+The note states values and how they sit relative to the explicit
+references, which for this analysis are NOT zero:
+- concentration is reported as EXCESS over a finite-sample null (a uniform
+  ground truth at the same mass gives Gini 0.017 at mass 20 but 0.49 at
+  mass 0.02, so raw values are not comparable across members);
+- correlations carry an exact spatial-permutation p (the 196 positions are
+  spatially smooth, so the iid reference is far too generous).
 
     python analysis/build_sink_address_note.py
 """
@@ -22,8 +29,9 @@ from pathlib import Path
 MISSING = "MISSING"
 CELLS = [("vit_small", "mixup"), ("vit_small", "nomix"),
          ("vit_base", "mixup")]
+BASES = ("canon", "mad")
 UNIFORM_TOP5 = 5 / 196
-UNIFORM_TOP20 = 20 / 196
+ALPHA = 0.05
 
 
 def load(path: Path):
@@ -47,7 +55,7 @@ class Table:
 
     def val(self, **kw):
         r = self.one(**kw)
-        if r is None or r["value"] == MISSING:
+        if r is None or r["value"] in (MISSING, ""):
             return None
         return r["value"]
 
@@ -55,132 +63,208 @@ class Table:
         v = self.val(**kw)
         return None if v is None else float(v)
 
+    def nums(self, **kw):
+        return [float(r["value"]) for r in self.find(**kw)
+                if r["value"] not in (MISSING, "")]
+
 
 def fmt(v, nd=4):
     return MISSING if v is None else f"{v:.{nd}f}"
 
 
+def rng_txt(values, nd=4):
+    if not values:
+        return MISSING
+    if len(values) == 1:
+        return fmt(values[0], nd)
+    return f"{min(values):.{nd}f} to {max(values):.{nd}f}"
+
+
 def cell_label(arch, rec):
-    return f"{arch.replace('vit_', 'ViT-').replace('small', 'S').replace('base', 'B')}/{rec}"
+    return (f"{arch.replace('vit_', 'ViT-').replace('small', 'S')
+            .replace('base', 'B')}/{rec}")
 
 
-def saga_gate_extremes(t: Table, arch, rec, basis, comparator):
-    """[(tag, layer, rho, std_at_layer)] for the cell's SAGA runs."""
+def pair_p(t: Table, question, basis, arch, rec, subject, variant="baseline"):
+    return t.num(question=question, arch=arch, recipe_actual=rec,
+                 map_basis=basis, variant=variant, subject=subject,
+                 statistic="spearman_p_spatial")
+
+
+def significant_count(t: Table, question, basis, variant="baseline"):
+    """(n_significant, n_total) over every individual pair of a question."""
+    ps = t.nums(question=question, map_basis=basis, variant=variant,
+                statistic="spearman_p_spatial")
+    return sum(1 for p in ps if p < ALPHA), len(ps)
+
+
+def gate_extremes(t: Table, arch, rec, basis, comparator="baseline-matched"):
+    """[(tag, layer, rho, p, bonf, other_layer, other_rho, std)] per run."""
     out = []
     for r in t.find(question="Q5_gate_address", arch=arch, recipe_actual=rec,
                     map_basis=basis, comparator=comparator,
                     statistic="spearman_layer_absmax"):
-        if r["value"] == MISSING:
-            out.append((r["subject"], None, None, None))
+        tag = r["subject"]
+        if r["value"] in (MISSING, ""):
+            out.append((tag, None, None, None, None, None, None, None))
             continue
-        layer = int(r["note"].split("=")[1])
+        layer = int(r["note"].split("layer=")[1].split(";")[0])
+        rho = float(r["value"])
+        p = t.num(question="Q5_gate_address", arch=arch, recipe_actual=rec,
+                  map_basis=basis, comparator=comparator, subject=tag,
+                  statistic="spearman_layer_absmax_p_spatial")
+        bonf = None
+        if "Bonferroni p=" in r["note"]:
+            bonf = float(r["note"].split("Bonferroni p=")[1].split()[0])
+        # the opposite-sign extreme of the SAME profile: if the absmax is
+        # negative the relevant counter-evidence is the profile max
+        other_stat = ("spearman_layer_max" if rho < 0
+                      else "spearman_layer_min")
+        other = t.one(question="Q5_gate_address", arch=arch,
+                      recipe_actual=rec, map_basis=basis,
+                      comparator=comparator, subject=tag,
+                      statistic=other_stat)
+        other_rho = (float(other["value"])
+                     if other and other["value"] not in (MISSING, "") else None)
+        other_layer = (int(other["note"].split("layer=")[1].split(";")[0])
+                       if other and "layer=" in other["note"] else None)
         std = t.num(question="Q5_gate_address", arch=arch, recipe_actual=rec,
-                    map_basis="-", subject=r["subject"],
+                    map_basis="-", subject=tag,
                     statistic=f"gate_spatial_std_layer{layer:02d}")
-        out.append((r["subject"], layer, float(r["value"]), std))
+        out.append((tag, layer, rho, p, bonf, other_layer, other_rho, std))
     return out
 
 
+# ── sections ─────────────────────────────────────────────────────────────────
+
 def section_headline(t: Table, lines):
     lines += ["## Headline per cell", "",
-              "One line per cell, canon-threshold maps, baseline repeats "
-              "(concentration) and same-provenance pairs (gate):", ""]
+              "Canon-threshold maps. Concentration is EXCESS over the "
+              "finite-sample null (zero = indistinguishable from a uniform "
+              "map at that mass); seed-stability is the mean baseline "
+              "pair Spearman with its exact spatial-permutation p; the "
+              "gate figure is each SAGA repeat's largest-|rho| layer.", ""]
     for arch, rec in CELLS:
-        conc = t.num(question="Q1_concentration", arch=arch,
-                     recipe_actual=rec, map_basis="canon", variant="baseline",
-                     subject="MEAN", statistic="entropy_normalized")
-        gini = t.num(question="Q1_concentration", arch=arch,
-                     recipe_actual=rec, map_basis="canon", variant="baseline",
-                     subject="MEAN", statistic="gini")
+        exc = t.num(question="Q1_concentration", arch=arch,
+                    recipe_actual=rec, map_basis="canon", variant="baseline",
+                    subject="MEAN", statistic="gini_excess")
         seed = t.one(question="Q2_seed_stability", arch=arch,
                      recipe_actual=rec, map_basis="canon", variant="baseline",
                      subject="all-pairs", statistic="spearman_mean")
-        ext = [e for e in saga_gate_extremes(t, arch, rec, "canon",
-                                             "baseline-matched")
-               if e[2] is not None]
-        if ext:
+        ps = t.nums(question="Q2_seed_stability", arch=arch,
+                    recipe_actual=rec, map_basis="canon", variant="baseline",
+                    statistic="spearman_p_spatial")
+        seed_txt = MISSING
+        if seed and seed["value"] not in (MISSING, ""):
+            seed_txt = f"{float(seed['value']):+.4f} (n={seed['n']} pairs"
+            if ps:
+                seed_txt += f", p = {rng_txt(ps)}"
+            seed_txt += ")"
+
+        gate_bits = []
+        for basis in BASES:
+            ext = [e for e in gate_extremes(t, arch, rec, basis)
+                   if e[2] is not None]
+            if not ext:
+                continue
             rhos = [e[2] for e in ext]
             layers = sorted({e[1] for e in ext})
-            layer_txt = (f"layer{'s' if len(layers) > 1 else ''} "
-                         f"{', '.join(str(x) for x in layers)}")
             n_neg = sum(1 for v in rhos if v < 0)
-            if n_neg in (0, len(rhos)):
-                # every repeat agrees in sign — report the range
-                sign = "negative" if n_neg else "positive"
-                gate_txt = (f"{min(rhos):+.3f}..{max(rhos):+.3f} at "
-                            f"{layer_txt} (all {len(rhos)} repeats {sign})")
-            else:
-                # repeats DISAGREE in sign: never hide that behind a range
-                per_run = "; ".join(f"{tag} {r:+.3f} (layer {li})"
-                                    for tag, li, r, _ in ext)
-                gate_txt = (f"{per_run} — the {len(rhos)} repeats DISAGREE "
-                            f"in sign")
-        else:
-            gate_txt = MISSING
-        seed_txt = (f"{float(seed['value']):+.4f} (n={seed['n']} pairs)"
-                    if seed and seed["value"] != MISSING else MISSING)
+            sign = ("all negative" if n_neg == len(rhos) else
+                    "all positive" if n_neg == 0 else
+                    f"SIGNS DISAGREE ({n_neg} negative of {len(rhos)})")
+            sig = sum(1 for e in ext if e[4] is not None and e[4] < ALPHA)
+            gate_bits.append(
+                f"{basis} {rng_txt(rhos, 3)} at layer(s) "
+                f"{', '.join(str(x) for x in layers)}, {sign}, "
+                f"{sig}/{len(ext)} with Bonferroni p<{ALPHA}")
         lines.append(
             f"- **{cell_label(arch, rec)}**: address concentration = "
-            f"{fmt(conc)} H/H_uniform (Gini {fmt(gini)}), "
-            f"seed-stability rho = {seed_txt}, "
-            f"gate-address rho = {gate_txt}.")
+            f"{fmt(exc)} excess Gini, seed-stability rho = {seed_txt}, "
+            f"gate-address rho = "
+            f"{'; '.join(gate_bits) if gate_bits else MISSING}.")
     lines += ["",
-              "References throughout: H/H_uniform = 1.0 and Gini = 0.0 are "
-              "a perfectly uniform map (no address); Gini = 0.9949 is all "
-              "mass on one position; rho = 0 is no shared spatial "
-              "structure.", ""]
+              f"Significance threshold used throughout: p < {ALPHA} under "
+              f"the exact spatial-permutation null. Raw (non-excess) "
+              f"concentration values are in the Q1 table.", ""]
 
 
 def section_q1(t: Table, lines):
     lines += ["## Q1 — Does an address exist? (baseline concentration)", "",
-              "| cell | basis | n repeats | H/H_uniform | Gini | top-5 share "
-              "| x uniform | top-20 share | x uniform | mean sinks/image |",
-              "|---|---|---|---|---|---|---|---|---|---|"]
+              "`obs` is the raw statistic, `null` its finite-sample "
+              "expectation under a SPATIALLY UNIFORM ground truth at the "
+              "same mass and image count, `excess` the difference. Only "
+              "`excess` is comparable between rows, because the null moves "
+              "with mass.", "",
+              "| cell | basis | n | mean sinks/image | Gini obs | Gini null "
+              "| Gini excess | H/H_uniform obs | H/H_uniform excess | "
+              "top-5 obs | top-5 excess |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
-        for basis in ("canon", "mad"):
+        for basis in BASES:
             kw = dict(question="Q1_concentration", arch=arch,
                       recipe_actual=rec, map_basis=basis, variant="baseline",
                       subject="MEAN")
-            row = t.one(**kw, statistic="entropy_normalized")
+            row = t.one(**kw, statistic="gini")
             if row is None:
                 continue
-            h = t.num(**kw, statistic="entropy_normalized")
-            g = t.num(**kw, statistic="gini")
-            t5 = t.num(**kw, statistic="top5_share")
-            t20 = t.num(**kw, statistic="top20_share")
-            mass = t.num(**kw, statistic="total_mass")
             lines.append(
                 f"| {cell_label(arch, rec)} | {basis} | {row['n']} | "
-                f"{fmt(h)} | {fmt(g)} | {fmt(t5)} | "
-                f"{t5 / UNIFORM_TOP5:.2f}x | {fmt(t20)} | "
-                f"{t20 / UNIFORM_TOP20:.2f}x | {fmt(mass)} |")
+                f"{fmt(t.num(**kw, statistic='total_mass'))} | "
+                f"{fmt(t.num(**kw, statistic='gini'))} | "
+                f"{fmt(t.num(**kw, statistic='gini_null'))} | "
+                f"{fmt(t.num(**kw, statistic='gini_excess'))} | "
+                f"{fmt(t.num(**kw, statistic='entropy_normalized'))} | "
+                f"{fmt(t.num(**kw, statistic='entropy_normalized_excess'))} | "
+                f"{fmt(t.num(**kw, statistic='top5_share'))} | "
+                f"{fmt(t.num(**kw, statistic='top5_share_excess'))} |")
+
+    h_obs, t5_ratio, g_exc = [], [], []
+    for arch, rec in CELLS:
+        for basis in BASES:
+            kw = dict(question="Q1_concentration", arch=arch,
+                      recipe_actual=rec, map_basis=basis, variant="baseline",
+                      subject="MEAN")
+            h = t.num(**kw, statistic="entropy_normalized")
+            t5 = t.num(**kw, statistic="top5_share")
+            ge = t.num(**kw, statistic="gini_excess")
+            if h is not None:
+                h_obs.append(h)
+            if t5 is not None:
+                t5_ratio.append(t5 / UNIFORM_TOP5)
+            if ge is not None:
+                g_exc.append(ge)
     lines += ["",
-              f"Uniform references: top-5 share = {UNIFORM_TOP5:.5f}, "
-              f"top-20 share = {UNIFORM_TOP20:.5f} (196 positions).",
-              "",
-              "Every H/H_uniform sits close to the uniform 1.0 (0.936 to "
-              "0.990), while every top-5 share exceeds its uniform "
-              "reference (1.79x to 4.96x). The mass is therefore spread "
-              "widely but not evenly.", ""]
+              f"Uniform references for the raw values: top-5 share = "
+              f"{UNIFORM_TOP5:.5f}, Gini = 0, H/H_uniform = 1 (196 "
+              f"positions).", "",
+              f"Observed H/H_uniform spans {rng_txt(h_obs)} — close to the "
+              f"uniform 1.0 — while observed top-5 share is "
+              f"{rng_txt(t5_ratio, 2)}x its uniform reference and excess "
+              f"Gini spans {rng_txt(g_exc)}. The mass is spread widely but "
+              f"not evenly, and the excess column shows the unevenness "
+              f"survives the finite-sample floor in every baseline cell.",
+              ""]
 
 
 def section_q1b(t: Table, lines):
     lines += ["## Q1b — Geometry: mean frequency per ring from the border",
               "",
               "Ring 0 is the outermost row/column of the 14x14 grid, ring 6 "
-              "the centre. Canon maps, mean over each cell's repeats.", "",
+              "the centre. Canon maps, mean over each cell's repeats. A flat "
+              "row is no border structure; peak ring 1 means the highest "
+              "sink frequency sits one patch inside the border.", "",
               "| cell | variant | n | ring0 | ring1 | ring2 | ring3 | ring4 "
-              "| ring5 | ring6 | peak ring |",
-              "|---|---|---|---|---|---|---|---|---|---|---|"]
+              "| ring5 | ring6 | peak ring | noise-flagged |",
+              "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
         for variant in ("baseline", "saga", "registers"):
-            per_ring = defaultdict(list)
-            peaks = []
+            per_ring, peaks = defaultdict(list), []
             for r in t.find(question="Q1b_geometry", arch=arch,
                             recipe_actual=rec, map_basis="canon",
                             variant=variant):
                 if r["statistic"] == "peak_ring":
-                    peaks.append(int(r["value"]))
+                    peaks.append(int(float(r["value"])))
                 elif r["statistic"].startswith("ring"):
                     per_ring[r["statistic"]].append(float(r["value"]))
             if not peaks:
@@ -188,41 +272,50 @@ def section_q1b(t: Table, lines):
             cells = []
             for k in range(7):
                 vals = per_ring.get(f"ring{k}_mean_freq", [])
-                cells.append(fmt(sum(vals) / len(vals), 4) if vals else MISSING)
-            peak_txt = ", ".join(str(p) for p in sorted(set(peaks)))
+                cells.append(fmt(sum(vals) / len(vals)) if vals else MISSING)
+            noisy = [r["subject"] for r in t.find(
+                question="Q1_concentration", arch=arch, recipe_actual=rec,
+                map_basis="canon", variant=variant,
+                statistic="position_rel_se")
+                if r["value"] not in (MISSING, "")
+                and float(r["value"]) > 0.5 and r["subject"] != "MEAN"]
             lines.append(f"| {cell_label(arch, rec)} | {variant} | "
                          f"{len(peaks)} | " + " | ".join(cells) +
-                         f" | {peak_txt} |")
-    lines += ["", "A flat row is no border structure; a peak ring of 1 "
-              "means the highest sink frequency sits one patch inside the "
-              "border.", ""]
+                         f" | {', '.join(str(p) for p in sorted(set(peaks)))}"
+                         f" | {', '.join(noisy) if noisy else 'no'} |")
+    lines += ["", "A noise-flagged row's ring profile is read off a map "
+              "whose per-position estimate has a relative standard error "
+              "above 0.5, so its peak ring is not meaningful.", ""]
 
 
 def section_q2(t: Table, lines):
     lines += ["## Q2 — Is the address seed-stable? (the make-or-break number)",
               "",
               "Spearman between BASELINE frequency maps of the cell's "
-              "repeats, all pairs. Reference: rho = 0 is no shared "
-              "structure.", "",
-              "| cell | basis | n pairs | mean rho | min | max |",
-              "|---|---|---|---|---|---|"]
+              "repeats, all pairs, with the exact spatial-permutation "
+              "p-value. `null sd` is that permutation null's spread — "
+              "compare it with the iid reference 1/sqrt(195) = 0.0716 to see "
+              "why the position count is not the effective sample size.", "",
+              "| cell | basis | n pairs | mean rho | min | max | p range | "
+              f"pairs with p<{ALPHA} |", "|---|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
-        for basis in ("canon", "mad"):
+        for basis in BASES:
             kw = dict(question="Q2_seed_stability", arch=arch,
                       recipe_actual=rec, map_basis=basis, variant="baseline",
                       subject="all-pairs")
             m = t.one(**kw, statistic="spearman_mean")
-            if m is None:
+            if m is None or m["value"] in (MISSING, ""):
                 continue
-            if m["value"] == MISSING:
-                lines.append(f"| {cell_label(arch, rec)} | {basis} | 0 | "
-                             f"{MISSING} | {MISSING} | {MISSING} |")
-                continue
+            ps = t.nums(question="Q2_seed_stability", arch=arch,
+                        recipe_actual=rec, map_basis=basis,
+                        variant="baseline", statistic="spearman_p_spatial")
             lines.append(
                 f"| {cell_label(arch, rec)} | {basis} | {m['n']} | "
                 f"{fmt(float(m['value']))} | "
                 f"{fmt(t.num(**kw, statistic='spearman_min'))} | "
-                f"{fmt(t.num(**kw, statistic='spearman_max'))} |")
+                f"{fmt(t.num(**kw, statistic='spearman_max'))} | "
+                f"{rng_txt(ps)} | {sum(1 for p in ps if p < ALPHA)}/{len(ps)} |")
+
     pairs = t.find(question="Q2_seed_stability", arch="vit_small",
                    recipe_actual="mixup", map_basis="canon",
                    variant="baseline", statistic="spearman")
@@ -230,77 +323,111 @@ def section_q2(t: Table, lines):
         lines += ["", "Individual pairs, ViT-S/mixup baseline (canon) — the "
                   "only cell with four repeats, spanning legacy runs and "
                   "fresh seeded reruns:", "",
-                  "| pair | rho |", "|---|---|"]
+                  "| pair | rho | p (spatial) | null sd |",
+                  "|---|---|---|---|"]
         for r in pairs:
-            lines.append(f"| {r['subject']} | {fmt(float(r['value']))} |")
-    lines.append("")
+            sub = r["subject"]
+            lines.append(
+                f"| {sub} | {fmt(float(r['value']))} | "
+                f"{fmt(pair_p(t, 'Q2_seed_stability', 'canon', 'vit_small', 'mixup', sub))} | "
+                f"{fmt(t.num(question='Q2_seed_stability', arch='vit_small', recipe_actual='mixup', map_basis='canon', variant='baseline', subject=sub, statistic='spearman_null_sd'))} |")
+    n_sig, n_tot = significant_count(t, "Q2_seed_stability", "canon")
+    lines += ["", f"Across every cell (canon), {n_sig} of {n_tot} baseline "
+              f"pairs reach p<{ALPHA}.", ""]
 
 
 def section_q3(t: Table, lines):
     lines += ["## Q3 — Is the address recipe-stable?", "",
               "Spearman between ViT-S/mixup and ViT-S/true-nomix BASELINE "
               "maps, all cross pairs.", "",
-              "| basis | n pairs | mean rho | min | max |",
-              "|---|---|---|---|---|"]
-    for basis in ("canon", "mad"):
+              "| basis | n pairs | mean rho | min | max | p range | "
+              f"pairs with p<{ALPHA} |", "|---|---|---|---|---|---|---|"]
+    for basis in BASES:
         kw = dict(question="Q3_recipe_stability", map_basis=basis,
                   subject="all-cross-pairs")
         m = t.one(**kw, statistic="spearman_mean")
-        if m is None or m["value"] == MISSING:
+        if m is None or m["value"] in (MISSING, ""):
             continue
-        lines.append(f"| {basis} | {m['n']} | {fmt(float(m['value']))} | "
-                     f"{fmt(t.num(**kw, statistic='spearman_min'))} | "
-                     f"{fmt(t.num(**kw, statistic='spearman_max'))} |")
+        ps = t.nums(question="Q3_recipe_stability", map_basis=basis,
+                    statistic="spearman_p_spatial")
+        lines.append(
+            f"| {basis} | {m['n']} | {fmt(float(m['value']))} | "
+            f"{fmt(t.num(**kw, statistic='spearman_min'))} | "
+            f"{fmt(t.num(**kw, statistic='spearman_max'))} | "
+            f"{rng_txt(ps)} | {sum(1 for p in ps if p < ALPHA)}/{len(ps)} |")
+
     within = t.num(question="Q2_seed_stability", arch="vit_small",
                    recipe_actual="mixup", map_basis="canon",
                    variant="baseline", subject="all-pairs",
                    statistic="spearman_mean")
     cross = t.num(question="Q3_recipe_stability", map_basis="canon",
                   subject="all-cross-pairs", statistic="spearman_mean")
+    w_sig, w_tot = significant_count(t, "Q2_seed_stability", "canon")
+    c_sig, c_tot = significant_count(t, "Q3_recipe_stability", "canon")
     if within is not None and cross is not None:
-        lines += ["", f"Within-recipe (Q2, ViT-S/mixup, canon) mean rho = "
-                  f"{fmt(within)}; cross-recipe mean rho = {fmt(cross)}.", ""]
+        lines += ["",
+                  f"Within-recipe (Q2, ViT-S/mixup, canon) mean rho = "
+                  f"{fmt(within)} with {w_sig}/{w_tot} pairs at p<{ALPHA}; "
+                  f"cross-recipe mean rho = {fmt(cross)} with only "
+                  f"{c_sig}/{c_tot} pairs at p<{ALPHA}. The cross-recipe "
+                  f"value lies largely inside its own spatial null, so it "
+                  f"is not evidence that the address transfers between "
+                  f"recipes.", ""]
+    lines += ["The two cells are thresholded at DIFFERENT canon taus (each "
+              "calibrated on its own baseline), so the canon comparison is "
+              "between each cell's own sink definition; the mad basis, whose "
+              "threshold is per-image by construction, is listed beside it.",
+              ""]
 
 
 def section_q4(t: Table, lines):
     lines += ["## Q4 — Does SAGA (or registers) relocate the address?", "",
               "Spearman of each variant repeat's map against the "
-              "SAME-PROVENANCE baseline map. Reference: rho = 1 is an "
-              "identical address, rho = 0 relocated.", "",
-              "| cell | variant | basis | n pairs | mean rho | min | max |",
-              "|---|---|---|---|---|---|---|"]
+              "SAME-PROVENANCE baseline map (rho = 1 identical, 0 "
+              "relocated), with the spatial-permutation p.", "",
+              "| cell | variant | basis | n pairs | mean rho | min | max | "
+              f"pairs with p<{ALPHA} |", "|---|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
         for variant in ("saga", "registers"):
-            for basis in ("canon", "mad"):
+            for basis in BASES:
                 kw = dict(question="Q4_relocation", arch=arch,
                           recipe_actual=rec, map_basis=basis,
                           variant=variant, subject="paired")
                 m = t.one(**kw, statistic="spearman_mean")
-                if m is None or m["value"] == MISSING:
+                if m is None or m["value"] in (MISSING, ""):
                     continue
+                ps = t.nums(question="Q4_relocation", arch=arch,
+                            recipe_actual=rec, map_basis=basis,
+                            variant=variant, statistic="spearman_p_spatial")
                 lines.append(
                     f"| {cell_label(arch, rec)} | {variant} | {basis} | "
                     f"{m['n']} | {fmt(float(m['value']))} | "
                     f"{fmt(t.num(**kw, statistic='spearman_min'))} | "
-                    f"{fmt(t.num(**kw, statistic='spearman_max'))} |")
-    lines += ["", "Change in concentration and mass (variant cell-mean minus "
-              "baseline cell-mean, canon maps). For H/H_uniform a NEGATIVE "
-              "delta is more concentrated; for Gini and top-5 share a "
-              "POSITIVE delta is more concentrated.", "",
-              "| cell | variant | d H/H_uniform | d Gini | d top-5 share | "
-              "d mean sinks/image |", "|---|---|---|---|---|---|"]
+                    f"{fmt(t.num(**kw, statistic='spearman_max'))} | "
+                    f"{sum(1 for p in ps if p < ALPHA)}/{len(ps)} |")
+    lines += ["", "Change in concentration, as PAIRED differences of "
+              "EXCESS-over-null values (canon). Differencing raw values "
+              "instead inverts the registers result, because the variants "
+              "change the sink mass by up to two orders of magnitude and "
+              "the null moves with mass. For excess H/H_uniform a NEGATIVE "
+              "delta is more concentrated; for excess Gini and top-5 share "
+              "a POSITIVE delta is.", "",
+              "| cell | variant | n pairs | d excess H/H_uniform | "
+              "d excess Gini | d excess top-5 | d mean sinks/image |",
+              "|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
         for variant in ("saga", "registers"):
             kw = dict(question="Q4_relocation", arch=arch, recipe_actual=rec,
-                      map_basis="canon", variant=variant, subject="MEAN")
-            h = t.one(**kw, statistic="delta_entropy_normalized")
+                      map_basis="canon", variant=variant, subject="MEAN",
+                      comparator="baseline-matched")
+            h = t.one(**kw, statistic="delta_entropy_normalized_excess")
             if h is None:
                 continue
             lines.append(
-                f"| {cell_label(arch, rec)} | {variant} | "
-                f"{fmt(float(h['value']))} | "
-                f"{fmt(t.num(**kw, statistic='delta_gini'))} | "
-                f"{fmt(t.num(**kw, statistic='delta_top5_share'))} | "
+                f"| {cell_label(arch, rec)} | {variant} | {h['n']} | "
+                f"{fmt(float(h['value'])) if h['value'] not in (MISSING, '') else MISSING} | "
+                f"{fmt(t.num(**kw, statistic='delta_gini_excess'))} | "
+                f"{fmt(t.num(**kw, statistic='delta_top5_share_excess'))} | "
                 f"{fmt(t.num(**kw, statistic='delta_total_mass'))} |")
     lines.append("")
 
@@ -308,52 +435,40 @@ def section_q4(t: Table, lines):
 def section_q5(t: Table, lines):
     lines += ["## Q5 — Does the gate know the address?", "",
               "Spearman between sigmoid(phi) (mean over heads) and a "
-              "frequency map, per layer. `baseline-matched` uses the "
-              "same-provenance baseline map, `own` the SAGA run's own map. "
-              "The extremal layer is the one with the largest |rho|. "
-              "`gate std` is that layer's spatial standard deviation of "
-              "sigmoid(phi) — a rank correlation is scale-free, so it says "
-              "how much absolute modulation the rho corresponds to.", "",
-              "| cell | saga repeat | comparator | extremal layer | rho | "
-              "layer-mean rho | layers defined | gate std at layer |",
-              "|---|---|---|---|---|---|---|---|"]
+              "frequency map, per layer, against the same-provenance "
+              "baseline map. Each row's layer is an ARGMAX over the "
+              "defined layers, so `p Bonf` corrects for that selection, "
+              "and `opposite extreme` gives the largest same-profile "
+              "correlation of the other sign — the counter-evidence to a "
+              "sign claim. `gate std` is that layer's spatial standard "
+              "deviation of sigmoid(phi): a rank correlation is "
+              "scale-free, so it says how little absolute modulation the "
+              "rho corresponds to.", "",
+              "| cell | saga repeat | basis | layer | rho | p | p Bonf | "
+              "opposite extreme | gate std |",
+              "|---|---|---|---|---|---|---|---|---|"]
     for arch, rec in CELLS:
-        for comparator in ("baseline-matched", "own"):
-            for tag, layer, rho, std in saga_gate_extremes(
-                    t, arch, rec, "canon", comparator):
-                mean_row = t.one(question="Q5_gate_address", arch=arch,
-                                 recipe_actual=rec, map_basis="canon",
-                                 subject=tag, comparator=comparator,
-                                 statistic="spearman_layer_mean")
-                defined = (mean_row["note"].replace("n_layers_defined=", "")
-                           if mean_row else MISSING)
+        for basis in BASES:
+            for (tag, layer, rho, p, bonf, o_layer, o_rho,
+                 std) in gate_extremes(t, arch, rec, basis):
+                if rho is None:
+                    lines.append(f"| {cell_label(arch, rec)} | {tag} | "
+                                 f"{basis} | {MISSING} | {MISSING} | "
+                                 f"{MISSING} | {MISSING} | {MISSING} | "
+                                 f"{MISSING} |")
+                    continue
+                opp = (f"{o_rho:+.3f} (layer {o_layer})"
+                       if o_rho is not None else MISSING)
                 lines.append(
-                    f"| {cell_label(arch, rec)} | {tag} | {comparator} | "
-                    f"{layer if layer is not None else MISSING} | "
-                    f"{fmt(rho, 3) if rho is not None else MISSING} | "
-                    f"{fmt(float(mean_row['value']), 3) if mean_row and mean_row['value'] != MISSING else MISSING} | "
-                    f"{defined} | {fmt(std, 5) if std is not None else MISSING} |")
+                    f"| {cell_label(arch, rec)} | {tag} | {basis} | {layer} "
+                    f"| {fmt(rho, 3)} | {fmt(p)} | {fmt(bonf)} | {opp} | "
+                    f"{fmt(std, 5)} |")
     lines += ["", "The final layer is spatially constant in every SAGA run "
-              "(phi stays at its initialisation there), so it has no defined "
-              "rank correlation and is excluded from the layer mean and "
-              "counted in `layers defined`.", ""]
-
-
-def degenerate_maps(t: Table, min_distinct=32):
-    """Members whose freq map has too few distinct values for a Spearman to
-    mean anything (mostly ties). Returned with their numbers."""
-    out = []
-    for r in t.find(question="Q1_concentration", statistic="n_distinct_values"):
-        n_distinct = int(float(r["value"]))
-        if n_distinct >= min_distinct:
-            continue
-        zf = t.num(question="Q1_concentration", arch=r["arch"],
-                   recipe_actual=r["recipe_actual"],
-                   map_basis=r["map_basis"], variant=r["variant"],
-                   subject=r["subject"], statistic="zero_fraction")
-        out.append((cell_label(r["arch"], r["recipe_actual"]), r["variant"],
-                    r["subject"], r["map_basis"], n_distinct, zf))
-    return out
+              "(phi stays at its initialisation there), so it has no "
+              "defined rank correlation and is excluded from the layer "
+              "statistics. The signed layer-mean rho in the CSV is near "
+              "zero partly through cancellation between layers of opposite "
+              "sign; `spearman_layer_absmean` is listed beside it.", ""]
 
 
 def section_open(t: Table, lines):
@@ -366,6 +481,8 @@ def section_open(t: Table, lines):
                    recipe_actual="mixup", map_basis="canon",
                    variant="baseline", subject="all-pairs",
                    statistic="spearman_mean")
+    sds = t.nums(question="Q2_seed_stability", map_basis="canon",
+                 statistic="spearman_null_sd")
     lines += [
         f"- Seed-stability rests on ONE pair in ViT-S/nomix "
         f"(n={n_nomix['n'] if n_nomix else 0}) and ONE in ViT-B/mixup "
@@ -378,31 +495,51 @@ def section_open(t: Table, lines):
         "through the seeded trainer (the 2-epoch smoke passed, the chains "
         "are unsubmitted).",
     ]
-    deg = degenerate_maps(t)
-    if deg:
+    if sds:
         lines.append(
-            f"- DEGENERATE RANKINGS — a Spearman needs spread, and these "
-            f"maps have almost none, so every correlation involving them "
-            f"(Q4 especially) rests on ties and should not be compared "
-            f"with the other cells: "
-            + "; ".join(f"{cell} {variant} {tag} [{basis}] only "
-                        f"{n} distinct values of 196 positions, "
-                        f"{zf * 100:.1f}% never a sink"
-                        for cell, variant, tag, basis, n, zf in deg) + ".")
+            f"- The 196 positions are NOT 196 independent samples: the "
+            f"spatial-permutation null sd is {rng_txt(sds)} against an iid "
+            f"reference of 0.0716, i.e. an effective sample size around "
+            f"{1 / max(sds) ** 2 + 1:.0f} to {1 / min(sds) ** 2 + 1:.0f}. "
+            f"The `n` column on a correlation row is the POSITION count, "
+            f"not that effective size; use the p-value.")
+    noisy = [(r["arch"], r["recipe_actual"], r["variant"], r["subject"],
+              r["map_basis"], float(r["value"]))
+             for r in t.find(question="Q1_concentration",
+                             statistic="position_rel_se")
+             if r["value"] not in (MISSING, "") and float(r["value"]) > 0.5
+             and r["subject"] != "MEAN"]
+    if noisy:
+        lines.append(
+            "- MONTE-CARLO NOISE, not ties, is what makes a sparse map's "
+            "ranking meaningless: these maps have so few sinks that one "
+            "position's frequency carries a relative standard error above "
+            "0.5, so their concentration, ring profile and correlations "
+            "are not comparable with the other cells — "
+            + "; ".join(f"{cell_label(a, rc)} {v} {tag} [{b}] rel SE "
+                        f"{se:.2f}" for a, rc, v, tag, b, se in noisy) + ".")
     else:
-        lines.append("- No frequency map is tie-degenerate (every map has "
-                     "enough distinct values for a Spearman).")
+        lines.append("- No map is noise-flagged (every per-position "
+                     "relative standard error is at or below 0.5).")
+    layers = sorted({r["statistic"] for r in t.find(
+        question="Q5_gate_address") if r["statistic"].startswith(
+            "spearman_layer") and r["statistic"][14:].isdigit()})
+    comparators = sorted({r["comparator"] for r in t.find(
+        question="Q5_gate_address")
+        if r["statistic"].startswith("spearman_layer")
+        and r["statistic"][14:].isdigit()})
     lines += [
-        "- Q3 correlates maps thresholded at DIFFERENT canon taus (one per "
-        "cell, calibrated on that cell's own baseline), so the canon "
-        "comparison is between each cell's own sink definition; the MAD "
-        "basis, whose threshold is per-image by construction, is reported "
-        "beside it and points the same way.",
-        "- Q5 is reported at each run's extremal layer; the full 12-layer "
-        "profile for every run and comparator is in the CSV "
-        "(`spearman_layer00..11`) and in Faddr.npz (`profile__*`).",
-        "- Both threshold bases are reported throughout; no cell has been "
-        "designated primary for the address question.",
+        f"- Q5 is reported at each run's extremal layer. The full "
+        f"per-layer profile is in the CSV for {', '.join(comparators)} "
+        f"as {layers[0]}..{layers[-1]} (the spatially constant final layer "
+        f"has no row), and for every comparator in Faddr.npz "
+        f"(`profile__*`)." if layers else
+        "- Q5 per-layer profiles are in Faddr.npz (`profile__*`).",
+        "- Concentration nulls are Monte-Carlo (see the `*_null` rows for "
+        "sims and seed); correlation p-values are exact permutation tests "
+        "and need no seed.",
+        "- Both threshold bases are reported for every question; no basis "
+        "has been designated primary for the address question.",
         ""]
 
 
@@ -415,8 +552,8 @@ def build_note(rows, table_path: Path, npz_path: Path) -> str:
     lines = [
         "# Sink-address analysis (TASK-07 Phase C)", "",
         "GENERATED by `analysis/build_sink_address_note.py` from "
-        f"`{table_path.as_posix()}` — every number below is read from that "
-        "CSV, none is hand-typed.", "",
+        f"`{table_path.as_posix()}` — every number below, including the "
+        "ranges quoted in prose, is read from that CSV.", "",
         f"Source maps: the committed `*_addr.json` files "
         f"(`tools/sink_address.py`, HPC Phase B), {n_members} of them, one "
         "per (cell, variant, repeat), all sha-matched to their checkpoints "

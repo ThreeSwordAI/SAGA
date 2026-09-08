@@ -61,7 +61,7 @@ def members_of(data, arch, rec):
 
 
 def extremal_layer(rows, arch, rec, tag, basis, comparator="baseline-matched"):
-    """(layer, rho) of the most (anti)correlated gate layer, or None."""
+    """(layer, rho, p_bonferroni) of the most (anti)correlated gate layer."""
     for r in rows:
         if (r["question"] == "Q5_gate_address" and r["arch"] == arch
                 and r["recipe_actual"] == rec and r["subject"] == tag
@@ -69,9 +69,27 @@ def extremal_layer(rows, arch, rec, tag, basis, comparator="baseline-matched"):
                 and r["comparator"] == comparator
                 and r["statistic"] == "spearman_layer_absmax"
                 and r["value"] != "MISSING"):
-            layer = int(r["note"].split("=")[1])
-            return layer, float(r["value"])
+            note = r["note"]
+            layer = int(note.split("layer=")[1].split(";")[0])
+            bonf = None
+            if "Bonferroni p=" in note:
+                bonf = float(note.split("Bonferroni p=")[1].split()[0])
+            return layer, float(r["value"]), bonf
     return None
+
+
+def noisy_subjects(rows, basis, threshold=0.5):
+    """{(arch, rec, variant, tag)} whose per-position estimate is mostly
+    Monte-Carlo noise — their concentration bars must be marked."""
+    out = set()
+    for r in rows:
+        if (r["question"] == "Q1_concentration"
+                and r["statistic"] == "position_rel_se"
+                and r["map_basis"] == basis and r["subject"] != "MEAN"
+                and r["value"] not in ("MISSING", "")
+                and float(r["value"]) > threshold):
+            out.add((r["arch"], r["recipe_actual"], r["variant"]))
+    return out
 
 
 def cell_figure(data, rows, arch, rec, basis):
@@ -125,7 +143,11 @@ def cell_figure(data, rows, arch, rec, basis):
             title = f"saga {tag}\nlayer {layer}"
             if ext:
                 title += f", rho={ext[1]:+.3f}"
-            title += f"\nstd={m.std():.4f}"
+                # the layer is an argmax over 12, so show the corrected p
+                if ext[2] is not None:
+                    title += (f"\nBonf p={ext[2]:.3f}"
+                              + ("" if ext[2] < 0.05 else " (n.s.)"))
+            title += f"  std={m.std():.4f}"
             ax.set_title(title, fontsize=7.5, color=INK)
             ax.set_xticks([]), ax.set_yticks([])
         for ax in axes[1][len(chosen):]:
@@ -144,14 +166,23 @@ def cell_figure(data, rows, arch, rec, basis):
 
 
 def concentration_figure(rows, basis):
-    stats = [("entropy_normalized", "H / H_uniform  (1 = uniform)", 1.0),
-             ("gini", "Gini  (0 = uniform)", 0.0),
-             ("top5_share", "top-5 share", 5 / 196)]
-    fig, axes = plt.subplots(1, len(stats), figsize=(4.1 * len(stats), 3.5))
-    labels, colors = [], {"baseline": "#4c72b0", "saga": "#c44e52",
-                          "registers": "#55a868"}
-    for ax, (stat, title, ref) in zip(axes, stats):
-        xs, heights, cs = [], [], []
+    """Concentration as EXCESS over the finite-sample null.
+
+    Plotting the RAW statistics against a zero reference makes the
+    sparsest map (ViT-B registers, 0.02 sinks/image) the tallest Gini bar
+    in the figure, purely from Monte-Carlo noise. Excess subtracts each
+    map's own null, and any map that is mostly noise is hatched.
+    """
+    stats = [("entropy_normalized_excess",
+              "excess H / H_uniform  (0 = uniform-like)"),
+             ("gini_excess", "excess Gini  (0 = uniform-like)"),
+             ("top5_share_excess", "excess top-5 share")]
+    fig, axes = plt.subplots(1, len(stats), figsize=(4.1 * len(stats), 3.6))
+    colors = {"baseline": "#4c72b0", "saga": "#c44e52",
+              "registers": "#55a868"}
+    noisy = noisy_subjects(rows, basis)
+    for ax, (stat, title) in zip(axes, stats):
+        xs, heights, cs, hatches = [], [], [], []
         for arch, rec in CELLS:
             for variant in VARIANT_ORDER:
                 hit = [r for r in rows
@@ -160,16 +191,22 @@ def concentration_figure(rows, basis):
                        and r["variant"] == variant and r["subject"] == "MEAN"
                        and r["map_basis"] == basis
                        and r["statistic"] == stat]
-                if not hit or hit[0]["value"] == "MISSING":
+                if not hit or hit[0]["value"] in ("MISSING", ""):
                     continue
+                flagged = (arch, rec, variant) in noisy
                 xs.append(f"{arch.replace('vit_', '')}|{rec}\n{variant} "
-                          f"(n={hit[0]['n']})")
+                          f"(n={hit[0]['n']})" + ("\nNOISY" if flagged else ""))
                 heights.append(float(hit[0]["value"]))
                 cs.append(colors[variant])
+                hatches.append("///" if flagged else "")
         pos = np.arange(len(heights))
-        ax.bar(pos, heights, color=cs, width=0.72)
-        ax.axhline(ref, color=MUTED, ls="--", lw=1)
-        ax.annotate(f"uniform = {ref:.4g}", (0.02, ref), xycoords=("axes fraction", "data"),
+        bars = ax.bar(pos, heights, color=cs, width=0.72)
+        for bar, hatch in zip(bars, hatches):
+            if hatch:
+                bar.set_hatch(hatch)
+                bar.set_edgecolor("white")
+        ax.axhline(0.0, color=MUTED, ls="--", lw=1)
+        ax.annotate("null", (0.02, 0.0), xycoords=("axes fraction", "data"),
                     fontsize=7, color=MUTED, va="bottom")
         ax.set_xticks(pos)
         ax.set_xticklabels(xs, fontsize=6, rotation=90, color=INK)
@@ -177,9 +214,11 @@ def concentration_figure(rows, basis):
         ax.tick_params(labelsize=7, colors=MUTED)
         for s in ("top", "right"):
             ax.spines[s].set_visible(False)
-    fig.suptitle(f"Address concentration, mean over repeats  [{basis} map]",
-                 fontsize=11, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.suptitle(f"Address concentration as EXCESS over each map's "
+                 f"finite-sample null, mean over repeats  [{basis} map]\n"
+                 f"hatched = per-position relative standard error > 0.5 "
+                 f"(mostly Monte-Carlo noise)", fontsize=10, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
     return fig
 
 
