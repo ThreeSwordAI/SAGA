@@ -17,6 +17,7 @@ CPU-only, fake data. Covers:
 """
 
 import json
+import math
 import re
 import sys
 import tarfile
@@ -528,6 +529,134 @@ def test_release_lock_respects_ownership(tmp_path):
     assert lock.exists(), "a zombie must never remove a successor's lock"
     train_ft.release_lock(lock, "successor-process token")
     assert not lock.exists()
+
+
+def test_ft_table_stats_and_pairing(tmp_path):
+    """T3 aggregation: pairing by ft-seed, sample std, SE, 2xSE verdict,
+    MISSING never averaged, n=1 cells flagged with no significance."""
+    from analysis import build_ft_tables as bft
+
+    assert bft.mean_std([1.0, 2.0, 3.0])[0] == pytest.approx(2.0)
+    assert bft.mean_std([1.0, 2.0, 3.0])[1] == pytest.approx(1.0)  # n-1
+    assert bft.mean_std([5.0]) == (5.0, bft.MISSING)   # n=1 -> no std
+    assert bft.mean_std([bft.MISSING]) == (bft.MISSING, bft.MISSING)
+    # a MISSING is dropped, never imputed as zero
+    assert bft.mean_std([2.0, bft.MISSING, 4.0])[0] == pytest.approx(3.0)
+    assert bft.welch([1.0], [2.0]) == (bft.MISSING, bft.MISSING)
+
+    runs = tmp_path / "runs"
+    seeds = {"baseline": {0: 70.0, 1: 72.0, 2: 71.0},
+             "saga": {0: 71.0, 1: 73.5, 2: 71.5}}
+    matrix = {"backbones": {"bb_baseline": {"sha256": "a" * 64},
+                            "bb_saga": {"sha256": "b" * 64}},
+              "runs": {}}
+    for variant, per_seed in seeds.items():
+        for seed, top1 in per_seed.items():
+            run_id = f"ft_cub_vits_{variant}_bs1_f{seed}"
+            matrix["runs"][run_id] = {
+                "dataset": "cub", "arch": "vit_small_patch16_224",
+                "variant": variant, "backbone": f"bb_{variant}",
+                "ft_seed": seed}
+            d = runs / run_id / "eval"
+            d.mkdir(parents=True)
+            (d / "test_final.json").write_text(json.dumps({
+                "top1": top1, "top5": 90.0 + 0.5 * seed,
+                "val_top1_at_best": top1 + 1,
+                "best_epoch": 10, "epochs_trained": 100, "n_images": 5794,
+                "backbone_sha256": ("a" if variant == "baseline" else "b") * 64,
+            }))
+    rows = bft.build_rows(runs, matrix)
+
+    def get(kind, variant="saga", seed=None):
+        return [r for r in rows if r["kind"] == kind
+                and r["variant"] == variant
+                and (seed is None or r["ft_seed"] == seed)][0]
+
+    # deltas pair BY SEED: 1.0, 1.5, 0.5
+    assert [get("paired_delta", seed=f"f{s}")["test_top1"] for s in (0, 1, 2)] \
+        == [pytest.approx(1.0), pytest.approx(1.5), pytest.approx(0.5)]
+    dm = get("paired_delta_mean")["test_top1"]
+    dse = get("paired_delta_se")["test_top1"]
+    assert dm == pytest.approx(1.0)
+    assert dse == pytest.approx(0.5 / math.sqrt(3))
+    assert get("significant_2xSE")["test_top1"] == int(abs(dm) > 2 * dse) == 1
+    assert get("mean", "baseline")["test_top1"] == pytest.approx(71.0)
+
+
+def test_ft_table_sha_mismatch_becomes_missing(tmp_path):
+    """A run whose recorded backbone sha does not match the matrix, or that
+    is a smoke artifact, must yield MISSING — never an unverified number."""
+    from analysis import build_ft_tables as bft
+
+    runs = tmp_path / "runs"
+    matrix = {"backbones": {"bb": {"sha256": "a" * 64}}, "runs": {}}
+    cases = {0: ("a" * 64, False), 1: ("dead" + "0" * 60, False),
+             2: ("a" * 64, True)}
+    for seed, (sha, smoke) in cases.items():
+        run_id = f"ft_cub_vits_baseline_bs1_f{seed}"
+        matrix["runs"][run_id] = {
+            "dataset": "cub", "arch": "vit_small_patch16_224",
+            "variant": "baseline", "backbone": "bb", "ft_seed": seed}
+        d = runs / run_id / "eval"
+        d.mkdir(parents=True)
+        (d / "test_final.json").write_text(json.dumps({
+            "top1": 70.0 + seed, "top5": 90.0, "val_top1_at_best": 71.0,
+            "best_epoch": 5, "epochs_trained": 100, "n_images": 5794,
+            "backbone_sha256": sha, "smoke": smoke}))
+    reps = bft.load_repeats(runs, matrix, "cub", "vit_small_patch16_224",
+                            "baseline")
+    got = {seed: vals["test_top1"] for seed, vals in reps}
+    assert got[0] == pytest.approx(70.0)
+    assert got[1] == bft.MISSING, "sha mismatch must not yield a number"
+    assert got[2] == bft.MISSING, "smoke artifact must not yield a number"
+    # the surviving single value still means, but cannot get a std
+    rows = bft.build_rows(runs, matrix)
+    mean_row = [r for r in rows if r["kind"] == "mean"][0]
+    std_row = [r for r in rows if r["kind"] == "std"][0]
+    assert mean_row["test_top1"] == pytest.approx(70.0)
+    assert std_row["test_top1"] == bft.MISSING
+
+
+def test_committed_T3_matches_the_run_jsons():
+    """The committed table must agree exactly with the committed run JSONs
+    (numbers are sacred: no drift between a regenerated table and source)."""
+    table = REPO / "results" / "tables" / "T3_finegrained.csv"
+    if not table.exists():
+        pytest.skip("T3 not built yet")
+    import csv as _csv
+    with open(table) as f:
+        rows = list(_csv.DictReader(f))
+    n_checked = 0
+    for r in rows:
+        if r["kind"] != "repeat":
+            continue
+        archtok = "vits" if "small" in r["arch"] else "vitb"
+        run_id = (f"ft_{r['dataset']}_{archtok}_{r['variant']}_bs1_"
+                  f"{r['ft_seed']}")
+        p = (REPO / "results" / "runs" / run_id / "eval" /
+             "test_final.json")
+        assert p.exists(), run_id
+        d = json.load(open(p))
+        assert float(r["test_top1"]) == pytest.approx(d["top1"])
+        assert float(r["test_top5"]) == pytest.approx(d["top5"])
+        assert float(r["val_top1_at_best"]) == pytest.approx(
+            d["val_top1_at_best"])
+        assert int(r["best_epoch"]) == d["best_epoch"]
+        assert int(r["n_test_images"]) == d["n_images"]
+        assert not d.get("smoke", False), f"{run_id} is a smoke artifact"
+        n_checked += 1
+    assert n_checked == 16, f"expected 16 repeat rows, found {n_checked}"
+
+
+def test_finegrained_note_states_legacy_void():
+    """The note must name the superseded legacy deltas as void (task C.3)."""
+    note = REPO / "results" / "notes" / "finegrained.md"
+    if not note.exists():
+        pytest.skip("note not built yet")
+    text = note.read_text(encoding="utf-8")
+    assert "VOID" in text
+    assert "+2.19" in text and "+1.29" in text
+    assert "exactly once" in text.lower()
 
 
 def test_split_builder_is_write_once(fake_cub, tmp_path, monkeypatch):

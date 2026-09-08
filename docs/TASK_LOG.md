@@ -585,6 +585,81 @@ locally (T3 tables + finegrained.md) after 16× test_final.json are back.
 - Quota watch: hpc 86.1G of 104.9G soft; the 14 remaining runs add
   ≈9-10 GB of ft checkpoints under `results/runs/<id>/ckpt/`.
 
+**Update 2026-09-08 (Phase B attempt 2 + PHASE C — T3 complete):**
+- Array 4198114 (`--exclude=a0801`): **all 14 outstanding runs COMPLETED**
+  (19-40 min each); tasks 8,9 skipped themselves via their markers exactly
+  as designed. All 16 `eval/test_final.json` in hand (human commit
+  `fd98185`, rebased onto `dd73aea`).
+- Integrity of all 16 verified before any table was built: `smoke` false
+  everywhere, `n_images` correct per dataset (CUB 5794 / Aircraft 3333),
+  100 epochs and 100 log rows each, `best_epoch` and `val_top1_at_best`
+  matching each run's OWN log.csv peak exactly, the four backbone sha256s
+  matching `configs/ft_matrix.yaml`, and ONE frozen split sha per dataset
+  across all runs of that dataset.
+- C1 `analysis/build_ft_tables.py` → `results/tables/T3_finegrained.csv`
+  (60 rows). Repeats listed individually before any mean; deltas paired BY
+  ft-seed (the only valid pairing — both sides share the frozen val split);
+  sample std (n-1), SE = sd/√n, `significant_2xSE`, unpaired Welch as a
+  robustness line; MISSING never averaged; a run whose backbone sha does
+  not match the matrix (or that is a smoke artifact) yields MISSING, never
+  an unverified number. ViT-B cells carry an explicit `n=1` flag.
+- **T3 headline (exact test top-1, official test split touched once per
+  run, val-selected checkpoint):**
+  - CUB ViT-S: baseline mean **80.877** (std 0.2390; 81.153/80.739/80.739),
+    saga mean **80.515** (std 0.3543; 80.860/80.532/80.152). Paired Δ =
+    **−0.362**, SE 0.1150, **significant at 2×SE (SAGA BELOW baseline)** —
+    all three seeds negative (−0.293/−0.207/−0.587). Welch p 0.2255.
+  - CUB ViT-B: baseline 80.549, saga 81.878, Δ **+1.329** (n=1, no SE, no
+    significance claim possible).
+  - Aircraft ViT-S: baseline mean **73.067** (std 1.0113;
+    72.757/74.197/72.247), saga mean **74.027** (std 0.3617;
+    73.687/74.407/73.987). Paired Δ = **+0.960**, SE 0.4419, significant
+    at 2×SE but by a THIN margin (|Δ| − 2×SE = +0.076); all three seeds
+    positive (+0.930/+0.210/+1.740). Welch p 0.2367.
+  - Aircraft ViT-B: baseline 72.427, saga 74.227, Δ **+1.800** (n=1).
+  - **The two ViT-S cells reach 2×SE significance in OPPOSITE directions**
+    (CUB negative, Aircraft positive). Both ViT-B deltas are positive but
+    n=1. No pooled cross-dataset claim is made anywhere.
+- C2/C3 `analysis/build_finegrained_note.py` →
+  `results/notes/finegrained.md` (162 lines; every number computed from the
+  CSV + run JSONs, none typed). §0 states the legacy **+2.19 Aircraft /
+  +1.29 CUB are VOID and never cited**, with the B7 mechanism, and that
+  they must not be compared against T3 (they measure a different, invalid
+  quantity). §4 tabulates per-run backbone/split/git shas.
+- Sanity (task C.2): **16 of 16 runs peaked on val strictly before their
+  final epoch** (best epochs 11..86 of 100) — the 100-epoch schedule
+  overfits both datasets and val-selection changed the evaluated weights
+  on EVERY run, which is precisely what B7's test-tuned peak concealed.
+  6 of 16 runs show |val − test| > 2 pts, all positive, largest +3.784
+  (CUB ViT-B baseline); 13 of 16 gaps positive, mean +1.553. Recorded with
+  the computed noise floor (CUB val n=600 ⇒ binomial SE ≈ 1.53 pts;
+  Aircraft n=700 ⇒ ≈ 1.65 pts) and the note that a val-selected maximum is
+  upward-biased — reported, not corrected for.
+- Independent recompute of every T3 value straight from the 16 JSONs via a
+  separate code path (repeats, means, sample stds, paired deltas, SEs,
+  2×SE verdicts): **0 errors**.
+- 3 note-generator defects found and fixed before commit: binomial-SE
+  lines duplicated per cell instead of per dataset; "n = 1 pairs" plural;
+  and a bare "significant: YES" that could be misread as favourable on the
+  CUB cell — now every verdict prints its direction and its |Δ| − 2×SE
+  margin, and a thin margin (< 25% of the threshold) says so in words.
+- Tests: 9 new (T3 stats/pairing/MISSING-never-imputed, sha-mismatch and
+  smoke → MISSING, committed-T3-matches-run-JSONs, note-states-void).
+  `pytest -q`: **220 passed** (includes the concurrent TASK-07/09
+  sessions' in-tree tests).
+- **Reconciliation:** the TASK-09 session was editing this worktree
+  concurrently (detection/segmentation trainers, `.gitignore`,
+  `results/README.md`, `scripts/sync_results.sh`, `saga/vit.py`,
+  `requirements.txt` and its own TASK_LOG entry, all uncommitted). Per
+  CLAUDE.md's one-task-per-commit rule this commit stages ONLY the four
+  TASK-08 artifacts plus `tests/test_task08_ft.py` and this log entry;
+  TASK-09's uncommitted work was left exactly as found.
+
+**TASK 08 COMPLETE** (Phases A/B/C). Nothing pending from the HPC.
+Open decisions for the human: whether to add ft-seeds f1/f2 for the two
+ViT-B cells (would let the +1.329/+1.800 deltas carry an SE), and how to
+frame the opposite-direction ViT-S result in the paper.
+
 ---
 
 ## 2026-09-07 — TASK 07, PHASE A (sink-address tool + optional-run prep)

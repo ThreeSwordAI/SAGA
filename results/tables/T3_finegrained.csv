@@ -1,0 +1,61 @@
+dataset,arch,variant,kind,ft_seed,n,test_top1,test_top5,val_top1_at_best,best_epoch,epochs_trained,val_minus_test,n_test_images,flag
+cub,vit_small_patch16_224,baseline,repeat,f0,,81.153,95.461,82.833,23,100,1.68,5794,
+cub,vit_small_patch16_224,baseline,repeat,f1,,80.739,94.684,83.167,58,100,2.428,5794,
+cub,vit_small_patch16_224,baseline,repeat,f2,,80.739,96.117,82.667,15,100,1.928,5794,
+cub,vit_small_patch16_224,baseline,mean,,3,80.877,95.420667,82.889,,,,,
+cub,vit_small_patch16_224,baseline,std,,3,0.239023,0.717351,0.254661,,,,,
+cub,vit_small_patch16_224,saga,repeat,f0,,80.86,94.667,83.167,42,100,2.307,5794,
+cub,vit_small_patch16_224,saga,repeat,f1,,80.532,95.185,83.5,32,100,2.968,5794,
+cub,vit_small_patch16_224,saga,repeat,f2,,80.152,94.149,82.833,68,100,2.681,5794,
+cub,vit_small_patch16_224,saga,mean,,3,80.514667,94.667,83.166667,,,,,
+cub,vit_small_patch16_224,saga,std,,3,0.354318,0.518,0.3335,,,,,
+cub,vit_small_patch16_224,saga,paired_delta,f0,,-0.293,-0.794,0.334,,,,,
+cub,vit_small_patch16_224,saga,paired_delta,f1,,-0.207,0.501,0.333,,,,,
+cub,vit_small_patch16_224,saga,paired_delta,f2,,-0.587,-1.968,0.166,,,,,
+cub,vit_small_patch16_224,saga,paired_delta_mean,,3,-0.362333,-0.753667,0.277667,,,,,
+cub,vit_small_patch16_224,saga,paired_delta_se,,3,0.115044,0.713024,0.055834,,,,,
+cub,vit_small_patch16_224,saga,significant_2xSE,,3,1,0,1,,,,,
+cub,vit_small_patch16_224,saga,welch_t,,3,-1.4684,-1.4753,1.1461,,,,,
+cub,vit_small_patch16_224,saga,welch_p,,3,0.2255,0.2209,0.3197,,,,,
+cub,vit_base_patch16_224,baseline,repeat,f0,,80.549,95.685,84.333,14,100,3.784,5794,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,baseline,mean,,1,80.549,95.685,84.333,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,baseline,std,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,repeat,f0,,81.878,95.841,83.167,11,100,1.289,5794,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,mean,,1,81.878,95.841,83.167,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,std,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,paired_delta,f0,,1.329,0.156,-1.166,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,paired_delta_mean,,1,1.329,0.156,-1.166,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,paired_delta_se,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,significant_2xSE,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,welch_t,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+cub,vit_base_patch16_224,saga,welch_p,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_small_patch16_224,baseline,repeat,f0,,72.757,92.739,73.857,54,100,1.1,3333,
+aircraft,vit_small_patch16_224,baseline,repeat,f1,,74.197,93.309,75.0,76,100,0.803,3333,
+aircraft,vit_small_patch16_224,baseline,repeat,f2,,72.247,92.859,73.857,55,100,1.61,3333,
+aircraft,vit_small_patch16_224,baseline,mean,,3,73.067,92.969,74.238,,,,,
+aircraft,vit_small_patch16_224,baseline,std,,3,1.011286,0.3005,0.659911,,,,,
+aircraft,vit_small_patch16_224,saga,repeat,f0,,73.687,93.129,76.0,59,100,2.313,3333,
+aircraft,vit_small_patch16_224,saga,repeat,f1,,74.407,93.339,74.0,68,100,-0.407,3333,
+aircraft,vit_small_patch16_224,saga,repeat,f2,,73.987,92.859,74.714,86,100,0.727,3333,
+aircraft,vit_small_patch16_224,saga,mean,,3,74.027,93.109,74.904667,,,,,
+aircraft,vit_small_patch16_224,saga,std,,3,0.361663,0.240624,1.013541,,,,,
+aircraft,vit_small_patch16_224,saga,paired_delta,f0,,0.93,0.39,2.143,,,,,
+aircraft,vit_small_patch16_224,saga,paired_delta,f1,,0.21,0.03,-1.0,,,,,
+aircraft,vit_small_patch16_224,saga,paired_delta,f2,,1.74,0.0,0.857,,,,,
+aircraft,vit_small_patch16_224,saga,paired_delta_mean,,3,0.96,0.14,0.666667,,,,,
+aircraft,vit_small_patch16_224,saga,paired_delta_se,,3,0.441928,0.1253,0.912283,,,,,
+aircraft,vit_small_patch16_224,saga,significant_2xSE,,3,1,0,0,,,,,
+aircraft,vit_small_patch16_224,saga,welch_t,,3,1.5482,0.6299,0.9547,,,,,
+aircraft,vit_small_patch16_224,saga,welch_p,,3,0.2367,0.5645,0.4019,,,,,
+aircraft,vit_base_patch16_224,baseline,repeat,f0,,72.427,93.129,72.143,19,100,-0.284,3333,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,baseline,mean,,1,72.427,93.129,72.143,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,baseline,std,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,repeat,f0,,74.227,92.769,74.143,63,100,-0.084,3333,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,mean,,1,74.227,92.769,74.143,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,std,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,paired_delta,f0,,1.8,-0.36,2.0,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,paired_delta_mean,,1,1.8,-0.36,2.0,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,paired_delta_se,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,significant_2xSE,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,welch_t,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
+aircraft,vit_base_patch16_224,saga,welch_p,,1,MISSING,MISSING,MISSING,,,,,n=1 (single ft-seed by design: no std/SE/significance)
