@@ -1767,3 +1767,43 @@ def test_trainers_reject_the_wrong_task(tmp_path, fake_coco_root):
     with pytest.raises(ValueError, match="detection run"):
         seg_train.run_training(matrix, "det_x", fake_coco_root,
                                out_root=tmp_path / "o", device_str="cpu")
+
+
+# ── the Phase-B smoke checker ────────────────────────────────────────────────
+
+def test_check_smoke_reports_missing_and_present_evidence(tmp_path):
+    """tools/check_smoke.py decides whether the HPC smokes passed, so it must
+    FAIL on absent evidence rather than assume, and every check must print
+    what it actually saw."""
+    from tools import check_smoke
+
+    rep = check_smoke.Report()
+    rep.check("a", True, "saw 1")
+    rep.check("b", False, "saw nothing")
+    assert [n for _, n, _ in rep.failures()] == ["b"]
+
+    # a log that is missing must be a FAIL, never a silent pass
+    rep2 = check_smoke.Report()
+    assert check_smoke.read_text(tmp_path / "nope.log") is None
+    assert check_smoke.load_json(tmp_path / "nope.json") is None
+
+    # the log checks key off the strings the trainers actually print
+    good = ("deps ok: 2.10.0 1.0.28\n77 passed in 30.00s\n"
+            "  train2017: 118287 images (expected: 118287)\n"
+            "  B5 normalization check PASSED: max_abs_diff=0.00e+00, x\n"
+            "  backbone [primary]: /path/last.pth\n"
+            "[1/2] loss=1.0  (no eval)  t=1s\n"
+            "[2/2] loss=0.9  AP=1.0  AP50=2.0  AP_S=0.5  t=1s\n"
+            "  *** new best AP 1.000 -> coco_eval_best.json\n"
+            "Done - det_vitb_saga_s1  best AP 1.000 at epoch 1\n")
+    check_smoke.check_log(rep2, check_smoke.PIPELINES["detection"], good, "")
+    assert not rep2.failures(), [n for _, n, _ in rep2.failures()]
+
+    # and a run that crashed must not be reported as a pass
+    rep3 = check_smoke.Report()
+    check_smoke.check_log(rep3, check_smoke.PIPELINES["detection"],
+                          good.replace("77 passed", "1 failed, 76 passed")
+                          + "Traceback (most recent call last):\n", "")
+    names = [n for _, n, _ in rep3.failures()]
+    assert "unit suite green ON THE COMPUTE NODE" in names
+    assert "no python traceback anywhere in stdout/stderr" in names

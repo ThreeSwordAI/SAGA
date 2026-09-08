@@ -549,6 +549,39 @@ best.pth selected on it, eval every 5 epochs; legacy +2.19 Aircraft /
 
 **Commit:** `[TASK-08] fine-grained clean protocol (phase A)`
 
+**Update 2026-09-08 (Phase B start — data confirmed, smokes submitted):**
+- All four dataset archives EXIST on woody: COCO train2017.zip (19,336,861,798
+  B), val2017.zip (815,585,330 B), annotations_trainval2017.zip (252,907,541 B)
+  and ADE20K/ADEChallengeData2016.zip (967,382,037 B). ADE20K had never been
+  used by a completed run, so this was the open question — it is answered.
+- Backbone resolution verified on the HPC by `tools/dense_done.py
+  --require_backbone` for all six runs: baseline/saga resolve to the e2r
+  **primary** checkpoints (991 MiB each), and both registers runs correctly
+  fall through to the **fallback** with the reason printed
+  (`results/runs/e2r_vitb_mixup_registers_s1/ckpt/last.pth — file does not
+  exist`). The legacy registers file is 1,039,043,001 B, matching its
+  manifest row exactly.
+- **QUOTA CONSTRAINT, now blocking the six chains (not the smokes):** hpc is
+  ALREADY OVER its soft quota — `101G* / 100G quota / 200G limit`, in grace,
+  136k/500k files. vault is at 974G/1000G (147k/200k files). The third
+  filesystem in the quota output (226G of 954G, ~728G free) is the bulk one
+  How to Run.md §1 maps to woody. The six runs add ~7.6 GiB of checkpoints
+  (det 1.16 GiB/run; seg 1.03 + 0.34 GiB/run, computed from parameter
+  counts), and TASK-08's remaining ft runs draw on the same headroom, so the
+  default (repo run dir, on hpc) should be redirected with `--ckpt_root`
+  before submitting. The generated job files do not pass that flag yet —
+  regenerating them needs the human's confirmed path.
+- New `tools/check_smoke.py`: reads both smoke logs AND the artifacts they
+  wrote and prints one PASS/FAIL per TASK-09 acceptance item (on-device deps
+  + pytest, the B5 assertion, staging counts enforced, epoch count, log
+  schema, six APs with no -1 sentinel, 80 per-category rows, the
+  detections-dump sha and keyset, mIoU units and the B4 definition, 150
+  named classes incl. sky/wall/floor, 20x3 probe files, backbone hash
+  verified, world_size 4, `smoke: true` everywhere). Missing evidence is
+  FAIL, never an assumption.
+- Smokes submitted: `dense_smoke_det` job **4200497**, `dense_smoke_seg` job
+  **4200498** (both PD/Priority at submission).
+
 **Pending from HPC (Phase B):** build+commit the two ftsplit JSONs → smoke
 → submit 16 → sync cadence (block printed at end of task). Then Phase C
 locally (T3 tables + finegrained.md) after 16× test_final.json are back.
