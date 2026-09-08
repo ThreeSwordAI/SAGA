@@ -549,39 +549,6 @@ best.pth selected on it, eval every 5 epochs; legacy +2.19 Aircraft /
 
 **Commit:** `[TASK-08] fine-grained clean protocol (phase A)`
 
-**Update 2026-09-08 (Phase B start — data confirmed, smokes submitted):**
-- All four dataset archives EXIST on woody: COCO train2017.zip (19,336,861,798
-  B), val2017.zip (815,585,330 B), annotations_trainval2017.zip (252,907,541 B)
-  and ADE20K/ADEChallengeData2016.zip (967,382,037 B). ADE20K had never been
-  used by a completed run, so this was the open question — it is answered.
-- Backbone resolution verified on the HPC by `tools/dense_done.py
-  --require_backbone` for all six runs: baseline/saga resolve to the e2r
-  **primary** checkpoints (991 MiB each), and both registers runs correctly
-  fall through to the **fallback** with the reason printed
-  (`results/runs/e2r_vitb_mixup_registers_s1/ckpt/last.pth — file does not
-  exist`). The legacy registers file is 1,039,043,001 B, matching its
-  manifest row exactly.
-- **QUOTA CONSTRAINT, now blocking the six chains (not the smokes):** hpc is
-  ALREADY OVER its soft quota — `101G* / 100G quota / 200G limit`, in grace,
-  136k/500k files. vault is at 974G/1000G (147k/200k files). The third
-  filesystem in the quota output (226G of 954G, ~728G free) is the bulk one
-  How to Run.md §1 maps to woody. The six runs add ~7.6 GiB of checkpoints
-  (det 1.16 GiB/run; seg 1.03 + 0.34 GiB/run, computed from parameter
-  counts), and TASK-08's remaining ft runs draw on the same headroom, so the
-  default (repo run dir, on hpc) should be redirected with `--ckpt_root`
-  before submitting. The generated job files do not pass that flag yet —
-  regenerating them needs the human's confirmed path.
-- New `tools/check_smoke.py`: reads both smoke logs AND the artifacts they
-  wrote and prints one PASS/FAIL per TASK-09 acceptance item (on-device deps
-  + pytest, the B5 assertion, staging counts enforced, epoch count, log
-  schema, six APs with no -1 sentinel, 80 per-category rows, the
-  detections-dump sha and keyset, mIoU units and the B4 definition, 150
-  named classes incl. sky/wall/floor, 20x3 probe files, backbone hash
-  verified, world_size 4, `smoke: true` everywhere). Missing evidence is
-  FAIL, never an assumption.
-- Smokes submitted: `dense_smoke_det` job **4200497**, `dense_smoke_seg` job
-  **4200498** (both PD/Priority at submission).
-
 **Pending from HPC (Phase B):** build+commit the two ftsplit JSONs → smoke
 → submit 16 → sync cadence (block printed at end of task). Then Phase C
 locally (T3 tables + finegrained.md) after 16× test_final.json are back.
@@ -914,7 +881,7 @@ here had to preserve a previous result — only the committed TRAINING MATH.
   chosen so the LAST smoke epoch trains with the backbone UNFROZEN. Smoke
   output goes to `results/smoke/` (git-ignored) and every JSON it writes
   carries `"smoke": true`.
-- `tests/test_task09_dense.py` — 77 tests (CPU, fake data, tiny real models
+- `tests/test_task09_dense.py` — 80 tests (CPU, fake data, tiny real models
   at REAL dense resolutions): B5 (identity transform, single-normalized
   backbone input, padded mixed-size batch, and the bug's reintroduction
   detected), B6 (3800 = 50x76 tokens at 800x1216 for all three variants,
@@ -1141,7 +1108,7 @@ real defects, all fixed:
    Both trainers therefore accept `--ckpt_root` to redirect `ckpt/` off the
    repo filesystem; the default stays the repo run dir (e2r precedent). The
    human decides.
-- `pytest -q`: **239 passed** — 77 TASK-09 tests + 143 pre-existing + 19
+- `pytest -q`: **242 passed** — 80 TASK-09 tests + 143 pre-existing + 19
   from a parallel TASK-07 Phase-C session working in the same worktree
   (`tests/test_task07_address_analysis.py`, `analysis/address_analysis.py`,
   `plotting/plot_address.py`, `results/{tables,notes,figures_data}/…addr…`).
@@ -1155,15 +1122,161 @@ real defects, all fixed:
 
 **Commit:** `[TASK-09] dense fixes + launchers (phase A)`
 
-**Pending from HPC (Phase B):** confirm the COCO and ADE20K paths exist →
-`sbatch scripts/jobs/dense_smoke_det.sbatch` and `dense_smoke_seg.sbatch` →
-on green, submit the six chains with SIX SEPARATE COMMANDS, detection first
-(a glob or brace form would run only the FIRST script and pass the other
-two as positional arguments, silently leaving two Gate-2 rows unsubmitted —
-verified, and pinned by a test that scans the repo for such instructions):
-`bash scripts/submit_det_vitb_baseline_s1.sh`,
-`bash scripts/submit_det_vitb_saga_s1.sh`,
-`bash scripts/submit_det_vitb_registers_s1.sh`, then the same three with
-`submit_seg_vitb_*` → `bash scripts/sync_results.sh` every day or two. Then
-Phase C locally (T4/T5 tables, F7 figure,
+**Phase B status (2026-09-08) — data confirmed, smokes PASSED, chains not
+yet submitted.**
+
+**Third review round (6-lane attack on the fixes + a completeness critic).**
+The lanes confirmed the ten fixes hold — each backed by its own measurement
+(the mIoU matched an independent reference on 40 randomized trials, worst
+delta 4.8e-5; MS-TTA with scales=[1.0] reproduces the single-scale matrix bit
+for bit; per-rank collective sequences byte-identical across ten restart
+states in 2-rank gloo runs; the sha256 gate is not circumventable by '', 0,
+False, [] or a truthy non-string). Five more real items, all fixed:
+- **`sync_results.sh` called bare `python` with stderr suppressed.**
+  `dense_done.py` imports torch, so on a login node without the conda env it
+  exits non-zero — and the gate read that as "not complete" and printed a
+  positive claim about run state that had never been established, silently
+  never shipping `detections_val.json`. It now uses the env interpreter by
+  absolute path (as every sbatch does), does not suppress stderr, and
+  distinguishes exit 0 / 1 / >=2 ("CANNOT DETERMINE", with the activation
+  command).
+- **My "(not the smokes)" quota claim was measurably FALSE** — the smoke
+  sbatch files pass only `--out_root`, so their ckpt/ also lands under
+  CODE_ROOT, and they wrote 2.51 GiB onto the over-quota filesystem. Claim
+  corrected in place. The matrix gained a `ckpt_root:` key (null = old
+  default) and the generator now injects `--ckpt_root` into all six chains
+  AND both smokes; a test asserts both states.
+- **No timing projection existed** — the one pre-launch number that decides
+  whether 25 epochs fit in 4x24 h, with no dense throughput datum anywhere
+  in the repo to calibrate against. `check_smoke.py` now reads the last
+  smoke epoch's `img_per_sec`/`wall_time` (that epoch is the unfrozen one by
+  construction), projects epoch-hours onto the production schedule including
+  eval passes and staging, FAILS if it overruns, and says what to raise
+  `chain.<task>` to.
+- **Both Phase-B updates had been filed inside the TASK-08 entry** (a
+  `replace(..., 1)` hit TASK-08's `Pending from HPC` first), leaving TASK-09's
+  own Pending block stale. Moved, and TASK-09's Pending rewritten as the
+  four remaining steps.
+- **The segmentation half of the submit instruction was still a wildcard
+  shape** — in the very paragraph explaining why a wildcard drops rows,
+  because the guard test only matched lines with a `bash ` prefix and that
+  phrasing had none. All six commands are now written out and the pattern catches the
+  bare form too (scoped to the dense names so real code is not flagged).
+
+
+**Update 2026-09-08 (Phase B start — data confirmed, smokes submitted):**
+- All four dataset archives EXIST on woody: COCO train2017.zip (19,336,861,798
+  B), val2017.zip (815,585,330 B), annotations_trainval2017.zip (252,907,541 B)
+  and ADE20K/ADEChallengeData2016.zip (967,382,037 B). ADE20K had never been
+  used by a completed run, so this was the open question — it is answered.
+- Backbone resolution verified on the HPC by `tools/dense_done.py
+  --require_backbone` for all six runs: baseline/saga resolve to the e2r
+  **primary** checkpoints (991 MiB each), and both registers runs correctly
+  fall through to the **fallback** with the reason printed
+  (`results/runs/e2r_vitb_mixup_registers_s1/ckpt/last.pth — file does not
+  exist`). The legacy registers file is 1,039,043,001 B, matching its
+  manifest row exactly.
+- **QUOTA CONSTRAINT (it applies to the SMOKES TOO — an earlier version of
+  this entry said "not the smokes", which was wrong: the smoke sbatch files
+  pass only `--out_root`, so their ckpt/ also lands under CODE_ROOT, and
+  they did in fact write 2.51 GiB there):** hpc is ALREADY OVER its soft
+  quota — `101G* / 100G quota / 200G limit`, in grace,
+  136k/500k files. vault is at 974G/1000G (147k/200k files). The third
+  filesystem in the quota output (226G of 954G, ~728G free) is the bulk one
+  How to Run.md §1 maps to woody. The six runs add ~7.6 GiB of checkpoints
+  (det 1.16 GiB/run; seg 1.03 + 0.34 GiB/run, computed from parameter
+  counts), and TASK-08's remaining ft runs draw on the same headroom, so the
+  default (repo run dir, on hpc) should be redirected with `--ckpt_root`
+  before submitting. The generated job files do not pass that flag yet —
+  regenerating them needs the human's confirmed path.
+- New `tools/check_smoke.py`: reads both smoke logs AND the artifacts they
+  wrote and prints one PASS/FAIL per TASK-09 acceptance item (on-device deps
+  + pytest, the B5 assertion, staging counts enforced, epoch count, log
+  schema, six APs with no -1 sentinel, 80 per-category rows, the
+  detections-dump sha and keyset, mIoU units and the B4 definition, 150
+  named classes incl. sky/wall/floor, 20x3 probe files, backbone hash
+  verified, world_size 4, `smoke: true` everywhere). Missing evidence is
+  FAIL, never an assumption.
+- Smokes submitted: `dense_smoke_det` job **4200497**, `dense_smoke_seg` job
+  **4200498** (both PD/Priority at submission).
+
+**Update 2026-09-08 (smokes BACK — both COMPLETED, verdict PASS with one
+Phase-C gap):** jobs 4200497 (det, 4:39) and 4200498 (seg, 1:46), both
+COMPLETED ExitCode 0:0 on a0905. `tools/check_smoke.py`: detection 44/45,
+segmentation 52/55.
+- **The acceptance items are demonstrated on real data.** B5 asserted ON
+  DEVICE on a real COCO batch: `max_abs_diff=0.00e+00`, backbone-input
+  channel means `[-0.409, -0.328, -0.170]`, `dist_to_double_normalized=3.49`
+  — single-normalized, and far from the double-normalized alternative. The
+  unit suite ran on the compute node (77 passed, zero skips, so pycocotools
+  was really present). Both staging guards fired with the exact counts
+  (118287 / 20210). Backbone hash verified against the matrix
+  (`a4e0e0ccd3b4...` = e2r saga s1, source primary). world_size 4.
+  Detection: 2 epochs, only the eval epoch carries an AP, `lr_backbone`
+  1e-05 -> 5.05e-06 so the last epoch trained UNFROZEN, all six APs + six
+  ARs present with no -1 sentinel, 80 per-category rows, n_val_images 64,
+  detections dump sha-matched with keyset exactly
+  {image_id, category_id, bbox, score} and OFFICIAL category ids.
+  Segmentation: 3 epochs, mIoU only on the eval epoch, ss 3.8862 / ms 5.1011
+  (MS > SS is the expected direction), 150 per-class entries, units block
+  present, ignore_index 255, 20x3 probe files, committed probe-list sha
+  recorded. Numbers are meaningless by design (50/51 iterations from a
+  fresh head) and every JSON carries `smoke: true`.
+- **The "TaskProlog" FAIL was MY CHECKER'S bug, not the run's.** It grepped
+  the bare word, which SLURM prints in ordinary prologue output; the a0801
+  fault signature is `task_prolog can not be executed` / `TaskProlog failed
+  status=1` and produces NO script output (FAILED, 00:00:00, ExitCode 1:0).
+  Both jobs COMPLETED 0:0 with full logs and artifacts. Pattern fixed and
+  pinned by a test in both directions (benign word passes, real signature
+  fails).
+- **REAL GAP, Phase C only: the committed ADEChallengeData2016.zip extracts
+  WITHOUT objectInfo150.csv**, so per_class_iou.csv's `name` column is 150x
+  MISSING and Phase C's mandated sky/wall/floor rows cannot be surfaced by
+  name. NO NUMBER IS AFFECTED — the class indices, the confusion matrix and
+  every IoU are correct and complete; names are a join on class_index.
+  `load_class_names` now searches four locations, reports every path it
+  tried, and honours a new `class_names_file` matrix key so pointing at a
+  real file is a config change. The name source must still be located on the
+  HPC (see below); this does NOT block submitting the six chains.
+- Smoke outputs: 1.15 GiB (det) + 1.36 GiB (seg) under `results/smoke/`,
+  deletable — and worth deleting, since hpc is over quota.
+
+**Pending from HPC (Phase B, remaining):**
+1. DECIDE `ckpt_root`. hpc measured 101G of a 100G soft quota (in grace); the
+   six chains write ~7.6 GiB of checkpoints there by default and the two
+   smokes already wrote 2.51 GiB. `configs/dense_matrix.yaml` now has a
+   `ckpt_root:` key (null = the old default) and
+   `scripts/gen_dense_jobs.py` puts `--ckpt_root` into all six chains AND
+   both smokes when it is set. Confirm a bulk path (the quota output's
+   226G-of-954G filesystem is the one How to Run.md §1 maps to woody), then
+   regenerate: `python scripts/gen_dense_jobs.py`.
+2. `rm -rf results/smoke/*/*/ckpt` — the smoke checkpoints are 2.51 GiB on
+   the over-quota filesystem and `tools/check_smoke.py` has already read
+   everything it needs from them.
+3. Locate an `objectInfo150.csv` so per_class_iou.csv gets real class names
+   (the staged zip has none). `unzip -l` the ADE20K archive to see what it
+   carries; then set `class_names_file` in the matrix. Numbers are
+   unaffected — this only blocks Phase C's sky/wall/floor rows.
+4. Submit the six chains, SIX SEPARATE COMMANDS (a glob or brace form runs
+   only the first script and passes the rest as ignored positional
+   arguments, silently leaving Gate-2 rows unsubmitted — verified, and
+   pinned by a test that scans the repo for that shape):
+   `bash scripts/submit_det_vitb_baseline_s1.sh`
+   `bash scripts/submit_det_vitb_saga_s1.sh`
+   `bash scripts/submit_det_vitb_registers_s1.sh`
+   `bash scripts/submit_seg_vitb_baseline_s1.sh`
+   `bash scripts/submit_seg_vitb_saga_s1.sh`
+   `bash scripts/submit_seg_vitb_registers_s1.sh`
+5. Sync every day or two WITH THE ENV ACTIVATED (`module load
+   python/3.12-conda && source activate
+   /home/vault/iwi5/iwi5359h/envs/saga`), because sync_results.sh shells out
+   to tools/dense_done.py, which imports torch:
+   `bash scripts/sync_results.sh` then `I_AM_HUMAN=1 git push`.
+Then Phase C locally (T4/T5 tables, F7 figure,
 `results/notes/gate2_report.md`) once the six runs' JSONs are back.
+
+**Note for a later task:** the rewrite saves no best-AP DETECTOR weights,
+only the JSON pair (coco_eval_best.json + detections_val.json), which is all
+Phase C reads. If `best_epoch != 24` the best detector's weights are not
+recoverable — relevant if the "test-time-registers dense rows" task wants to
+re-infer from the best model rather than the last.

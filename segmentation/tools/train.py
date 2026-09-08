@@ -244,19 +244,37 @@ def write_per_class_csv(path, iou, inter, gt, pred, union, class_names):
     atomic_write_text(buf.getvalue(), path)
 
 
-def load_class_names(data_root, num_classes):
+def load_class_names(data_root, num_classes, explicit=None):
     """ADE20K class names from the dataset's own objectInfo150.csv (row order
-    == class index + 1). Returns (names, delimiter_description) or
-    (None, reason) — names are reported MISSING rather than guessed.
+    == class index + 1, verified against its Idx column). Returns
+    (names, source_description) or (None, reason) — names are reported
+    MISSING rather than guessed.
 
     The official file is TAB-separated despite its .csv name (its `Name`
-    column contains commas), so the delimiter is sniffed instead of assumed:
-    getting this wrong would put 150 MISSING names into per_class_iou.csv and
-    block Phase C's mandated sky/wall/floor rows.
+    column contains commas), so the delimiter is sniffed instead of assumed.
+
+    Several candidate locations are tried because the staged tree does not
+    always carry it: the 2026-09-08 smoke found the committed
+    ADEChallengeData2016.zip extracts WITHOUT objectInfo150.csv, which left
+    150 MISSING names in per_class_iou.csv and would have blocked Phase C's
+    mandated sky/wall/floor rows. `explicit` (the matrix's
+    `class_names_file`) wins when set, so pointing at a real file on the HPC
+    is a config change rather than a code change. Numbers are unaffected
+    either way — the class INDICES are always correct.
     """
-    path = Path(data_root) / "objectInfo150.csv"
-    if not path.exists():
-        return None, f"{path.name} not found in the staged dataset"
+    candidates = []
+    if explicit:
+        candidates.append(Path(explicit) if Path(explicit).is_absolute()
+                          else repo_path(explicit))
+    root = Path(data_root)
+    candidates += [root / "objectInfo150.csv", root / "objectInfo150.txt",
+                   root.parent / "objectInfo150.csv",
+                   root / "sceneparsing" / "objectInfo150.csv"]
+
+    path = next((c for c in candidates if c.exists()), None)
+    if path is None:
+        return None, ("objectInfo150.csv not found; tried "
+                      + ", ".join(str(c) for c in candidates))
     raw = path.read_text(encoding="utf-8", errors="replace")
     for delim, label in (("\t", "tab"), (",", "comma"), (";", "semicolon")):
         rows = list(csv.DictReader(io.StringIO(raw), delimiter=delim))
@@ -276,19 +294,19 @@ def load_class_names(data_root, num_classes):
         idx_key = next((k for k in rows[0]
                         if k and k.strip().lower() == "idx"), None)
         if idx_key is None:
-            return None, (f"{path.name} ({label}-separated) has no Idx "
+            return None, (f"{path} ({label}-separated) has no Idx "
                           f"column, so row order cannot be verified")
         try:
             idx = [int((r.get(idx_key) or "").strip()) for r in rows]
         except ValueError:
-            return None, (f"{path.name} ({label}-separated) has a "
+            return None, (f"{path} ({label}-separated) has a "
                           f"non-integer Idx value")
         if idx != list(range(1, num_classes + 1)):
-            return None, (f"{path.name} ({label}-separated) is not in Idx "
+            return None, (f"{path} ({label}-separated) is not in Idx "
                           f"order 1..{num_classes}; names would be attached "
                           f"to the wrong classes")
-        return names, f"objectInfo150.csv ({label}-separated, Idx-verified)"
-    return None, (f"{path.name} did not yield {num_classes} non-empty names "
+        return names, (f"{path} ({label}-separated, Idx-verified)")
+    return None, (f"{path} did not yield {num_classes} non-empty names "
                   f"under any of tab/comma/semicolon")
 
 
@@ -503,7 +521,8 @@ def run_training(matrix, run_id, data_root, out_root=None, resume="auto",
                             pin_memory=device.type == "cuda")
 
     probe_stems, probe_indices, probe_sha = load_fixed20(data_root, val_ds)
-    class_names, names_source = load_class_names(data_root, num_classes)
+    class_names, names_source = load_class_names(
+        data_root, num_classes, explicit=cfg.get("class_names_file"))
     if class_names is None and rank == 0:
         print(f"  WARNING: class names unavailable ({names_source}) — "
               f"per_class_iou.csv will carry MISSING names, which blocks the "

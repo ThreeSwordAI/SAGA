@@ -30,6 +30,27 @@ out_roots:
 
 n_register_tokens: 4
 
+# Where ckpt/ goes. null = the run dir, i.e. CODE_ROOT on the `hpc`
+# filesystem, which How to Run.md §1 reserves for CODE ONLY and which
+# measured 101G of a 100G soft quota (in grace) on 2026-09-08. Each
+# detection run writes ~1.16 GiB and each segmentation run ~1.37 GiB
+# (last.pth + weights-only best_model.pth), and the SMOKES write the same,
+# so the six chains plus smokes are ~10 GiB on a filesystem that is already
+# over its limit. Set this to a bulk path and scripts/gen_dense_jobs.py adds
+# `--ckpt_root <path>` to all six chains AND both smokes; the trainers then
+# put ckpt/ under <ckpt_root>/<run_id>/ and record `ckpt_dir` in meta.json.
+# Regenerate after changing it:  python scripts/gen_dense_jobs.py
+ckpt_root: null
+
+# ADE20K class names for per_class_iou.csv's `name` column (Phase C surfaces
+# the sky/wall/floor rows by name). The 2026-09-08 smoke found the committed
+# ADEChallengeData2016.zip extracts WITHOUT objectInfo150.csv, so the names
+# came out MISSING; the class INDICES and every number are unaffected.
+# Set this to a real objectInfo150.csv on the HPC (absolute, or repo-relative
+# if the file is committed) and the names resolve; leave it null and the
+# trainer searches the staged tree and reports which paths it tried.
+class_names_file: null
+
 # Extra eval knobs the committed base configs do not carry. Multi-scale is
 # TTA on the 512x512 val tensor the committed val pipeline produces (that
 # pipeline resizes every val image to 512x512), NOT whole-image multi-scale

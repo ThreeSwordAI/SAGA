@@ -1180,7 +1180,12 @@ def test_no_file_tells_the_human_to_bash_a_glob_of_submit_scripts():
     be queued. Every instruction must be one command per line."""
     import re
     bad = []
-    pattern = re.compile(r"bash\s+\S*submit_\S*[*{]")
+    # Both shapes: `bash .../submit_det_*.sh` AND a bare `submit_seg_vitb_*`
+    # reference in prose — the second form is how the instruction slipped
+    # back in even with this guard in place.
+    # Only the DENSE submit-script names, so a wildcard in real code
+    # (`f"submit_{run_id}.sh"`) or an unrelated glob is not flagged.
+    pattern = re.compile(r"submit_(?:det|seg)[A-Za-z0-9_]*[*{]")
     for path in sorted(REPO_ROOT.rglob("*")):
         if not path.is_file() or ".git" in path.parts:
             continue
@@ -1807,3 +1812,83 @@ def test_check_smoke_reports_missing_and_present_evidence(tmp_path):
     names = [n for _, n, _ in rep3.failures()]
     assert "unit suite green ON THE COMPUTE NODE" in names
     assert "no python traceback anywhere in stdout/stderr" in names
+
+    # The a0801 fault must be matched by its SIGNATURE, not by the bare word
+    # "TaskProlog", which SLURM also prints on healthy nodes — matching the
+    # word alone produced a false FAIL on a smoke that COMPLETED 0:0 with
+    # every artifact intact.
+    rep4 = check_smoke.Report()
+    check_smoke.check_log(rep4, check_smoke.PIPELINES["detection"],
+                          good + "TaskProlog: /etc/slurm/slurm.taskprolog\n",
+                          "")
+    assert not rep4.failures(), [n for _, n, _ in rep4.failures()]
+
+    rep5 = check_smoke.Report()
+    check_smoke.check_log(
+        rep5, check_smoke.PIPELINES["detection"], good,
+        "slurm task_prolog can not be executed "
+        "(/etc/slurm/slurm.taskprolog) Permission denied\n"
+        "TaskProlog failed status=1\n")
+    assert "no a0801-style TaskProlog fault" in \
+        [n for _, n, _ in rep5.failures()]
+
+
+def test_ckpt_root_matrix_key_redirects_every_launcher(tmp_path):
+    """hpc measured 101G of a 100G soft quota, and ckpt/ defaults to the run
+    dir there. Setting `ckpt_root` must redirect the six chains AND both
+    smokes (the smokes write checkpoints too — an earlier claim that they
+    did not was wrong), and leaving it null must reproduce the committed
+    files byte for byte."""
+    from scripts import gen_dense_jobs as gen
+    matrix = yaml.safe_load(open(MATRIX_PATH))
+    assert "ckpt_root" in matrix, "the escape hatch must be in the matrix"
+    assert matrix["ckpt_root"] is None, "default must stay the run dir"
+
+    plain = tmp_path / "plain"
+    gen.render(matrix, plain, DENSE_BASE_PORT)
+    for f in sorted(plain.rglob("*.sbatch")):
+        assert "--ckpt_root" not in f.read_text(), f
+
+    redirected = tmp_path / "redirected"
+    gen.render(dict(matrix, ckpt_root="/bulk/dense_ckpt"), redirected,
+               DENSE_BASE_PORT)
+    sbatch = sorted(redirected.rglob("*.sbatch"))
+    assert len(sbatch) == 8, [f.name for f in sbatch]
+    for f in sbatch:
+        text = f.read_text()
+        assert "--ckpt_root /bulk/dense_ckpt" in text, f.name
+        # must be a continued argument, not a stray line
+        assert "--ckpt_root /bulk/dense_ckpt \\" in text, f.name
+
+
+def test_runtime_projection_flags_an_undersized_chain(tmp_path):
+    """The smoke's throughput is the only dense measurement that exists, and
+    it decides whether 25 epochs fit in 4x24 h. A projection that overruns
+    the budget must FAIL and say what to raise the chain to."""
+    from tools import check_smoke
+
+    def project(ips):
+        run = tmp_path / f"r{ips}"
+        run.mkdir()
+        dr.append_log_row(run / "log.csv",
+                          ["epoch", "img_per_sec", "wall_time"],
+                          {"epoch": 0, "img_per_sec": ips, "wall_time": 100})
+        rep = check_smoke.Report()
+        check_smoke.project_runtime(rep, check_smoke.PIPELINES["detection"],
+                                    run, MATRIX_PATH)
+        return rep.rows[0]
+
+    slow_ok, _, slow_ev = project(2.0)
+    fast_ok, _, fast_ev = project(40.0)
+    assert not slow_ok and "RAISE chain.detection" in slow_ev
+    assert fast_ok and "RAISE" not in fast_ev
+    # the projection must be built from the COMMITTED chain length
+    assert "budget 96 h" in slow_ev, slow_ev
+
+    # a missing log is a FAIL, never an assumption
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    rep = check_smoke.Report()
+    check_smoke.project_runtime(rep, check_smoke.PIPELINES["detection"],
+                                empty, MATRIX_PATH)
+    assert not rep.rows[0][0]

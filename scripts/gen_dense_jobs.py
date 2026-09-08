@@ -162,7 +162,7 @@ fi
     {entry} \\
         --matrix configs/dense_matrix.yaml \\
         --run {run_id} \\
-        --data_root {data_root} \\
+        --data_root {data_root}{ckpt_root_arg} \\
         --resume auto
 STATUS=$?
 
@@ -255,7 +255,7 @@ echo "===================== smoke run ====================="
         --out_root results/smoke/{task} \\
         --max_epochs {epochs} \\
         --max_steps {steps} \\
-        --max_eval_images {eval_images} \\
+        --max_eval_images {eval_images}{ckpt_root_arg} \\
         --resume none
 STATUS=$?
 
@@ -276,6 +276,17 @@ def render(matrix: dict, out_dir: Path, base_port: int):
     jobs_dir.mkdir(parents=True, exist_ok=True)
     written = []
 
+    # ckpt/ defaults to the run dir, i.e. CODE_ROOT on the `hpc` filesystem —
+    # which How to Run.md §1 reserves for CODE ONLY and which measured 101G
+    # of a 100G soft quota on 2026-09-08. Setting `ckpt_root` in the matrix
+    # redirects every checkpoint (~1.16 GiB per detection run, ~1.37 GiB per
+    # segmentation run, and the same again for each SMOKE — the smokes write
+    # checkpoints too) onto a bulk filesystem. Null/empty emits no flag and
+    # keeps the previous default.
+    ckpt_root = matrix.get("ckpt_root") or ""
+    ckpt_root_arg = ("" if not ckpt_root else
+                     " \\\n        --ckpt_root " + str(ckpt_root))
+
     for i, (run_id, run) in enumerate(sorted(matrix["runs"].items())):
         setup = TASK_SETUP[run["task"]]
         n = int(matrix.get("chain", {}).get(run["task"], 2))
@@ -287,7 +298,8 @@ def render(matrix: dict, out_dir: Path, base_port: int):
             stage_fn=setup["stage_fn"], cleanup_fn=setup["cleanup_fn"],
             entry=setup["entry"], data_root=setup["data_root"],
             epochs_note=setup["epochs_note"],
-            count_guard=setup["count_guard"])
+            count_guard=setup["count_guard"],
+            ckpt_root_arg=ckpt_root_arg)
         path = jobs_dir / f"{run_id}.sbatch"
         path.write_text(job, encoding="utf-8", newline="\n")
         written.append(path)
@@ -311,7 +323,8 @@ def render(matrix: dict, out_dir: Path, base_port: int):
             steps=steps, total_steps=epochs * steps, freeze=freeze,
             eval_images=eval_images, env=setup["env"], stage=setup["stage"],
             stage_fn=setup["stage_fn"], cleanup_fn=setup["cleanup_fn"],
-            entry=setup["entry"], data_root=setup["data_root"])
+            entry=setup["entry"], data_root=setup["data_root"],
+            ckpt_root_arg=ckpt_root_arg)
         path = jobs_dir / f"dense_smoke_{short}.sbatch"
         path.write_text(smoke, encoding="utf-8", newline="\n")
         written.append(path)

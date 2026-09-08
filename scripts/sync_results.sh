@@ -16,6 +16,9 @@ set -eu
 cd "$(dirname "$0")/.."
 
 DENSE_DETECTIONS_MB=${DENSE_DETECTIONS_MB:-25}
+# same interpreter the generated sbatch files use (How to Run.md §2): this
+# script shells out to tools/dense_done.py, which imports torch
+PY=${PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
 
 shopt -s nullglob
 git add --ignore-errors \
@@ -51,11 +54,25 @@ for f in results/detection/*/detections_val.json; do
     # at every new-best epoch, so syncing it mid-run would commit a
     # multi-megabyte blob several times over into git history for no benefit
     # (Phase C only ever reads the final one).
-    if ! python tools/dense_done.py --run "$run_id" --quiet 2>/dev/null; then
-        echo "sync_results: $run_id still running -- deferring $f"
-        echo "  (it is rewritten at every new best; it will be staged once the run completes)"
-        continue
-    fi
+    #
+    # Use the ENV interpreter by absolute path, exactly as every generated
+    # sbatch does: dense_done.py imports torch/numpy/yaml, so a bare `python`
+    # on a login node without the conda env exits non-zero, and treating that
+    # as "not complete" would silently never ship the dump. stderr is NOT
+    # suppressed, and exit >= 2 means "could not tell" — which must not be
+    # reported as a statement about the run.
+    "$PY" tools/dense_done.py --run "$run_id" --quiet
+    case $? in
+        0) ;;                       # complete -> fall through and stage it
+        1)  echo "sync_results: $run_id not complete -- deferring $f"
+            echo "  (rewritten at every new best; staged once the run finishes)"
+            continue ;;
+        *)  echo "sync_results: CANNOT DETERMINE whether $run_id is complete" >&2
+            echo "  ($PY tools/dense_done.py failed above) -- not staging $f;" >&2
+            echo "  activate the env first:  module load python/3.12-conda &&" >&2
+            echo "  source activate /home/vault/iwi5/iwi5359h/envs/saga" >&2
+            continue ;;
+    esac
 
     bytes=$(wc -c < "$f")
     if [ "$bytes" -le "$LIMIT" ]; then

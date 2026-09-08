@@ -155,9 +155,22 @@ def check_log(rep, spec, text, err_text):
     rep.check("no python traceback anywhere in stdout/stderr", not tb,
               "traceback present" if tb else "none")
 
-    for bad in ("CUDA out of memory", "NCCL WARN", "Watchdog", "TaskProlog"):
+    for bad in ("CUDA out of memory", "NCCL WARN", "Watchdog"):
         hit = bad in (text or "") or bad in (err_text or "")
         rep.check(f"no '{bad}'", not hit, "found" if hit else "none")
+
+    # The a0801 cluster fault (docs/TASK_LOG.md) must be matched by its real
+    # signature, not by the bare word "TaskProlog": SLURM prints that word in
+    # ordinary prologue output on healthy nodes too, and matching it caused a
+    # false FAIL on a run that had COMPLETED 0:0 with every artifact intact.
+    # The fault itself looks like
+    #   slurm task_prolog can not be executed (...) Permission denied
+    #   TaskProlog failed status=1
+    # and it produces NO script output at all.
+    fault = re.search(r"task_prolog can not be executed"
+                      r"|TaskProlog failed", (text or "") + (err_text or ""))
+    rep.check("no a0801-style TaskProlog fault", fault is None,
+              fault.group(0) if fault else "none")
 
 
 # ── artifact checks ───────────────────────────────────────────────────────────
@@ -354,6 +367,83 @@ def check_segmentation_artifacts(rep, run_dir, spec):
               meta.get("class_names_source"))
 
 
+def project_runtime(rep, spec, run_dir, matrix_path):
+    """Turn the smoke's measured throughput into "does the production
+    schedule fit in chain x 24 h?" — the one pre-launch number that decides
+    whether the chains produce a result at all. The repo holds no dense
+    throughput datum to calibrate against (no e3/e4 log.csv exists), so the
+    smoke's last epoch is the only measurement available; it is also the
+    UNFROZEN-backbone epoch by construction, i.e. the representative one.
+
+    Deliberately conservative: it charges the staging time and the eval
+    passes the production run will actually pay, and FAILS if the projection
+    does not fit, so the chain length is signed off on a measured number
+    rather than on the task file's "~3 days".
+    """
+    log = run_dir / "log.csv"
+    if not log.exists():
+        rep.check("runtime projected onto the production schedule", False,
+                  "no log.csv to measure")
+        return
+    with open(log, newline="") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        rep.check("runtime projected onto the production schedule", False,
+                  "log.csv has no rows")
+        return
+
+    last = rows[-1]
+    try:
+        ips = float(last["img_per_sec"])
+        wall = float(last["wall_time"])
+    except (KeyError, TypeError, ValueError):
+        rep.check("runtime projected onto the production schedule", False,
+                  f"could not read img_per_sec/wall_time from {last}")
+        return
+
+    # the production numbers, read from the matrix + the committed configs
+    matrix = {}
+    try:
+        import ast
+        txt = Path(matrix_path).read_text(encoding="utf-8")
+        for key in ("detection", "segmentation"):
+            m = re.search(rf"^  {key}: (\d+)$", txt, re.M)
+            if m:
+                matrix[key] = int(m.group(1))
+    except OSError:
+        pass
+    task = "detection" if spec["run_id"].startswith("det_") else "segmentation"
+    chain = matrix.get(task, 4 if task == "detection" else 2)
+
+    n_train = {"detection": 118287, "segmentation": 20210}[task]
+    epochs = {"detection": 25, "segmentation": 80}[task]
+    eval_every = {"detection": 5, "segmentation": 10}[task]
+    n_val = {"detection": 5000, "segmentation": 2000}[task]
+
+    # the smoke ran only `steps` iterations, so scale by images, not by time
+    smoke_imgs = ips * wall
+    epoch_h = (n_train / ips) / 3600.0 if ips > 0 else float("inf")
+    # eval throughput is not separately measured; charge it at the training
+    # rate, which understates it (eval is forward-only) — noted, not hidden
+    evals = epochs // eval_every
+    eval_h = (evals * n_val / ips) / 3600.0 if ips > 0 else float("inf")
+    stage_h = chain * 0.25          # 10-15 min of staging per job
+    total_h = epochs * epoch_h + eval_h + stage_h
+    budget_h = chain * 24.0
+
+    rep.check(f"{task} fits the committed {chain}x24h chain "
+              f"(measured from the smoke)",
+              total_h <= budget_h,
+              f"smoke last epoch: {ips:.2f} img/s over {wall:.0f}s "
+              f"({smoke_imgs:.0f} imgs) -> {epoch_h:.2f} h/epoch x {epochs} "
+              f"= {epochs * epoch_h:.1f} h + {evals} evals {eval_h:.1f} h + "
+              f"staging {stage_h:.1f} h = {total_h:.1f} h vs budget "
+              f"{budget_h:.0f} h"
+              + ("" if total_h <= budget_h else
+                 f"  -> RAISE chain.{task} to "
+                 f"{int(total_h // 24) + 1} in configs/dense_matrix.yaml"))
+
+
 def check_meta_common(rep, run_dir):
     meta = load_json(run_dir / "meta.json")
     if meta is None:
@@ -417,6 +507,8 @@ def main():
                 check_detection_artifacts(rep, run_dir, spec)
             else:
                 check_segmentation_artifacts(rep, run_dir, spec)
+            project_runtime(rep, spec, run_dir,
+                            repo / "configs" / "dense_matrix.yaml")
 
         rep.dump(f"{task.upper()} SMOKE  (job {job})")
         overall[task] = rep
