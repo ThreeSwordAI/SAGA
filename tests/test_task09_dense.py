@@ -1892,3 +1892,39 @@ def test_runtime_projection_flags_an_undersized_chain(tmp_path):
     check_smoke.project_runtime(rep, check_smoke.PIPELINES["detection"],
                                 empty, MATRIX_PATH)
     assert not rep.rows[0][0]
+
+
+def test_class_names_parse_the_REAL_objectInfo150_txt_layout(tmp_path):
+    """The archive ships the names as objectInfo150.TXT (confirmed on the
+    HPC 2026-09-08: ADEChallengeData2016/objectInfo150.txt, 5689 B — there is
+    no .csv). Pin the real layout: tab-separated, `Idx Ratio Train Val Name`,
+    names containing commas, 150 rows in Idx order."""
+    from segmentation.tools.train import load_class_names, write_per_class_csv
+
+    # the first four official ADE20K classes, in their real Idx order
+    real = ["wall", "building, edifice", "sky",
+            "floor, flooring"]
+    root = tmp_path / "ADEChallengeData2016"
+    root.mkdir()
+    with open(root / "objectInfo150.txt", "w", encoding="utf-8") as f:
+        f.write("Idx\tRatio\tTrain\tVal\tName\n")
+        for i, n in enumerate(real, 1):
+            f.write(f"{i}\t0.1576\t11664\t1172\t{n}\n")
+
+    names, source = load_class_names(root, len(real))
+    assert names == real, names
+    assert "objectInfo150.txt" in source and "tab" in source
+    assert "Idx-verified" in source
+
+    # ... and those names survive into the CSV Phase C reads, un-mangled by
+    # the commas inside them
+    iou = np.array([0.5, 0.25, 0.75, 0.125])
+    counts = np.arange(1, len(real) + 1)
+    path = tmp_path / "per_class_iou.csv"
+    write_per_class_csv(path, iou, counts, counts, counts, counts, names)
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["name"] for r in rows] == real
+    by_name = {r["name"].split(",")[0]: int(r["class_index"]) for r in rows}
+    assert by_name["wall"] == 0 and by_name["sky"] == 2
+    assert by_name["floor"] == 3          # the rows Phase C must surface

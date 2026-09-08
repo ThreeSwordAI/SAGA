@@ -881,7 +881,7 @@ here had to preserve a previous result — only the committed TRAINING MATH.
   chosen so the LAST smoke epoch trains with the backbone UNFROZEN. Smoke
   output goes to `results/smoke/` (git-ignored) and every JSON it writes
   carries `"smoke": true`.
-- `tests/test_task09_dense.py` — 80 tests (CPU, fake data, tiny real models
+- `tests/test_task09_dense.py` — 81 tests (CPU, fake data, tiny real models
   at REAL dense resolutions): B5 (identity transform, single-normalized
   backbone input, padded mixed-size batch, and the bug's reintroduction
   detected), B6 (3800 = 50x76 tokens at 800x1216 for all three variants,
@@ -1108,7 +1108,7 @@ real defects, all fixed:
    Both trainers therefore accept `--ckpt_root` to redirect `ckpt/` off the
    repo filesystem; the default stays the repo run dir (e2r precedent). The
    human decides.
-- `pytest -q`: **242 passed** — 80 TASK-09 tests + 143 pre-existing + 19
+- `pytest -q`: **243 passed** — 81 TASK-09 tests + 143 pre-existing + 19
   from a parallel TASK-07 Phase-C session working in the same worktree
   (`tests/test_task07_address_analysis.py`, `analysis/address_analysis.py`,
   `plotting/plot_address.py`, `results/{tables,notes,figures_data}/…addr…`).
@@ -1241,6 +1241,34 @@ segmentation 52/55.
 - Smoke outputs: 1.15 GiB (det) + 1.36 GiB (seg) under `results/smoke/`,
   deletable — and worth deleting, since hpc is over quota.
 
+**Update 2026-09-08 (chain lengths CONFIRMED on measured throughput; the
+class-name file located):**
+- `tools/check_smoke.py`'s projection, from the smoke's own last (unfrozen)
+  epoch — the first dense throughput datum this repo has ever held:
+  * detection **31.01 img/s** -> 1.06 h/epoch x 25 = 26.5 h + 5 evals 0.2 h
+    + staging 1.0 h = **27.7 h vs the committed 4x24 h = 96 h budget**;
+  * segmentation **120.67 img/s** -> 0.05 h/epoch x 80 = 3.7 h + 8 evals
+    + staging = **4.3 h vs the committed 2x24 h = 48 h budget**.
+  CAVEAT, stated because the margin is what makes this safe rather than the
+  precision: the windows are tiny (6 s / 2 s, i.e. 202 / 278 images), they
+  exclude dataloader steady state, and `wall_time` is training only (the
+  projection charges evals separately at the training rate, which
+  UNDERSTATES them since eval runs batch_size=1 forward-only). What makes
+  the conclusion solid is that the committed chain lengths also cover the
+  TASK-09 file's own independent estimates (~3 chained days for detection,
+  ~15 h for segmentation): 72 h and 15 h both fit 96 h and 48 h. So the
+  chain lengths hold whichever estimate is closer, and no change is needed.
+- **The ADE20K class names DO ship with the archive — as
+  `ADEChallengeData2016/objectInfo150.txt`, not `.csv`** (5,689 B; the zip
+  also carries `sceneCategories.txt` and nothing else non-image).
+  `load_class_names`'s candidate list already includes
+  `$DATA_ROOT/objectInfo150.txt`, so no config change is needed — the smoke
+  reported MISSING only because it ran at efd4f9d, before that search was
+  added in 1dac02b. The parse (tab delimiter, `Idx`/`Name` headers, Idx
+  order 1..150) is verified separately before the seg chains go out.
+- Smoke checkpoints deleted (2.51 GiB reclaimed from the over-quota hpc
+  filesystem).
+
 **Pending from HPC (Phase B, remaining):**
 1. DECIDE `ckpt_root`. hpc measured 101G of a 100G soft quota (in grace); the
    six chains write ~7.6 GiB of checkpoints there by default and the two
@@ -1253,10 +1281,10 @@ segmentation 52/55.
 2. `rm -rf results/smoke/*/*/ckpt` — the smoke checkpoints are 2.51 GiB on
    the over-quota filesystem and `tools/check_smoke.py` has already read
    everything it needs from them.
-3. Locate an `objectInfo150.csv` so per_class_iou.csv gets real class names
-   (the staged zip has none). `unzip -l` the ADE20K archive to see what it
-   carries; then set `class_names_file` in the matrix. Numbers are
-   unaffected — this only blocks Phase C's sky/wall/floor rows.
+3. DONE — the names ship as `objectInfo150.txt` and the trainer already
+   looks for it; only its parse needs the one-off verification noted above.
+   `class_names_file` in the matrix stays null unless that verification
+   fails.
 4. Submit the six chains, SIX SEPARATE COMMANDS (a glob or brace form runs
    only the first script and passes the rest as ignored positional
    arguments, silently leaving Gate-2 rows unsubmitted — verified, and
