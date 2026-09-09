@@ -74,7 +74,14 @@ def main():
     p.add_argument("--probe", default="results/probe/probe_set.json")
     p.add_argument("--data", metavar="ROOT", required=True,
                    help="ImageNet root containing val/")
-    p.add_argument("--out-root", default="results/runs")
+    p.add_argument("--out-root", default="results/runs",
+                   help="run tree holding diag/*_addr.json (the TASK-07 sink "
+                        "maps) — normally the repo's own results/runs")
+    p.add_argument("--attn-root", default=None,
+                   help="where the attn/ trees live (default: --out-root); "
+                        "must match tools/dump_attention.py. Kept separate "
+                        "because the dumps may sit on a bulk filesystem while "
+                        "the committed diag JSONs stay in the repo.")
     p.add_argument("--out", default="results/figures_data/F1_teaser.npz")
     p.add_argument("--img-size", type=int, default=224)
     args = p.parse_args()
@@ -87,6 +94,7 @@ def main():
 
     runs = [r.strip() for r in args.runs.split(",") if r.strip()]
     out_root = Path(args.out_root)
+    attn_root = Path(args.attn_root or args.out_root)
     arrays, absent, prov = {}, [], {}
     grid = None
 
@@ -95,7 +103,7 @@ def main():
             Path(args.data), item["path"], args.img_size)
 
     for run_id in runs:
-        attn_dir = out_root / run_id / "attn"
+        attn_dir = attn_root / run_id / "attn"
         got = 0
         for item in curated["items"]:
             npz = attn_dir / f"probe_curated_{sanitize(item['image_id'])}.npz"

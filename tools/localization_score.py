@@ -194,6 +194,9 @@ def main():
     p.add_argument("--groups", default="random200,boxes20")
     p.add_argument("--probe", default="results/probe/probe_set.json")
     p.add_argument("--out-root", default="results/runs")
+    p.add_argument("--attn-root", default=None,
+                   help="where the attn/ trees live (default: --out-root); "
+                        "must match tools/dump_attention.py")
     p.add_argument("--out", default="results/figures_data/F1_localization.csv")
     p.add_argument("--img-size", type=int, default=224)
     p.add_argument("--allow-missing", action="store_true",
@@ -206,7 +209,7 @@ def main():
 
     rows, absent, provenance = [], [], {}
     for run_id in [r.strip() for r in args.runs.split(",") if r.strip()]:
-        attn_dir = Path(args.out_root) / run_id / "attn"
+        attn_dir = Path(args.attn_root or args.out_root) / run_id / "attn"
         for group_name in [g.strip() for g in args.groups.split(",") if g.strip()]:
             group = probe.get("groups", {}).get(group_name)
             if not group or group.get("status") != "frozen":

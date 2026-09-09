@@ -23,6 +23,15 @@ source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 source $CODE_ROOT/scripts/stage_probe.sh
 cd $CODE_ROOT
 
+# Where the attn/*.npz land. They total ~3 GB for the five models below and
+# must NEVER be deleted (Phase C and every later figure read them), while the
+# hpc filesystem holding CODE_ROOT was over its soft quota on 2026-09-08.
+# Override before submitting to put them on bulk storage, e.g.
+#   ATTN_ROOT=/home/woody/iwi5/iwi5359h/SAGA/probe_attn sbatch scripts/jobs/probe_attention.sbatch
+ATTN_ROOT=${ATTN_ROOT:-$CODE_ROOT/results/runs}
+mkdir -p "$ATTN_ROOT"
+echo "attn root: $ATTN_ROOT"
+
 PY=$(which python)
 echo "python: $PY"
 $PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.__version__, 'cuda', torch.cuda.is_available())"
@@ -64,10 +73,10 @@ for entry in "${MODELS[@]}"; do
     fi
     echo "=== dumping $RUN_ID ($ARCH/$VARIANT) ==="
     $PY tools/dump_attention.py --run-id "$RUN_ID" --arch "$ARCH" \
-        --variant "$VARIANT" --ckpt "$CKPT" \
+        --variant "$VARIANT" --ckpt "$CKPT" --attn-root "$ATTN_ROOT" \
         --groups curated,random200 --data $PROBE_IN_DIR
     $PY tools/dump_attention.py --run-id "$RUN_ID" --arch "$ARCH" \
-        --variant "$VARIANT" --ckpt "$CKPT" \
+        --variant "$VARIANT" --ckpt "$CKPT" --attn-root "$ATTN_ROOT" \
         --groups boxes20 --coco-root $PROBE_COCO_DIR
     DUMPED+=("$RUN_ID")
 done
@@ -81,10 +90,14 @@ echo "dumped runs: $RUNS"
 
 # ── 4. Localization statistics (small, committed) ────────────────────────────
 $PY tools/localization_score.py --runs "$RUNS" --groups random200,boxes20 \
+    --attn-root "$ATTN_ROOT" \
     --out results/figures_data/F1_localization.csv
 
 # ── 5. Figure arrays (small, committed) ──────────────────────────────────────
+# --out-root stays the repo tree: that is where the TASK-07 diag/*_addr.json
+# sink maps live, even when the dumps themselves sit on bulk storage.
 $PY analysis/collect_F1.py --runs "$RUNS" --data $PROBE_IN_DIR \
+    --attn-root "$ATTN_ROOT" --out-root $CODE_ROOT/results/runs \
     --out results/figures_data/F1_teaser.npz
 
 echo "======================================================"
@@ -92,7 +105,7 @@ echo "  DONE — commit these three, and NOT the attn dumps:"
 echo "    results/probe/probe_set.json"
 echo "    results/figures_data/F1_localization.csv (+ _meta.json)"
 echo "    results/figures_data/F1_teaser.npz"
-echo "  The attn/*.npz stay here (git-ignored) — Phase C needs them."
+echo "  The attn/*.npz stay in $ATTN_ROOT and must NOT be deleted."
 ls -la results/figures_data/F1_* results/probe/probe_set.json
-du -sh results/runs/*/attn 2>/dev/null
+du -sh "$ATTN_ROOT"/*/attn 2>/dev/null
 echo "======================================================"

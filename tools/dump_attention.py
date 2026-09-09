@@ -175,6 +175,12 @@ def main():
     p.add_argument("--coco-root", metavar="ROOT",
                    help="COCO root containing val2017/")
     p.add_argument("--out-root", default="results/runs")
+    p.add_argument("--attn-root", default=None,
+                   help="where the attn/ trees go (default: --out-root). The "
+                        "dumps are ~3 GB for the planned five models and must "
+                        "never be deleted, so point this at a bulk filesystem "
+                        "if the repo one is tight (TASK-09 --ckpt_root "
+                        "precedent).")
     p.add_argument("--model-builder", default=None,
                    help="TASK-10 hook, 'module:function'")
     p.add_argument("--batch-size", type=int, default=8)
@@ -203,7 +209,7 @@ def main():
     ckpt_sha = file_sha256(args.ckpt) if args.ckpt else None
     repo_sha = git_sha()        # one subprocess, not one per image
 
-    attn_dir = Path(args.out_root) / args.run_id / "attn"
+    attn_dir = Path(args.attn_root or args.out_root) / args.run_id / "attn"
     attn_dir.mkdir(parents=True, exist_ok=True)
 
     written = skipped = 0

@@ -565,6 +565,53 @@ def test_plot_F1_renders_with_a_missing_ttr_column(tmp_path):
     assert pdf.is_file() and pdf.stat().st_size > 1000
 
 
+def test_attn_root_separates_bulk_dumps_from_the_repo_run_tree(tmp_path):
+    """The ~3 GB of dumps may live on bulk storage while the committed
+    diag/*_addr.json sink maps stay in the repo — so collect_F1 must read the
+    two from DIFFERENT roots."""
+    root, probe = _tiny_probe(tmp_path)
+    bulk = tmp_path / "bulk"
+    repo_runs = tmp_path / "repo_runs"
+
+    from tools.model_factory import build_model
+    torch.manual_seed(0)
+    model = build_model("vit_tiny_patch16_224", "baseline", num_classes=10)
+    ckpt = tmp_path / "b.pth"
+    torch.save({"model": model.state_dict()}, ckpt)
+
+    old = sys.argv
+    try:
+        sys.argv = ["dump_attention.py", "--run-id", "r_b",
+                    "--arch", "vit_tiny_patch16_224", "--variant", "baseline",
+                    "--ckpt", str(ckpt), "--probe", str(probe),
+                    "--groups", "curated", "--data", str(root),
+                    "--out-root", str(repo_runs), "--attn-root", str(bulk),
+                    "--device", "cpu", "--num-classes", "10"]
+        assert dmp.main() == 0
+        # dumps went to the bulk root only
+        assert list(bulk.glob("r_b/attn/*.npz"))
+        assert not repo_runs.exists() or not list(repo_runs.glob("**/*.npz"))
+
+        # a sink map committed in the REPO tree is still picked up
+        diag = repo_runs / "r_b" / "diag"
+        diag.mkdir(parents=True, exist_ok=True)
+        (diag / "x_last_addr.json").write_text(
+            json.dumps({"freq_canon": [1.0 / 196] * 196}), encoding="utf-8")
+
+        from analysis import collect_F1
+        out = tmp_path / "F1.npz"
+        sys.argv = ["collect_F1.py", "--runs", "r_b", "--probe", str(probe),
+                    "--data", str(root), "--out-root", str(repo_runs),
+                    "--attn-root", str(bulk), "--out", str(out)]
+        assert collect_F1.main() == 0
+    finally:
+        sys.argv = old
+
+    with np.load(out, allow_pickle=False) as z:
+        assert "attn/r_b/n00000001/i0" in z.files    # from bulk
+        assert z["sink/r_b"].shape == (14, 14)       # from the repo tree
+
+
 def test_localization_fails_loudly_when_dumps_are_missing(tmp_path):
     _, probe = _tiny_probe(tmp_path)
     old = sys.argv

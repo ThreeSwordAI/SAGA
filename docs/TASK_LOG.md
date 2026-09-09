@@ -1560,8 +1560,16 @@ Branch `task/11-teaser` off `main` at `cdae852`. Phase A writes tooling only —
   2-4 h and staging adds ~30-40 min. Flagged in the job file itself.
 - A1 calls the probe set a Phase-A deliverable, but it can only be BUILT where
   the data is. The tool is Phase A; the frozen JSON is HPC step 1.
+- The dumps are ~3.1 GB for the five models (computed from the npz schema)
+  and must never be deleted, but they default onto the `hpc` filesystem that
+  TASK-09 recorded as already over its soft quota. All three tools therefore
+  take `--attn-root` (default: `--out-root`), and the job exposes it as
+  `ATTN_ROOT` so bulk storage is an env var, not a code edit — the TASK-09
+  `--ckpt_root` precedent. `collect_F1` keeps `--out-root` pointing at the
+  repo tree regardless, because the TASK-07 `diag/*_addr.json` sink maps live
+  there; a test pins that the two roots are read separately.
 
-`pytest -q`: **296 passed** (259 pre-existing + 37 TASK-11). No trainer, eval,
+`pytest -q`: **297 passed** (259 pre-existing + 38 TASK-11). No trainer, eval,
 diagnose or results file touched.
 
 **Commit:** `[TASK-11] probe set + attention dumps + localization score (phase A)`
