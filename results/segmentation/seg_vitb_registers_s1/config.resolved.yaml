@@ -1,0 +1,80 @@
+model:
+  arch: vit_base_patch16_224
+  patch_size: 16
+  img_size: 224
+  embed_dim: 768
+  fpn_indices:
+  - 3
+  - 6
+  - 9
+  - 11
+  fpn_out_channels: 256
+  num_classes: 150
+  gate: false
+  registers: 4
+train:
+  epochs: 80
+  warmup_epochs: 2
+  batch_size: 16
+  num_workers: 4
+  input_size: 512
+  backbone_lr: 1e-5
+  head_lr: 1e-4
+  weight_decay: 0.05
+  grad_clip: 1.0
+  freeze_backbone_epochs: 2
+  amp: true
+  random_flip_prob: 0.5
+  random_scale:
+  - 0.5
+  - 2.0
+logging:
+  log_freq: 50
+  save_freq: 10
+eval:
+  eval_freq: 10
+  input_size: 512
+  ms_scales:
+  - 0.5
+  - 0.75
+  - 1.0
+  - 1.25
+  - 1.5
+  ms_flip: true
+run_id: seg_vitb_registers_s1
+task: segmentation
+variant: registers
+seed: 1
+backbone_key: vitb_registers
+backbone_spec:
+  run: e2r_vitb_mixup_registers_s1
+  ckpt: results/runs/e2r_vitb_mixup_registers_s1/ckpt/last.pth
+  sha256: null
+  require_complete: results/runs/e2r_vitb_mixup_registers_s1
+  require_epochs: 300
+  fallback:
+    run: legacy_e2_vitb_registers_nomixdir
+    ckpt: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth
+    sha256: 82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1
+    note: "legacy e2 ViT-B registers, \"nomix\" DIRECTORY but recipe_actual=mixup\
+      \ (results/notes/recipe_erratum.md \u2014 the legacy nomix config never applied\
+      \ its augmentation block, so this checkpoint was trained with mixup 0.8 / cutmix\
+      \ 1.0, matching the baseline/saga backbones' recipe). Path and sha256 are row\
+      \ /home/vault/.../e2/checkpoints/ViT-B_registers_nomix/last.pth of results/legacy/checkpoint_manifest.csv.\
+      \ UNSEEDED (seed \"rlast\"), so the registers rows are one repeat with no seed\
+      \ control."
+task_config_file: segmentation/configs/base.yaml
+out_root: results/segmentation
+smoke: false
+backbone:
+  run: legacy_e2_vitb_registers_nomixdir
+  ckpt: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth
+  ckpt_config_value: /home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth
+  sha256: 82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1
+  source: fallback
+  note: "legacy e2 ViT-B registers, \"nomix\" DIRECTORY but recipe_actual=mixup (results/notes/recipe_erratum.md\
+    \ \u2014 the legacy nomix config never applied its augmentation block, so this\
+    \ checkpoint was trained with mixup 0.8 / cutmix 1.0, matching the baseline/saga\
+    \ backbones' recipe). Path and sha256 are row /home/vault/.../e2/checkpoints/ViT-B_registers_nomix/last.pth\
+    \ of results/legacy/checkpoint_manifest.csv. UNSEEDED (seed \"rlast\"), so the\
+    \ registers rows are one repeat with no seed control."
