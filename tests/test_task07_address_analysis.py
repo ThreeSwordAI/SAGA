@@ -648,6 +648,42 @@ def test_note_reports_sign_disagreement_instead_of_a_range():
 
 # ── the committed artifacts stay in sync ─────────────────────────────────────
 
+def test_committed_handoff_matches_committed_tables():
+    """docs/TASK_07_HANDOFF.md is generated from the results tables; a stale
+    file means someone edited it by hand or the data moved under it."""
+    from analysis.build_task07_handoff import build as build_handoff
+    table = REPO / "results/tables/sink_address.csv"
+    pooled = REPO / "results/tables/e2_pooled.csv"
+    doc = REPO / "docs/TASK_07_HANDOFF.md"
+    if not (table.exists() and pooled.exists() and doc.exists()):
+        pytest.skip("phase-C artifacts not present")
+    with open(table, newline="") as f:
+        rows = list(csv.DictReader(f))
+    with open(pooled, newline="") as f:
+        pooled_rows = list(csv.DictReader(f))
+    on_disk = doc.read_text(encoding="utf-8")
+    # the git sha line moves with every commit, so compare everything else
+    sha = on_disk.split("at git `")[1].split("`")[0]
+    assert build_handoff(rows, pooled_rows, sha).strip() == on_disk.strip()
+
+
+def test_handoff_quotes_every_paired_delta_not_just_the_first():
+    """The ViT-B significance argument turns on the SPREAD between the two
+    paired deltas, so both must be quoted."""
+    from analysis.build_task07_handoff import pooled_deltas
+    pooled = REPO / "results/tables/e2_pooled.csv"
+    doc = REPO / "docs/TASK_07_HANDOFF.md"
+    if not (pooled.exists() and doc.exists()):
+        pytest.skip("pooled table not present")
+    with open(pooled, newline="") as f:
+        rows = list(csv.DictReader(f))
+    deltas = pooled_deltas(rows, "vit_base", "mixup", "saga")
+    assert len(deltas) >= 2
+    text = doc.read_text(encoding="utf-8")
+    for tag, value in deltas:
+        assert f"{tag} {value}" in text, (tag, value)
+
+
 def test_committed_note_matches_committed_table():
     """The note in results/notes must be the one the committed CSV renders
     (it is generated, so a stale note means someone edited it by hand)."""
