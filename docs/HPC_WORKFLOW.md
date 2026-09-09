@@ -34,6 +34,15 @@ Claude Code has **no HPC access**: every GPU step is delivered as an exact,
 copy-pasteable command block based on `How to Run.md`, then Claude STOPS and
 waits for the results to come back through git.
 
+## Partitions
+
+`How to Run.md` §6 documents only `--partition=a100 --gres=gpu:a100:N`. The
+**a40** partition is also available and is addressed as
+`--partition=a40 --gres=gpu:a40:1` (confirmed by the human from a working a40
+job on this cluster, 2026-09-09; first used here by
+`scripts/jobs/probe_attention.sbatch`). Its wall limit is not documented —
+TASK-11's job asks for 6 h.
+
 ## Large files never travel through git
 
 - Git-ignored: checkpoints (`*.pth`, `*.pt`), datasets, raw attention dumps

@@ -1445,3 +1445,130 @@ four A2 chains (registers smoke passed) — `bash scripts/submit_e2r_*.sh`,
 S ~17 h / B ~29 h. Open for the human: whether to run
 e2r_vitb_mixup_{baseline,saga}_s2 to take ViT-B seed-stability from 1 pair
 to 3, which is the weakest number in the whole analysis.
+
+---
+
+## 2026-09-09 — TASK 11, PHASE A (probe set + attention dumps + localization)
+
+Branch `task/11-teaser` off `main` at `cdae852`. Phase A writes tooling only —
+**no results file was created or edited**, and no number exists yet.
+
+**Session start was BLOCKED TWICE, both reported rather than worked around:**
+- An unfinished `git pull` merge sat in the worktree (`.git/MERGE_HEAD`
+  present, 223 staged TASK-09/e2r result files, `main` ahead 1 / behind 1).
+  Per CLAUDE.md I did not commit, complete or stash it. After the human
+  reported it done, a successful `git fetch` showed `origin/main` still at
+  `d56db59` and the merge still open — the commands had not run (their shell
+  is Windows PowerShell 5.1, where `&&` and the `VAR=x cmd` prefix used in my
+  bash block are both invalid). Re-reported with PowerShell syntax; the human
+  then landed it as `cdae852`.
+- The A40 partition answer came back as an unfilled template placeholder.
+  Resolved by the human pasting a working a40 header from another project:
+  **`--partition=a40 --gres=gpu:a40:1`, `--cpus-per-task=4`.**
+
+**Done (local, by Claude Code):**
+- A1 `tools/build_probe_set.py` -> `results/probe/probe_set.json` (built on
+  the HPC). Three groups, each frozen INDEPENDENTLY and write-once, each
+  carrying a `sha256` over its own canonical serialization so a later group's
+  build re-verifies the earlier ones: `curated` (12 images, 4 per stated
+  criterion), `random200` (200 images, one per class over 200 seeded classes),
+  `boxes20` (20 COCO-val images + GT boxes, `status: pending` until a job with
+  COCO fills it). Criteria are CLASS-LEVEL priors and say so
+  (`criterion_basis: class_prior`) with the synset pool and rationale recorded
+  per image; `--curated-paths` gives the human per-image control
+  (`criterion_basis: explicit_paths`). Relative paths + labels, never dataset
+  indices. Stdlib only — deliberately no torch, so it runs on a login node
+  (TASK-09 lost a sync to exactly that assumption).
+- A2 `tools/dump_attention.py` -> `results/runs/<run_id>/attn/probe_<group>_<image_id>.npz`
+  (git-ignored via the existing `results/**/attn/`, verified with
+  `git check-ignore`). Per image: CLS->patch for ALL blocks both head-meaned
+  and per-head (fp16), the prefix mass (so patch+prefix == 1 is checkable on
+  the artifact), full maps for the last 4 blocks, per-block token norms,
+  SAGA's `sigmoid(phi)` head-mean, and provenance (ckpt sha256, git sha,
+  probe-group sha, prefix count). Prefix tokens come from the MODEL via
+  `infer_num_prefix_tokens`, never assumed; TTR (TASK-10) plugs in through
+  `--model-builder module:function`, so nothing about its interface is
+  invented here. Idempotent on (ckpt sha, probe sha, schema); an unreadable
+  file is redone, not trusted.
+- A3 `tools/localization_score.py` -> `results/figures_data/F1_localization.csv`
+  (exactly the mandated 5 columns; provenance in a sidecar `_meta.json`).
+  boxes20: `inbox_mass`, `pointing_hit`, and `box_area_frac` — the
+  uniform-attention null, written as its own row because TASK-07 established
+  that these statistics are meaningless without one. random200: `ring1_mass`,
+  `uniform_ring1_mass`, `attn_entropy_bits`.
+  **The ring is IMPORTED, not re-derived**: ring membership is obtained by
+  probing TASK-07's own `analysis.address_analysis.border_rings` with one-hot
+  maps, so the two cannot drift; a test pins the agreement against an
+  independent Chebyshev reference.
+  **The box frame is measured, not reasoned about** (TASK-09's 3-GPU-day
+  lesson): `map_boxes_to_input_frame` reproduces `build_val_transform`'s
+  Resize(short side -> 256) + CenterCrop(224) including torchvision's
+  truncation and rounding, and the test pushes a white rectangle through the
+  REAL transform and asserts the mapped box bounds the surviving pixels.
+- A6 `analysis/collect_F1.py` -> `results/figures_data/F1_teaser.npz` (runs on
+  the HPC, since the dumps never leave it): thumbnails, per-model attention
+  maps, gate maps at layers 7/8, TASK-07 sink-frequency maps, the ring-1 mask,
+  and an index recording what is ABSENT. A model that was never dumped has no
+  arrays at all — never a zero-filled panel.
+  `plotting/plot_F1.py` -> the Phase-C figure; a missing TTR column renders as
+  an explicit dotted "pending" panel.
+- `scripts/jobs/probe_attention.sbatch` (a40, 1 GPU) + `scripts/stage_probe.sh`.
+  Staging releases node-local scratch via `trap cleanup_probe EXIT`
+  (TASK-09's wall-clock lesson). Both files stored LF (verified against the
+  raw blobs, matching the committed scripts; `.gitattributes` untouched).
+- Tests: `tests/test_task11_probe.py`, **37 tests** — probe determinism across
+  two builds, seed sensitivity, disjointness, paths resolving under a fake
+  root, criteria recorded, write-once refusal, `--if-missing` no-op, boxes20
+  fill proven unable to perturb the frozen ImageNet groups, tampering
+  detected; ring/border_rings agreement, ring-1 uniform mass == area fraction
+  (44/196), entropy bounds; resized_size vs torchvision on 5 shapes, the
+  white-rectangle frame measurement, boxes outside the crop vanishing;
+  concentrated -> 1.0 and uniform -> box-area fraction, union-not-sum,
+  pointing game; per-variant prefix handling (baseline 1 / saga 1 /
+  registers 5) end to end, rows-sum-to-1 on the artifact, capture_attention
+  no-op re-pinned, guard skip AND guard re-dump on a changed checkpoint,
+  truncated dump redone; CSV schema + absent-never-zero; collect_F1 absent
+  handling; plot_F1 rendering with a missing TTR column.
+
+**Four defects found by my own tests and fixed before commit:**
+1. **The probe groups were not disjoint by construction** — `random200` could
+   (and did) draw the very image already in `curated`, which would have put
+   Figure 1's illustrations inside the population they are captioned with.
+   `build_random200` now excludes already-claimed paths.
+2. **`np.savez_compressed(tmp, ...)` appends `.npz`**, so every dump's
+   tmp+rename targeted a file that did not exist — the tool could not have
+   written a single artifact on the HPC. Replaced by the repo's existing
+   `tools.dense_runtime.atomic_npz_save` (which writes to a handle and
+   fsyncs); `atomic_write_text` likewise for the CSV/JSON.
+3. `collect_F1` hard-raised `KeyError` on a missing `criterion` — a figure
+   CAPTION taking down the archive. Now tolerant.
+4. `dump_attention` recomputed the gate map and shelled out to `git rev-parse`
+   once PER IMAGE (~1160 subprocesses over the planned run). Both hoisted.
+
+**Reconciliations (stated, not improvised):**
+- `How to Run.md` is NOT in the repo (it sits one level above), so the
+  mandated §6 note cannot be in the commit. The note is committed to
+  `docs/HPC_WORKFLOW.md` (new "Partitions" section) AND written into the
+  out-of-repo `How to Run.md` §6 as an uncommitted edit.
+- The committed stagers extract data this task never reads
+  (`stage_imagenet.sh`: 5 train shards, ~20-40 min; `stage_coco.sh`:
+  train2017.zip, ~18 GB). `scripts/stage_probe.sh` provides val-only variants
+  whose bodies are COPIED from those files with the train lines removed and
+  the stage dir renamed, and separate per-dataset stage dirs so both can be
+  staged in one job without overwriting `$STAGE_DIR`.
+- `--time=06:00:00` is the only SLURM value with no source: TASK-11 estimates
+  2-4 h and staging adds ~30-40 min. Flagged in the job file itself.
+- A1 calls the probe set a Phase-A deliverable, but it can only be BUILT where
+  the data is. The tool is Phase A; the frozen JSON is HPC step 1.
+
+`pytest -q`: **296 passed** (259 pre-existing + 37 TASK-11). No trainer, eval,
+diagnose or results file touched.
+
+**Commit:** `[TASK-11] probe set + attention dumps + localization score (phase A)`
+
+**Pending from HPC (Phase B):** run `scripts/jobs/probe_attention.sbatch`;
+commit `results/probe/probe_set.json`,
+`results/figures_data/F1_localization.csv` (+ `_meta.json`) and
+`results/figures_data/F1_teaser.npz`. The `attn/*.npz` are never committed and
+must NOT be deleted — Phase C's figure reads them. TTR is expected to be absent
+unless TASK 10 has landed; that is handled, not fatal.
