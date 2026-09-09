@@ -1,0 +1,82 @@
+{
+  "run_id": "det_vitb_registers_s1",
+  "git_sha": "1058d41135d77f5c469870799f10aeea0bc6b8e7",
+  "git_dirty": true,
+  "cmd": "detection/tools/train.py --matrix configs/dense_matrix.yaml --run det_vitb_registers_s1 --data_root /scratch/iwi5359h/coco_4200929 --ckpt_root /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt --resume auto",
+  "seed": 1,
+  "world_size": 4,
+  "hostname": "a0804",
+  "gpu_names": [
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "torch": "2.10.0+cu128",
+  "timm": "1.0.26",
+  "python": "3.12.13",
+  "cuda": "12.8",
+  "start_time": "2026-09-09T03:01:43.664065+00:00",
+  "end_time": null,
+  "task": "detection",
+  "variant": "registers",
+  "arch": "vit_base_patch16_224",
+  "backbone_run": "legacy_e2_vitb_registers_nomixdir",
+  "backbone_ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth",
+  "backbone_source": "fallback",
+  "backbone_note": "legacy e2 ViT-B registers, \"nomix\" DIRECTORY but recipe_actual=mixup (results/notes/recipe_erratum.md \u2014 the legacy nomix config never applied its augmentation block, so this checkpoint was trained with mixup 0.8 / cutmix 1.0, matching the baseline/saga backbones' recipe). Path and sha256 are row /home/vault/.../e2/checkpoints/ViT-B_registers_nomix/last.pth of results/legacy/checkpoint_manifest.csv. UNSEEDED (seed \"rlast\"), so the registers rows are one repeat with no seed control.",
+  "backbone_sha256_expected": "82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1",
+  "backbone_sha256_observed": "82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1",
+  "backbone_ckpt_meta": {
+    "epoch": 299,
+    "best_top1": 76.512,
+    "top1": 76.056
+  },
+  "task_config_file": "detection/configs/base.yaml",
+  "epochs": 25,
+  "epochs_configured": 25,
+  "smoke": false,
+  "steps_per_epoch": 14659,
+  "n_train_images": 117266,
+  "n_val_images": 5000,
+  "ckpt_dir": "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/det_vitb_registers_s1/ckpt",
+  "determinism": "seeded (matrix seed); GPU kernels not forced deterministic \u2014 same policy as the e2r trainer",
+  "normalization_check": {
+    "n_images": 2,
+    "max_abs_elementwise_diff": 0.0,
+    "backbone_input_channel_mean": [
+      -0.40857,
+      -0.3281,
+      -0.17016
+    ],
+    "backbone_input_channel_std": [
+      0.88244,
+      0.9285,
+      0.96663
+    ],
+    "dataloader_channel_mean": [
+      -0.40857,
+      -0.3281,
+      -0.17016
+    ],
+    "double_normalized_channel_mean": [
+      -3.90205,
+      -3.50046,
+      -2.56071
+    ],
+    "dist_to_single_normalized": 0.0,
+    "dist_to_double_normalized": 3.49348402,
+    "hypothesis_separation": 3.49348402,
+    "detector_image_mean": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "detector_image_std": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "atol": 0.0001
+  }
+}

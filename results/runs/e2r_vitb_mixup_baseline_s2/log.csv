@@ -1,0 +1,2 @@
+epoch,lr,train_loss,val_top1_full,val_top5_full,val_loss,img_per_sec,wall_time
+0,5.091e-05,6.7329,4.256,12.704,5.9678,4099.2,312.5

@@ -1,0 +1,632 @@
+{
+  "run_id": "det_vitb_registers_s1",
+  "task": "detection",
+  "variant": "registers",
+  "arch": "vit_base_patch16_224",
+  "seed": 1,
+  "epoch": 9,
+  "smoke": false,
+  "AP": 32.917,
+  "AP50": 55.121,
+  "AP75": 34.776,
+  "AP_S": 17.086,
+  "AP_M": 34.129,
+  "AP_L": 47.106,
+  "AR_1": 29.23,
+  "AR_10": 45.298,
+  "AR_100": 47.888,
+  "AR_S": 28.424,
+  "AR_M": 50.813,
+  "AR_L": 63.183,
+  "per_category": [
+    {
+      "category_id": 1,
+      "name": "person",
+      "AP": 46.269,
+      "AP50": 78.258,
+      "AP_S": 28.842
+    },
+    {
+      "category_id": 2,
+      "name": "bicycle",
+      "AP": 23.072,
+      "AP50": 49.056,
+      "AP_S": 13.134
+    },
+    {
+      "category_id": 3,
+      "name": "car",
+      "AP": 32.438,
+      "AP50": 61.296,
+      "AP_S": 24.468
+    },
+    {
+      "category_id": 4,
+      "name": "motorcycle",
+      "AP": 35.364,
+      "AP50": 66.761,
+      "AP_S": 15.514
+    },
+    {
+      "category_id": 5,
+      "name": "airplane",
+      "AP": 56.388,
+      "AP50": 85.7,
+      "AP_S": 55.624
+    },
+    {
+      "category_id": 6,
+      "name": "bus",
+      "AP": 54.659,
+      "AP50": 77.088,
+      "AP_S": 17.814
+    },
+    {
+      "category_id": 7,
+      "name": "train",
+      "AP": 57.863,
+      "AP50": 84.09,
+      "AP_S": 28.095
+    },
+    {
+      "category_id": 8,
+      "name": "truck",
+      "AP": 26.695,
+      "AP50": 48.753,
+      "AP_S": 10.664
+    },
+    {
+      "category_id": 9,
+      "name": "boat",
+      "AP": 18.244,
+      "AP50": 43.324,
+      "AP_S": 12.851
+    },
+    {
+      "category_id": 10,
+      "name": "traffic light",
+      "AP": 21.839,
+      "AP50": 47.035,
+      "AP_S": 18.551
+    },
+    {
+      "category_id": 11,
+      "name": "fire hydrant",
+      "AP": 58.257,
+      "AP50": 84.714,
+      "AP_S": 35.891
+    },
+    {
+      "category_id": 13,
+      "name": "stop sign",
+      "AP": 56.871,
+      "AP50": 72.715,
+      "AP_S": 24.423
+    },
+    {
+      "category_id": 14,
+      "name": "parking meter",
+      "AP": 35.591,
+      "AP50": 60.675,
+      "AP_S": 15.882
+    },
+    {
+      "category_id": 15,
+      "name": "bench",
+      "AP": 17.778,
+      "AP50": 32.895,
+      "AP_S": 7.216
+    },
+    {
+      "category_id": 16,
+      "name": "bird",
+      "AP": 28.13,
+      "AP50": 49.476,
+      "AP_S": 16.56
+    },
+    {
+      "category_id": 17,
+      "name": "cat",
+      "AP": 60.507,
+      "AP50": 89.312,
+      "AP_S": 0.0
+    },
+    {
+      "category_id": 18,
+      "name": "dog",
+      "AP": 58.236,
+      "AP50": 81.807,
+      "AP_S": 23.882
+    },
+    {
+      "category_id": 19,
+      "name": "horse",
+      "AP": 46.524,
+      "AP50": 71.136,
+      "AP_S": 17.39
+    },
+    {
+      "category_id": 20,
+      "name": "sheep",
+      "AP": 42.321,
+      "AP50": 72.094,
+      "AP_S": 27.066
+    },
+    {
+      "category_id": 21,
+      "name": "cow",
+      "AP": 44.58,
+      "AP50": 74.35,
+      "AP_S": 35.671
+    },
+    {
+      "category_id": 22,
+      "name": "elephant",
+      "AP": 53.876,
+      "AP50": 84.337,
+      "AP_S": 38.682
+    },
+    {
+      "category_id": 23,
+      "name": "bear",
+      "AP": 61.293,
+      "AP50": 86.048,
+      "AP_S": 28.515
+    },
+    {
+      "category_id": 24,
+      "name": "zebra",
+      "AP": 54.951,
+      "AP50": 85.775,
+      "AP_S": 39.288
+    },
+    {
+      "category_id": 25,
+      "name": "giraffe",
+      "AP": 56.239,
+      "AP50": 86.614,
+      "AP_S": 31.464
+    },
+    {
+      "category_id": 27,
+      "name": "backpack",
+      "AP": 8.133,
+      "AP50": 19.97,
+      "AP_S": 7.623
+    },
+    {
+      "category_id": 28,
+      "name": "umbrella",
+      "AP": 28.688,
+      "AP50": 53.939,
+      "AP_S": 10.14
+    },
+    {
+      "category_id": 31,
+      "name": "handbag",
+      "AP": 8.339,
+      "AP50": 20.573,
+      "AP_S": 6.841
+    },
+    {
+      "category_id": 32,
+      "name": "tie",
+      "AP": 22.572,
+      "AP50": 43.444,
+      "AP_S": 10.99
+    },
+    {
+      "category_id": 33,
+      "name": "suitcase",
+      "AP": 23.872,
+      "AP50": 46.398,
+      "AP_S": 12.671
+    },
+    {
+      "category_id": 34,
+      "name": "frisbee",
+      "AP": 55.504,
+      "AP50": 78.993,
+      "AP_S": 49.272
+    },
+    {
+      "category_id": 35,
+      "name": "skis",
+      "AP": 15.846,
+      "AP50": 34.79,
+      "AP_S": 15.028
+    },
+    {
+      "category_id": 36,
+      "name": "snowboard",
+      "AP": 27.428,
+      "AP50": 46.489,
+      "AP_S": 19.437
+    },
+    {
+      "category_id": 37,
+      "name": "sports ball",
+      "AP": 43.266,
+      "AP50": 66.013,
+      "AP_S": 40.151
+    },
+    {
+      "category_id": 38,
+      "name": "kite",
+      "AP": 33.853,
+      "AP50": 59.268,
+      "AP_S": 36.458
+    },
+    {
+      "category_id": 39,
+      "name": "baseball bat",
+      "AP": 20.956,
+      "AP50": 48.405,
+      "AP_S": 26.484
+    },
+    {
+      "category_id": 40,
+      "name": "baseball glove",
+      "AP": 29.226,
+      "AP50": 57.306,
+      "AP_S": 24.313
+    },
+    {
+      "category_id": 41,
+      "name": "skateboard",
+      "AP": 39.457,
+      "AP50": 67.463,
+      "AP_S": 28.521
+    },
+    {
+      "category_id": 42,
+      "name": "surfboard",
+      "AP": 30.463,
+      "AP50": 54.384,
+      "AP_S": 16.186
+    },
+    {
+      "category_id": 43,
+      "name": "tennis racket",
+      "AP": 36.014,
+      "AP50": 68.515,
+      "AP_S": 26.646
+    },
+    {
+      "category_id": 44,
+      "name": "bottle",
+      "AP": 28.613,
+      "AP50": 51.033,
+      "AP_S": 18.495
+    },
+    {
+      "category_id": 46,
+      "name": "wine glass",
+      "AP": 22.846,
+      "AP50": 42.714,
+      "AP_S": 11.759
+    },
+    {
+      "category_id": 47,
+      "name": "cup",
+      "AP": 29.647,
+      "AP50": 47.943,
+      "AP_S": 15.673
+    },
+    {
+      "category_id": 48,
+      "name": "fork",
+      "AP": 19.634,
+      "AP50": 36.132,
+      "AP_S": 5.813
+    },
+    {
+      "category_id": 49,
+      "name": "knife",
+      "AP": 8.91,
+      "AP50": 20.022,
+      "AP_S": 5.357
+    },
+    {
+      "category_id": 50,
+      "name": "spoon",
+      "AP": 7.812,
+      "AP50": 18.859,
+      "AP_S": 5.339
+    },
+    {
+      "category_id": 51,
+      "name": "bowl",
+      "AP": 31.691,
+      "AP50": 51.0,
+      "AP_S": 14.033
+    },
+    {
+      "category_id": 52,
+      "name": "banana",
+      "AP": 20.655,
+      "AP50": 42.106,
+      "AP_S": 10.444
+    },
+    {
+      "category_id": 53,
+      "name": "apple",
+      "AP": 13.009,
+      "AP50": 20.989,
+      "AP_S": 2.872
+    },
+    {
+      "category_id": 54,
+      "name": "sandwich",
+      "AP": 29.568,
+      "AP50": 49.08,
+      "AP_S": 3.532
+    },
+    {
+      "category_id": 55,
+      "name": "orange",
+      "AP": 26.1,
+      "AP50": 39.172,
+      "AP_S": 12.888
+    },
+    {
+      "category_id": 56,
+      "name": "broccoli",
+      "AP": 17.993,
+      "AP50": 40.474,
+      "AP_S": 9.51
+    },
+    {
+      "category_id": 57,
+      "name": "carrot",
+      "AP": 19.118,
+      "AP50": 37.698,
+      "AP_S": 11.156
+    },
+    {
+      "category_id": 58,
+      "name": "hot dog",
+      "AP": 24.113,
+      "AP50": 46.923,
+      "AP_S": 6.608
+    },
+    {
+      "category_id": 59,
+      "name": "pizza",
+      "AP": 45.163,
+      "AP50": 69.116,
+      "AP_S": 17.953
+    },
+    {
+      "category_id": 60,
+      "name": "donut",
+      "AP": 38.055,
+      "AP50": 55.998,
+      "AP_S": 30.044
+    },
+    {
+      "category_id": 61,
+      "name": "cake",
+      "AP": 28.658,
+      "AP50": 51.486,
+      "AP_S": 9.596
+    },
+    {
+      "category_id": 62,
+      "name": "chair",
+      "AP": 18.174,
+      "AP50": 37.852,
+      "AP_S": 10.541
+    },
+    {
+      "category_id": 63,
+      "name": "couch",
+      "AP": 37.448,
+      "AP50": 60.708,
+      "AP_S": 0.878
+    },
+    {
+      "category_id": 64,
+      "name": "potted plant",
+      "AP": 19.743,
+      "AP50": 41.128,
+      "AP_S": 11.398
+    },
+    {
+      "category_id": 65,
+      "name": "bed",
+      "AP": 40.166,
+      "AP50": 66.087,
+      "AP_S": 0.0
+    },
+    {
+      "category_id": 67,
+      "name": "dining table",
+      "AP": 20.548,
+      "AP50": 38.817,
+      "AP_S": 2.134
+    },
+    {
+      "category_id": 70,
+      "name": "toilet",
+      "AP": 53.118,
+      "AP50": 79.708,
+      "AP_S": 0.318
+    },
+    {
+      "category_id": 72,
+      "name": "tv",
+      "AP": 50.227,
+      "AP50": 74.208,
+      "AP_S": 12.859
+    },
+    {
+      "category_id": 73,
+      "name": "laptop",
+      "AP": 47.623,
+      "AP50": 70.514,
+      "AP_S": 7.348
+    },
+    {
+      "category_id": 74,
+      "name": "mouse",
+      "AP": 49.85,
+      "AP50": 71.806,
+      "AP_S": 41.03
+    },
+    {
+      "category_id": 75,
+      "name": "remote",
+      "AP": 20.479,
+      "AP50": 42.804,
+      "AP_S": 13.871
+    },
+    {
+      "category_id": 76,
+      "name": "keyboard",
+      "AP": 38.444,
+      "AP50": 65.758,
+      "AP_S": 14.42
+    },
+    {
+      "category_id": 77,
+      "name": "cell phone",
+      "AP": 25.585,
+      "AP50": 45.096,
+      "AP_S": 11.847
+    },
+    {
+      "category_id": 78,
+      "name": "microwave",
+      "AP": 48.8,
+      "AP50": 72.213,
+      "AP_S": 10.297
+    },
+    {
+      "category_id": 79,
+      "name": "oven",
+      "AP": 29.499,
+      "AP50": 55.159,
+      "AP_S": 2.194
+    },
+    {
+      "category_id": 80,
+      "name": "toaster",
+      "AP": 19.802,
+      "AP50": 29.785,
+      "AP_S": 48.647
+    },
+    {
+      "category_id": 81,
+      "name": "sink",
+      "AP": 28.357,
+      "AP50": 49.309,
+      "AP_S": 9.633
+    },
+    {
+      "category_id": 82,
+      "name": "refrigerator",
+      "AP": 42.019,
+      "AP50": 63.315,
+      "AP_S": 0.0
+    },
+    {
+      "category_id": 84,
+      "name": "book",
+      "AP": 11.357,
+      "AP50": 29.109,
+      "AP_S": 9.591
+    },
+    {
+      "category_id": 85,
+      "name": "clock",
+      "AP": 43.6,
+      "AP50": 70.37,
+      "AP_S": 31.531
+    },
+    {
+      "category_id": 86,
+      "name": "vase",
+      "AP": 26.021,
+      "AP50": 44.735,
+      "AP_S": 13.39
+    },
+    {
+      "category_id": 87,
+      "name": "scissors",
+      "AP": 21.853,
+      "AP50": 38.087,
+      "AP_S": 0.95
+    },
+    {
+      "category_id": 88,
+      "name": "teddy bear",
+      "AP": 37.116,
+      "AP50": 63.04,
+      "AP_S": 9.487
+    },
+    {
+      "category_id": 89,
+      "name": "hair drier",
+      "AP": 4.264,
+      "AP50": 11.174,
+      "AP_S": 0.347
+    },
+    {
+      "category_id": 90,
+      "name": "toothbrush",
+      "AP": 16.082,
+      "AP50": 28.886,
+      "AP_S": 14.83
+    }
+  ],
+  "n_val_images": 5000,
+  "n_detections": 235703,
+  "val_protocol": "official instances_val2017.json as ground truth; predictions mapped back to official category ids; all val images including annotation-free ones",
+  "backbone_run": "legacy_e2_vitb_registers_nomixdir",
+  "backbone_ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_registers_nomix/last.pth",
+  "backbone_source": "fallback",
+  "backbone_sha256": "82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1",
+  "detections_file": "detections_val.json",
+  "detections_bytes": 20421692,
+  "detections_sha256": "968c8948caff232d978d14e8cf146706466df0b144570bf76b877eb13a79aa34",
+  "normalization_check": {
+    "n_images": 2,
+    "max_abs_elementwise_diff": 0.0,
+    "backbone_input_channel_mean": [
+      -0.40857,
+      -0.3281,
+      -0.17016
+    ],
+    "backbone_input_channel_std": [
+      0.88244,
+      0.9285,
+      0.96663
+    ],
+    "dataloader_channel_mean": [
+      -0.40857,
+      -0.3281,
+      -0.17016
+    ],
+    "double_normalized_channel_mean": [
+      -3.90205,
+      -3.50046,
+      -2.56071
+    ],
+    "dist_to_single_normalized": 0.0,
+    "dist_to_double_normalized": 3.49348402,
+    "hypothesis_separation": 3.49348402,
+    "detector_image_mean": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "detector_image_std": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "atol": 0.0001
+  },
+  "git_sha": "1058d41135d77f5c469870799f10aeea0bc6b8e7"
+}
