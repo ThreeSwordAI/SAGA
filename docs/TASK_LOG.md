@@ -1580,3 +1580,209 @@ commit `results/probe/probe_set.json`,
 `results/figures_data/F1_teaser.npz`. The `attn/*.npz` are never committed and
 must NOT be deleted — Phase C's figure reads them. TTR is expected to be absent
 unless TASK 10 has landed; that is handled, not fatal.
+
+---
+
+## 2026-09-09 — TASK 10, PHASE A (test-time registers: the missing 2027 baseline)
+
+Branch `task/10-ttr` off `9887be7`. Track A: give the project an honest
+answer to "why not just use test-time registers?" — Jiang, Dravid, Efros &
+Gandelsman, *Vision Transformers Don't Need Trained Registers* (NeurIPS 2025
+Spotlight, arXiv:2506.08010). A negative result is a fine outcome here
+PROVIDED the implementation is validated, which is what Phase A builds.
+
+**Two blockers had to be cleared before any code (both reported, neither
+improvised):**
+- The worktree was **mid-merge** on `main`: the human's `git pull` had staged
+  223 files from `d56db59 "Task 09 half results"` without creating the merge
+  commit. Per CLAUDE.md I did not commit or stash it — reported and waited.
+  Human finished and pushed it (`cdae852`).
+- Then the single worktree was checked out on **`task/11-teaser`** (TASK-11's
+  session, created seconds after that merge). Reported per CLAUDE.md's
+  one-session-per-worktree rule and waited; human confirmed TASK-11 Phase A
+  was merged (`9887be7`) and its HPC job submitted, so the worktree was free.
+
+**A1 — the vendoring instruction is unsatisfiable, and this is the reason.**
+The authors' repo IS reachable (`github.com/nickjiang2378/test-time-registers`,
+187 stars, official), but it has **no license of its own**: the GitHub API
+reports `license: null`, and the only LICENSE in a recursive tree listing at
+the pinned commit is `dinov2/LICENSE` — Meta's, covering the vendored DINOv2
+subtree, not the authors' `shared/`, `custom_model/`, `clip/clip_*` or
+`register_neurons.ipynb`. A1 says to vendor it "with its LICENSE file
+intact"; there is no such file, and vendoring all-rights-reserved code into a
+repo headed for publication is a different kind of problem from a missing
+attribution. **Reconciliation: their code was READ at commit `860df43` to
+implement the method exactly — no guessing about which variant — and no line
+of it was copied.** `third_party/ttr/PROVENANCE.md` carries the licensing
+finding, the URL/sha/date, the method as their code defines it (with the file
+and function names), and a table of all eight deviations. If they add a
+license later, the pinned commit makes the comparison exact.
+
+**Done (local):**
+- `saga/ttr.py` — the two documented steps.
+  * `find_register_neurons`: their criterion is the DEFAULT
+    (`mean_abs_act_at_outliers_v1` — per image, mean |MLP hidden activation|
+    over the outlier tokens, averaged over images that have one); the
+    contrast variant A2.1 suggests is selectable
+    (`mean_abs_act_outliers_minus_rest_v1`). The criterion string is written
+    into every artifact, so no result is ever ambiguous about which was used.
+    Hook point `blocks[l].mlp.act`, the same one their
+    `Dinov2HookManager.neuron_activation_component` returns. Returns the full
+    descending ranking, so the `--n-neurons` sweep is a PREFIX of one scan,
+    never a rescan per k. Raises loudly when no image has an outlier, as
+    theirs does.
+  * `apply_ttr`: zero-initialised extra tokens (their README states the
+    initialisation), `scale * sign_max(...)` written into them at the selected
+    neurons, those neurons zeroed on the patch tokens, CLS never touched.
+  * **Token placement deviates deliberately.** They append
+    (`[CLS][PATCH][REG]`); A2.2 requires patch count and ordering to be
+    untouched, so extras are spliced in as PREFIX tokens
+    (`[CLS][EXTRA][PATCH]`) and `num_prefix_tokens` grows. `metrics.py`,
+    `diagnose.py` and `sink_address.py` therefore need no change. The two
+    placements are equivalent by permutation-equivariance (the extras carry
+    no positional embedding) — **measured, not asserted**: max |Δ| ≈ 2e-6 on
+    tokens of norm ≈ 16, i.e. fp32 round-off.
+  * **Outliers are detected among PATCH tokens only**, unlike theirs. Every τ
+    in this repo is calibrated on `last_block_patch_norms`, so thresholding
+    CLS with a patch-calibrated τ is a category error and would pollute the
+    scores with CLS-specific activations.
+  * τ comes from the base cell's canon file, not their hardcoded 30 — our
+    scales differ by an order of magnitude across cells (20.85 / 127.31 /
+    22.86), so one constant cannot serve.
+- **A design flaw the repo's own B6 tripwire caught.** Setting
+  `model.num_prefix_tokens = 1 + n_extra` trips
+  `SAGAViT._interpolate_pos_embed`, which reads the same attribute to
+  describe the pos-embed layout and hard-errors unless it is 1 — and it is
+  right to, since it runs before block 0, i.e. before the extras exist. The
+  two readers have incompatible needs during a TTR forward, so `apply_ttr`
+  now yields a `TTRModel` proxy: the wrapped model is left BIT-IDENTICAL (no
+  attribute of it is written at all) while every tool that asks the proxy
+  gets the patched count. `.blocks` is the same object, so hook-based tools
+  attach to the real blocks.
+- `apply_ttr` REFUSES SAGA-gated models: `SpatialGate.forward` hard-codes
+  `n_patches = N - 1`, so extra prefix tokens would be gated as patches (or
+  raise a grid mismatch). TTR is a baseline-model intervention here. An empty
+  selection is an EXACT no-op — nothing appended, no hook installed — because
+  appending an unused zero token would NOT be one (other tokens attend to it).
+- `tools/ttr_validate.py` — the A3 gate. Per sweep value: sink count under the
+  base cell's canon τ and top-1 on a fixed 5 000-image subset of the frozen
+  split (first 5 per class, class-balanced, no RNG), with the neuron scan run
+  on a DISJOINT strided 500-image set from the other half of the split.
+  A3 states the PASS criterion in words only, so both numbers are flags
+  (default: ≥50 % relative sink reduction AND ≤1.00 point top-1 drop) and both
+  are printed and recorded beside the verdict. Exit **0 = PASS, 3 = a measured
+  FAIL** (do not run the matrix — the validated negative is the deliverable),
+  anything else = the tool itself broke. Writes `neurons.json` + `sweep.csv`
+  (row `n_neurons=0` is the unpatched reference, measured the same way) +
+  `validate.json`.
+- `tools/ttr_prepare_run.py` + `tools/ttr_derive.py` — the Phase-B pair.
+  **`tools/eval.py` and `tools/diagnose.py` keep a ZERO diff**: wrapping their
+  eval loops in a context manager would mean re-indenting the two tools that
+  produce every paper number, so `ttr_derive` imports their exact pieces
+  instead (`shard_counts`, `counts_to_metrics`, `build_val_transform`, the
+  `n == 50000` assert, `compute_diagnostics`) and a test pins that its
+  UNPATCHED path (`--n-neurons 0`) reproduces `tools/eval.py`'s top1/top5/loss
+  to the last digit. Single-GPU by design (Phase B is one A40, eval-only), so
+  no sharding and no all_reduce. npz before JSON, sha-keyed skip guards on
+  both steps, so a requeue redoes only what is missing.
+- **The integration point A5.3 actually depends on, found and fixed:**
+  `apply_fixed_thr --version canon` resolves a diag file's cell via
+  `recipe_from_run_dir`, which reads `<run_dir>/config.resolved.yaml`. A TTR
+  run dir had none, so the canon backfill would have refused every TTR diag
+  ("cannot resolve recipe_actual"), leaving no `sink_fixed_canon` — and then
+  `sink_address.py`'s HARD cross-check would have had nothing to compare
+  against. `ttr_prepare_run.py` writes that config with the **BASE** cell's
+  arch/variant/recipe (plus a `ttr:` provenance block), so the existing
+  backfill resolves `vit_small|mixup` and works unmodified. Pinned by a test
+  that runs the real resolver and then the real `apply_fixed_thr` CLI on a
+  derived TTR run dir. Related trap also guarded: a diag stem with exactly 7
+  underscore-separated parts is read as a LEGACY e2 filename by
+  `recipe_from_stem`, which would resolve the cell from the NAME instead of
+  the config — `ttr_derive` refuses such a `--diag-name`.
+- `scripts/jobs/ttr_validate.sbatch` + `ttr_matrix.sbatch`. The a40 header is
+  copied from `scripts/jobs/probe_attention.sbatch` (TASK-11), which took it
+  from the human's own working a40 job; the same strings are in
+  `docs/HPC_WORKFLOW.md` "Partitions", so nothing was invented — a test pins
+  both files against that reference header. Reuses TASK-11's committed
+  val-only stager rather than adding a third one. Scratch released by
+  `trap cleanup_probe EXIT` (TASK-09's lesson), canon backfill BEFORE
+  `sink_address` (its cross-check needs that field), `N_BEST` required rather
+  than defaulted, no wildcard-submit shapes.
+- `results/README.md` documents both new trees, including WHY they are split:
+  `results/ttr/<base_run_id>/` for the TTR-specific artifacts (A2.1) and
+  `results/runs/ttr_<base_run_id>/` for the standard eval/diag pair (A5.3),
+  the latter under `runs/` precisely so the existing collectors glob it.
+- `tests/test_task10_ttr.py` — 61 tests (CPU, fake data, tiny models). The
+  four A4 items are marked `[A4]`; the rest pin the mechanism (`sign_max`
+  sign convention, the redirection's exact effect on extras/patches/CLS,
+  `scale`, each `normal_values` mode), the guards (gated-model refusal,
+  index/range validation, nesting, hook removal on exception), the selection
+  helpers, the proxy, the validate units (canon τ read from the REAL
+  committed file, subset carving, verdict incl. the undefined-when-zero
+  case), and the two CLIs end to end through subprocess.
+
+**Reconciliations (task file vs reality) — stated, not improvised:**
+1. A1's vendoring branch is unsatisfiable (no upstream license). See above.
+2. A5.2's example command omits `--data`, which the tool cannot run without
+   (it needs ImageNet val). `--data` is required and appears in the printed
+   block.
+3. A2.1 puts `neurons.json` under `results/ttr/<base_run_id>/` while A5.3
+   puts eval/diag under `results/runs/ttr_<base_run_id>/`. Both are honoured;
+   the split is deliberate and documented, not a typo I picked a side on.
+4. A5.3's "the legacy ViT-S baseline (recipe_actual=mixup)" is ambiguous:
+   BOTH legacy ViT-S baseline checkpoints have `recipe_actual=mixup` (the
+   nomix DIRECTORY is an additional repeat of the mixup cell, per the
+   erratum). The matrix uses the mixup-dir one
+   (`ViT-S_baseline/last.pth`, manifest sha `cd926200127b98cb…`); the sibling
+   `ViT-S_baseline_nomix/last.pth` (`8d980da27a4b571a…`) is named in the job
+   file as an available second repeat. **Human's call if both are wanted.**
+5. A5's step 3 cannot be written concretely yet: it needs the best sweep
+   value, which only exists after the gate runs. `ttr_matrix.sbatch` takes it
+   as `N_BEST`.
+6. Each of the four cells gets its OWN neuron scan (register neurons are
+   per-model); only the chosen `n` is shared. The matrix job therefore
+   re-runs the gate per cell, which also yields a per-cell sweep — cheap
+   relative to a 50k eval, and better evidence. Rerunning is deterministic
+   apart from the `timestamp` field.
+
+**Per the human's ruling (separate commit):** task branches are local-only
+and the HPC always runs `main`, so the merge + push comes BEFORE the HPC
+block. `SAGA_Code/CLAUDE.md`'s branching section was updated in place — but
+that file is tracked by NO repository (`git ls-files | grep -i claude` is
+empty; it sits one level above the repo), so it cannot be committed. The
+versioned copy went into `docs/HPC_WORKFLOW.md` under "Branches". The old
+CLAUDE.md text was not merely incomplete but wrong: it told the HPC block to
+`git checkout task/<NN>-<slug>`, a branch that is never pushed.
+
+`pytest -q`: **358 passed** (297 pre-existing + 61 TASK-10). No results file
+was written or edited by this phase; `eval.py`, `diagnose.py`,
+`sink_address.py`, `apply_fixed_thr.py` and the trainers are untouched.
+
+**Commits:** `17ce433` (phase A), `8aabdfb` (branch policy).
+
+**Worktree hazard, recorded because it bit twice in one task.** Between my
+second and third commits the shared worktree was switched out from under me:
+the reflog shows `checkout: moving from task/10-ttr to main` followed by
+`pull origin main: Fast-forward` to `004c152 "TASK_09 all results"` (the
+human collecting HPC results — det_vitb_registers_s1 is now complete, 25
+log rows, so TASK-09 has all six runs). My TASK_LOG commit therefore landed
+on **`main`** instead of `task/10-ttr`, leaving `main` one unpushed commit
+ahead with a task commit on it — which the next `git push origin main` would
+have published out of order. Cleaned up: the commit was cherry-picked onto
+`task/10-ttr` (`docs/TASK_LOG.md` was byte-identical on both sides, so no
+conflict) and `main` was moved back to `origin/main` with `git branch -f`
+while it was NOT checked out — a pure ref move, no `--hard`, nothing of the
+human's touched. Verified afterwards: `main == origin/main == 004c152`, the
+three TASK-10 commits all on `task/10-ttr`, zero file overlap between this
+branch and `004c152`, `git merge-tree` clean, `pytest -q` 358 passed. The two
+task branches in this one worktree remain the standing risk; CLAUDE.md's
+`git worktree add ../SAGA-<NN>` is the documented way out.
+
+**Pending from HPC (Phase B):** merge `task/10-ttr` into `main` and push,
+then `sbatch scripts/jobs/ttr_validate.sbatch` → **report the PASS/FAIL line
+back before anything else runs**. On PASS: `N_BEST=<n> sbatch
+scripts/jobs/ttr_matrix.sbatch`. On FAIL for every n the matrix must NOT run
+and Phase C writes the validated negative instead. Files expected back: the
+sweep table (`results/ttr/*/{neurons.json,sweep.csv,validate.json}`) and, on
+PASS, 4 × {eval, diag, addr} under `results/runs/ttr_*/`. Then Phase C
+locally on `task/10-ttr-c` (T_ttr.csv + `results/notes/ttr_baseline.md`).
