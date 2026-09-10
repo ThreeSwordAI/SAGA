@@ -17,11 +17,18 @@
 # source: TASK-11 estimates 2-4 h and staging adds ~30-40 min; lower it if
 # the a40 partition has a shorter wall limit.
 
-set -u
-
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 source $CODE_ROOT/scripts/stage_probe.sh
 cd $CODE_ROOT
+
+# [TASK-10 cross-task fix] `set -u` was ABOVE the sourcing here, which aborts
+# the job during env setup: env_alex.sh sources /etc/profile, whose site
+# scripts dereference unset variables (/etc/profile.d/debuginfod.sh line 8,
+# DEBUGINFOD_URLS). Measured on Alex via TASK-10's job, whose .err contained
+# only that one line. TASK-10 copied this file's header and inherited the
+# bug, which is how it was found. One line; revert by moving `set -u` back
+# above the two `source` lines if TASK-11 disagrees.
+set -u
 
 # Where the attn/*.npz land. They total ~3 GB for the five models below and
 # must NEVER be deleted (Phase C and every later figure read them), while the

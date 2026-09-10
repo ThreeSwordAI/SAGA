@@ -38,13 +38,26 @@
 # eval-only matrix, plus ~10 min staging. Every step is idempotent, so if the
 # wall clock kills this, resubmitting the same command finishes the rest.
 
-set -u
-
+# Fail before staging if N_BEST is missing. ${VAR:?} does not need `set -u`
+# — it aborts on unset OR empty regardless — which is why this guard can
+# stay up here while `set -u` has to wait until after the env sourcing.
 : "${N_BEST:?set N_BEST to the --n-neurons value the A3 gate chose, e.g. N_BEST=16 sbatch $0}"
 
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 source $CODE_ROOT/scripts/stage_probe.sh
 cd $CODE_ROOT
+
+# `set -u` ONLY AFTER the env sourcing, never before it.
+# env_alex.sh sources /etc/profile, which runs the site scripts in
+# /etc/profile.d/. One of them dereferences an unset variable
+# (debuginfod.sh line 8: DEBUGINFOD_URLS), and under `set -u` that aborts
+# the whole job during env setup — before one line of this script runs.
+# Measured on Alex: the .err contained exactly
+#   /etc/profile.d/debuginfod.sh: line 8: DEBUGINFOD_URLS: unbound variable
+# and nothing else. Every job file in this repo that has completed a real
+# run (TASK-08 ft_*, TASK-09 det_*/seg_*/dense_smoke_*) puts `set -u` here,
+# after the sourcing; a test pins that ordering repo-wide.
+set -u
 
 PY=$(which python)
 echo "python: $PY"

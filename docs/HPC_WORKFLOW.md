@@ -66,6 +66,46 @@ job on this cluster, 2026-09-09; first used here by
 `scripts/jobs/probe_attention.sbatch`). Its wall limit is not documented —
 TASK-11's job asks for 6 h.
 
+**Switching partition without editing the file.** sbatch command-line flags
+override the `#SBATCH` directives in the script, so when a40 is busy:
+
+```bash
+sbatch --partition=a100 --gres=gpu:a100:1 scripts/jobs/<job>.sbatch
+```
+
+Do NOT copy the job file to change its header — a duplicate drifts out of
+sync, its provenance comment becomes false, and the repo's job-file tests are
+keyed to the real names. (A copy named `... copy.sbatch` also cannot be
+submitted unquoted at all: the space splits it into two arguments and sbatch
+opens neither.)
+
+## `set -u` goes AFTER the env sourcing, never before
+
+`scripts/env_alex.sh` sources `/etc/profile`, which runs the site scripts in
+`/etc/profile.d/`. At least one of them dereferences an unset variable —
+`debuginfod.sh` line 8, `DEBUGINFOD_URLS` — and under `set -u` bash aborts
+the **calling** script. The job then dies during env setup with nothing in
+the `.err` but:
+
+```
+/etc/profile.d/debuginfod.sh: line 8: DEBUGINFOD_URLS: unbound variable
+```
+
+and not one line of the job body runs. Measured on Alex 2026-09-10 by
+TASK-10's validate job. So in every job file:
+
+```bash
+source .../scripts/env_alex.sh      # and the stager
+cd $CODE_ROOT
+set -u                              # only here
+```
+
+Every job file that had completed a real run (TASK-08 `ft_*`, TASK-09
+`det_*`/`seg_*`/`dense_smoke_*`) already had this ordering; the three that
+did not were fixed and `tests/test_task10_ttr.py` now pins it repo-wide over
+`scripts/**/*.sbatch`. A `${VAR:?message}` guard needs no `set -u` — it
+aborts on unset or empty regardless — so those can still sit at the top.
+
 ## Large files never travel through git
 
 - Git-ignored: checkpoints (`*.pth`, `*.pt`), datasets, raw attention dumps
