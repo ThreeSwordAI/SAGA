@@ -33,6 +33,24 @@ results/
     preds_fixed20/          # <stem>_{pred,gt}.png + <stem>_img.jpg for the
                             # 20 committed probe images
     ckpt/                   # *.pth — git-ignored
+  ttr/<base_run_id>/        # [TASK-10] test-time registers applied to a base
+                            # cell's BASELINE checkpoint (no training at all)
+    neurons.json            # register-neuron ranking + the criterion string
+                            # and the canon tau it was detected with
+    sweep.csv               # --n-neurons sweep; row n_neurons=0 is the
+                            # UNPATCHED reference measured the same way
+    validate.json           # A3 gate: per-n sink/top-1 + the PASS/FAIL
+                            # verdict and the thresholds it was judged on
+  runs/ttr_<base_run_id>/   # [TASK-10] the PATCHED model's standard
+                            # artifacts, deliberately under runs/ so the
+                            # existing collectors (which glob runs/*/) find
+                            # them with no change:
+    config.resolved.yaml    # carries the BASE cell's arch/variant/recipe,
+                            # which is how apply_fixed_thr --version canon
+                            # resolves the right tau for a TTR dir
+    eval/*.json  diag/*.json  diag/*_addr.json
+                            # tau is always the BASE cell's canon tau —
+                            # never recalibrated on the patched model
   legacy/                   # everything derived from pre-fix checkpoints
     checkpoint_manifest.csv
     eval/   diag/   attn/
