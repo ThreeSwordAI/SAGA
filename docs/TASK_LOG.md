@@ -1883,12 +1883,30 @@ different failures, none of them TTR itself: (1) a copied job file with a
 space in its name, (2) my `set -u` ordering, (3) the missing conda module
 plus my non-gating preflight.
 
+**Addendum (2026-09-10, the module rename — repo-wide fix):** the human
+confirmed on the cluster that `module load python` works and
+`module load python/3.12-conda` does not. That name resolved on 2026-09-08
+and was gone by 2026-09-10, so EVERY job in the repo was broken, not only
+TASK-10's. All four LIVE env scripts (`scripts/`, `detection/`,
+`segmentation/`, `classification/scripts/env_alex.sh`) now try the pinned
+name first (a restored modulefile is still preferred), fall back to the
+generic one, and print a loud WARNING if neither loads; they are sourced, so
+they warn rather than exit and each job file does its own fatal gating. Both
+branches simulated. **Cross-task scope, stated deliberately:** this touches
+TASK-08/09/11's and the e2r chains' env scripts, because a broken
+environment blocks all work and the fix came from the human — one block per
+file, revert by restoring the single `module load` line. **Deliberately NOT
+touched:** the legacy launchers that also name the dead module
+(`detection/scripts/e3_eval_tinyx.sh`, `evaluation/e5_lost/…`,
+`evaluation/e6_finegrained/e6_*.sh`) — superseded provenance that must not
+become accidentally runnable; a test records the exemption. Also fixed:
+`sync_results.sh` printed an "activate the env first" hint naming the dead
+module. `docs/HPC_WORKFLOW.md` records the rename, the failure mode, and the
+rule that job files address the env interpreter directly rather than
+depending on the module. `pytest -q`: **380 passed, 22 skipped**.
+Commits `ae2def0`, `6bb820a`, `c707021` on `task/10-ttr-env`.
+
 **Pending from HPC (Phase B), restated after attempt 2:**
-0. Verify the environment survives WITHOUT the module (the one open
-   question):
-   `/home/vault/iwi5/iwi5359h/envs/saga/bin/python -c "import torch, timm;
-   print(torch.__version__, timm.__version__)"`, and record
-   `module avail python` for the two env scripts.
 1. Merge `task/10-ttr-env` into `main` and push.
 2. `sbatch scripts/jobs/ttr_validate.sbatch` (prefix
    `--partition=a100 --gres=gpu:a100:1` if a40 is busy; never copy the file).
@@ -1902,3 +1920,8 @@ plus my non-gating preflight.
    and, on PASS, 4 x {eval, diag, addr} under `results/runs/ttr_*/`.
 Then Phase C locally on `task/10-ttr-c` (`results/tables/T_ttr.csv` +
 `results/notes/ttr_baseline.md`).
+
+**Still unverified (cheap, and it would have caught all of this):** nobody
+has yet run `/home/vault/iwi5/iwi5359h/envs/saga/bin/python -c "import
+torch, timm"` on the cluster. The job now performs exactly that check as its
+first fatal step, so attempt 3 answers it either way in seconds.
