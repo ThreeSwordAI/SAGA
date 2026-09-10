@@ -69,8 +69,10 @@ for f in results/detection/*/detections_val.json; do
             continue ;;
         *)  echo "sync_results: CANNOT DETERMINE whether $run_id is complete" >&2
             echo "  ($PY tools/dense_done.py failed above) -- not staging $f;" >&2
-            echo "  activate the env first:  module load python/3.12-conda &&" >&2
+            echo "  activate the env first:  module load python &&" >&2
             echo "  source activate /home/vault/iwi5/iwi5359h/envs/saga" >&2
+            echo "  ('python/3.12-conda' was removed from the cluster around" >&2
+            echo "   2026-09-10; plain 'module load python' is what works)" >&2
             continue ;;
     esac
 
