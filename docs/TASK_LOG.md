@@ -1822,12 +1822,78 @@ which have no `set -u` at all, so the ordering test has nothing to check).
 **The A3 gate has still never run.** Phase B step 1 is unchanged and must be
 resubmitted once `task/10-ttr-fix` is merged.
 
-**Pending from HPC (Phase B), restated after the failed attempt:**
-1. Merge `task/10-ttr-fix` into `main` and push (Phase A itself is already
-   merged as `ec6751b`).
-2. `sbatch scripts/jobs/ttr_validate.sbatch` — add
-   `--partition=a100 --gres=gpu:a100:1` in front of the script path if a40 is
-   busy; do NOT copy the file. **Report the PASS/FAIL line back before
+**Addendum (2026-09-10, Phase B attempt 2 — set -u fixed, new env failure):**
+Job 4211911 on a100/a0905 got past the previous bug: the body ran, staging
+completed cleanly (50 000 images, 1000 classes, 68 s). It then failed with
+
+```
+ERROR: Unable to locate a modulefile for 'python/3.12-conda'
+scripts/env_alex.sh: line 17: activate: No such file or directory
+ModuleNotFoundError: No module named 'torch'
+```
+
+and the job's own diagnostic line read `python: /usr/bin/python`.
+
+**The missing modulefile is CLUSTER-SIDE and its new name is NOT guessed
+here.** `module load python/3.12-conda` is in BOTH committed env scripts
+(`scripts/env_alex.sh` and `detection/scripts/env_alex.sh`), it is what
+How to Run.md §2/§3 documents, and TASK-08's `ft_finegrained_array.sbatch`
+completed all 16 fine-grained runs through this exact `scripts/env_alex.sh`
+on 2026-09-08 — so the modulefile existed two days earlier and is gone now.
+Every job in this repo is affected, not only TASK-10. Open for the human:
+either the module is restored / renamed in the two env scripts, or every job
+moves to the absolute interpreter (see below). `module avail python` on the
+cluster is the authoritative answer and has not been run yet.
+
+**Two things in MY job files turned a recoverable env problem into a wasted
+job, and both are now fixed:**
+- `PY=$(which python)` silently fell back to `/usr/bin/python` once the
+  module load failed. It is now
+  `${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}` — the env
+  interpreter by absolute path, which needs no module at all and is the
+  repo's OWN committed pattern (`scripts/env_alex.sh`'s `TORCHRUN` line;
+  TASK-09 made the same move for `sync_results.sh`). A test pins that the
+  two paths cannot drift apart.
+- **The `import torch` preflight already ran and already failed** — that
+  `ModuleNotFoundError` at `<string>` line 1 in the `.err` is mine — but its
+  exit status was never tested, so the job carried on and spent 68 s staging
+  50 000 images for a run that could not possibly work. Both guards now
+  abort, and both run BEFORE the cleanup trap is armed so nothing fires for
+  a stage dir that was never created.
+
+Tests pin: no `which python` in either TTR job, the absolute path matches
+`env_alex.sh`'s, the `-x` check precedes the torch check precedes staging,
+each guard reaches `exit 1`, and both precede the trap.
+`pytest -q`: **371 passed, 22 skipped**. Commit `ae2def0` on
+`task/10-ttr-env`.
+
+**Not yet verified, and it decides whether the fix is sufficient:** that
+`/home/vault/iwi5/iwi5359h/envs/saga/bin/python` still exists and can import
+torch/timm without the module. If the env itself is gone, the fix is not
+enough and the env must be rebuilt per How to Run.md §2.
+
+**Quota note from the job epilogue (2026-09-10):** `/home/hpc` is at
+**114.7 G of 104.9 G soft** (over, in grace; 136 K of 500 K files) — worse
+than the 101 G recorded on 2026-09-08. `/home/woody` 244.3 G of 1000 G,
+`/home/vault` 1021.1 G of 1048.6 G (146 K of 200 K files). The e2r
+checkpoints TASK-10 reads live on `hpc`.
+
+**The A3 gate has still never produced a verdict.** Three attempts, three
+different failures, none of them TTR itself: (1) a copied job file with a
+space in its name, (2) my `set -u` ordering, (3) the missing conda module
+plus my non-gating preflight.
+
+**Pending from HPC (Phase B), restated after attempt 2:**
+0. Verify the environment survives WITHOUT the module (the one open
+   question):
+   `/home/vault/iwi5/iwi5359h/envs/saga/bin/python -c "import torch, timm;
+   print(torch.__version__, timm.__version__)"`, and record
+   `module avail python` for the two env scripts.
+1. Merge `task/10-ttr-env` into `main` and push.
+2. `sbatch scripts/jobs/ttr_validate.sbatch` (prefix
+   `--partition=a100 --gres=gpu:a100:1` if a40 is busy; never copy the file).
+   It now aborts in seconds if the interpreter cannot import torch, instead
+   of staging 50 000 images first. **Report the PASS/FAIL line back before
    anything else runs.**
 3. On PASS only: `N_BEST=<n> sbatch scripts/jobs/ttr_matrix.sbatch`. On FAIL
    for every n the matrix must NOT run and Phase C writes the validated
