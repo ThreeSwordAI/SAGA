@@ -34,6 +34,29 @@ Claude Code has **no HPC access**: every GPU step is delivered as an exact,
 copy-pasteable command block based on `How to Run.md`, then Claude STOPS and
 waits for the results to come back through git.
 
+## Branches — task branches are local-only, the HPC runs `main`
+
+Human's ruling, 2026-09-09. `CLAUDE.md` carries it as the standing rule, but
+that file lives one level above the repo and is therefore untracked, so the
+policy is recorded here too, where it is versioned.
+
+- One branch per task, `task/<NN>-<slug>`, created off `main`. Every commit
+  for that task goes there. Claude never pushes.
+- **Task branches never leave this machine, and the HPC never checks one
+  out.** The HPC always runs `main`.
+- So the merge comes BEFORE the HPC block, not after it:
+
+  ```
+  git checkout main
+  git merge --no-ff task/<NN>-<slug>
+  I_AM_HUMAN=1 git push origin main
+  ```
+
+  only then can the HPC's `git checkout main && git pull` see the task's
+  code. Every phase that hands work to the HPC prints the merge + push
+  commands ahead of the HPC block.
+- HPC result commits land on `main` and come back with a local `git pull`.
+
 ## Partitions
 
 `How to Run.md` §6 documents only `--partition=a100 --gres=gpu:a100:N`. The
