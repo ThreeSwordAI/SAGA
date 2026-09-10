@@ -1144,3 +1144,125 @@ def test_no_job_file_name_contains_a_space():
     loops over the job files."""
     bad = [p.name for p in _all_job_files() if " " in p.name]
     assert not bad, f"sbatch names with spaces: {bad}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The interpreter preflight must be absolute, fatal, and before staging
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONDA_PY = "/home/vault/iwi5/iwi5359h/envs/saga/bin/python"
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_job_uses_the_env_interpreter_by_absolute_path(name):
+    """`which python` silently falls back to /usr/bin/python when
+    env_alex.sh's `module load` fails — measured on Alex 2026-09-10, job
+    4211911, which then had no torch. The absolute env path needs no module;
+    it is the repo's own committed pattern (env_alex.sh's TORCHRUN line)."""
+    src = _job(name)
+    assert "PY=$(which python)" not in src, (
+        f"{name}: `which python` resolves to /usr/bin/python when the conda "
+        f"module is unavailable")
+    assert f"PY=${{SAGA_PY:-{CONDA_PY}}}" in src
+    # the path must match the one env_alex.sh itself uses for TORCHRUN
+    env_alex = (REPO / "scripts" / "env_alex.sh").read_text(encoding="utf-8")
+    assert CONDA_PY in env_alex, (
+        "scripts/env_alex.sh no longer references this interpreter path — "
+        "the two must not drift apart")
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_torch_preflight_is_fatal_and_precedes_staging(name):
+    """An unchecked `$PY -c "import torch"` printed its own
+    ModuleNotFoundError and let the job stage 50 000 images anyway. The
+    check must gate, and it must gate BEFORE staging."""
+    lines = _job(name).splitlines()
+
+    def first(pred):
+        return next((i for i, l in enumerate(lines) if pred(l)), None)
+
+    i_check = first(lambda l: l.startswith("if ! $PY -c")
+                    and "import torch" in l)
+    i_exec = first(lambda l: l.strip() == "-x \"$PY\" ]" or
+                   l.strip().startswith("if [ ! -x \"$PY\" ]"))
+    i_stage = first(lambda l: l.strip() == "stage_probe_imagenet_val")
+    assert i_check is not None, f"{name}: the torch import is not gated by `if !`"
+    assert i_exec is not None, f"{name}: no executable check on $PY"
+    assert i_stage is not None, f"{name}: staging call not found"
+    assert i_exec < i_check < i_stage, (
+        f"{name}: order must be -x check ({i_exec}) -> torch check "
+        f"({i_check}) -> staging ({i_stage})")
+    # each guard must actually abort
+    for i in (i_exec, i_check):
+        block = "\n".join(lines[i:i + 8])
+        assert "exit 1" in block, (
+            f"{name}: the guard at line {i + 1} does not exit")
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_preflight_runs_before_the_cleanup_trap_is_armed(name):
+    """Exiting from the preflight must not fire a cleanup for a stage dir
+    that was never created."""
+    lines = _job(name).splitlines()
+    i_check = next(i for i, l in enumerate(lines)
+                   if l.startswith("if ! $PY -c") and "import torch" in l)
+    i_trap = next(i for i, l in enumerate(lines)
+                  if l.strip() == "trap cleanup_probe EXIT")
+    assert i_check < i_trap
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The conda module name churned mid-project; live env scripts must tolerate it
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: The env scripts every CURRENT job file sources. The legacy launchers
+#: (detection/scripts/e3_eval_tinyx.sh, evaluation/e5_lost/…,
+#: evaluation/e6_finegrained/e6_*.sh) still name the dead module and are
+#: deliberately NOT fixed: they are superseded provenance (TASK-08 replaced
+#: e6, TASK-09 banner-marked e3/e4) and must not be silently made runnable.
+LIVE_ENV_SCRIPTS = [
+    "scripts/env_alex.sh",
+    "detection/scripts/env_alex.sh",
+    "segmentation/scripts/env_alex.sh",
+    "classification/scripts/env_alex.sh",
+]
+
+
+@pytest.mark.parametrize("rel", LIVE_ENV_SCRIPTS)
+def test_live_env_script_tolerates_the_module_rename(rel):
+    """'python/3.12-conda' resolved on 2026-09-08 and was gone by 2026-09-10,
+    which broke every job in the repo: the load failed, `source activate`
+    failed, and jobs ran /usr/bin/python with no torch. A single hardcoded
+    module name is therefore a known failure mode, not a hypothetical."""
+    src = (REPO / rel).read_text(encoding="utf-8")
+    assert "module load python/3.12-conda" in src, (
+        f"{rel}: the pinned name should still be TRIED first so a restored "
+        f"modulefile is preferred")
+    assert "elif module load python 2>/dev/null" in src, (
+        f"{rel}: no fallback to the generic 'module load python', which is "
+        f"what works on the cluster as of 2026-09-10")
+    # and it must not fail silently
+    assert "WARNING - no python module loaded" in src, (
+        f"{rel}: a failed module load must be announced, not swallowed")
+    assert "/home/vault/iwi5/iwi5359h/envs/saga" in src
+
+
+@pytest.mark.parametrize("rel", LIVE_ENV_SCRIPTS)
+def test_live_env_script_is_syntactically_valid(rel):
+    """These are sourced by every job; a syntax error here kills all of them."""
+    import shutil
+    import subprocess
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("no bash available")
+    proc = subprocess.run([bash, "-n", str(REPO / rel)],
+                          capture_output=True, text=True)
+    assert proc.returncode == 0, f"{rel}: {proc.stderr}"
+
+
+def test_sync_results_hint_does_not_tell_the_human_a_dead_command():
+    """sync_results.sh prints an 'activate the env first' hint when it cannot
+    determine a run's state; that hint named the removed module."""
+    src = (REPO / "scripts" / "sync_results.sh").read_text(encoding="utf-8")
+    assert "module load python &&" in src
+    assert "module load python/3.12-conda &&" not in src

@@ -79,6 +79,37 @@ keyed to the real names. (A copy named `... copy.sbatch` also cannot be
 submitted unquoted at all: the space splits it into two arguments and sbatch
 opens neither.)
 
+## The conda module was renamed — `module load python`
+
+`How to Run.md` §2/§3 documents `module load python/3.12-conda`. That
+modulefile **resolved on 2026-09-08** (TASK-08's ft array completed all 16
+runs through it) and was **gone by 2026-09-10**. The failure mode is nasty
+rather than loud: the load fails, `source activate` then fails with
+`activate: No such file or directory`, and the job runs `/usr/bin/python`,
+which has no torch — so it dies deep inside Python, after staging.
+
+`module load python` (no version) is what works, confirmed on the cluster by
+the human 2026-09-10. All four LIVE env scripts —
+`scripts/env_alex.sh`, `detection/`, `segmentation/` and
+`classification/scripts/env_alex.sh` — now try the pinned name first, fall
+back to the generic one, and print a loud WARNING if neither loads;
+`tests/test_task10_ttr.py` pins that shape. The legacy launchers
+(`detection/scripts/e3_eval_tinyx.sh`, `evaluation/e5_lost/…`,
+`evaluation/e6_finegrained/e6_*.sh`) still name the dead module and were
+left alone on purpose: they are superseded provenance and must not be made
+runnable by accident.
+
+**Job files should not depend on the module at all.** Address the env's
+interpreter directly, as `env_alex.sh`'s own `TORCHRUN` line does:
+
+```bash
+PY=${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
+```
+
+and gate on it — `$PY -c "import torch, timm"` inside an `if !` with an
+`exit 1`, placed BEFORE any data staging. An unchecked import cost TASK-10 a
+job that staged 50 000 images and then died.
+
 ## `set -u` goes AFTER the env sourcing, never before
 
 `scripts/env_alex.sh` sources `/etc/profile`, which runs the site scripts in

@@ -46,9 +46,30 @@ cd $CODE_ROOT
 # after the sourcing; a test pins that ordering repo-wide.
 set -u
 
-PY=$(which python)
+# ── Interpreter preflight: FATAL, and before any staging ─────────────────────
+# Never `which python` here. If env_alex.sh's `module load python/3.12-conda`
+# fails, PATH still resolves to /usr/bin/python, which has no torch.
+# Measured on Alex 2026-09-10 (job 4211911): that modulefile was gone,
+# `source activate` then failed with "activate: No such file or directory",
+# `which python` gave /usr/bin/python, THIS check raised
+# ModuleNotFoundError — and because its exit status was never tested the job
+# carried on and spent 68 s staging 50 000 images before dying.
+# The env interpreter by absolute path is the repo's own committed pattern
+# (scripts/env_alex.sh's TORCHRUN line); it does not need the module at all.
+PY=${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
 echo "python: $PY"
-$PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.__version__, 'cuda', torch.cuda.is_available())"
+if [ ! -x "$PY" ]; then
+    echo "ERROR: $PY is not executable. The conda env location is documented"
+    echo "       in How to Run.md §1/§2. If it moved, resubmit with"
+    echo "       SAGA_PY=/path/to/python sbatch $0"
+    exit 1
+fi
+if ! $PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.__version__, 'cuda', torch.cuda.is_available())"; then
+    echo "ERROR: $PY cannot import torch/timm — refusing to stage 50 000"
+    echo "       images for a job that cannot run. Check 'module avail python'"
+    echo "       and the env at /home/vault/iwi5/iwi5359h/envs/saga."
+    exit 1
+fi
 
 # Release node-local scratch on EVERY exit path, including a kill at the
 # wall clock (TASK-09's lesson: a plain call at the end only runs on a
