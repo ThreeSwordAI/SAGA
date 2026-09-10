@@ -59,10 +59,27 @@ cd $CODE_ROOT
 # after the sourcing; a test pins that ordering repo-wide.
 set -u
 
-PY=$(which python)
+# ── Interpreter preflight: FATAL, and before any staging ─────────────────────
+# See the long note in ttr_validate.sbatch: `which python` silently falls back
+# to /usr/bin/python when env_alex.sh's `module load` fails, and an unchecked
+# `import torch` lets the job stage 50 000 images before it dies. Measured on
+# Alex 2026-09-10 (job 4211911). The env interpreter by absolute path is the
+# repo's own committed pattern (scripts/env_alex.sh's TORCHRUN line).
+PY=${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
 echo "python: $PY"
 echo "N_BEST: $N_BEST"
-$PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.__version__, 'cuda', torch.cuda.is_available())"
+if [ ! -x "$PY" ]; then
+    echo "ERROR: $PY is not executable. The conda env location is documented"
+    echo "       in How to Run.md §1/§2. If it moved, resubmit with"
+    echo "       SAGA_PY=/path/to/python N_BEST=$N_BEST sbatch $0"
+    exit 1
+fi
+if ! $PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.__version__, 'cuda', torch.cuda.is_available())"; then
+    echo "ERROR: $PY cannot import torch/timm — refusing to stage 50 000"
+    echo "       images for a job that cannot run. Check 'module avail python'"
+    echo "       and the env at /home/vault/iwi5/iwi5359h/envs/saga."
+    exit 1
+fi
 
 trap cleanup_probe EXIT
 stage_probe_imagenet_val

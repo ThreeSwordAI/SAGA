@@ -1144,3 +1144,68 @@ def test_no_job_file_name_contains_a_space():
     loops over the job files."""
     bad = [p.name for p in _all_job_files() if " " in p.name]
     assert not bad, f"sbatch names with spaces: {bad}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The interpreter preflight must be absolute, fatal, and before staging
+# ─────────────────────────────────────────────────────────────────────────────
+
+CONDA_PY = "/home/vault/iwi5/iwi5359h/envs/saga/bin/python"
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_job_uses_the_env_interpreter_by_absolute_path(name):
+    """`which python` silently falls back to /usr/bin/python when
+    env_alex.sh's `module load` fails — measured on Alex 2026-09-10, job
+    4211911, which then had no torch. The absolute env path needs no module;
+    it is the repo's own committed pattern (env_alex.sh's TORCHRUN line)."""
+    src = _job(name)
+    assert "PY=$(which python)" not in src, (
+        f"{name}: `which python` resolves to /usr/bin/python when the conda "
+        f"module is unavailable")
+    assert f"PY=${{SAGA_PY:-{CONDA_PY}}}" in src
+    # the path must match the one env_alex.sh itself uses for TORCHRUN
+    env_alex = (REPO / "scripts" / "env_alex.sh").read_text(encoding="utf-8")
+    assert CONDA_PY in env_alex, (
+        "scripts/env_alex.sh no longer references this interpreter path — "
+        "the two must not drift apart")
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_torch_preflight_is_fatal_and_precedes_staging(name):
+    """An unchecked `$PY -c "import torch"` printed its own
+    ModuleNotFoundError and let the job stage 50 000 images anyway. The
+    check must gate, and it must gate BEFORE staging."""
+    lines = _job(name).splitlines()
+
+    def first(pred):
+        return next((i for i, l in enumerate(lines) if pred(l)), None)
+
+    i_check = first(lambda l: l.startswith("if ! $PY -c")
+                    and "import torch" in l)
+    i_exec = first(lambda l: l.strip() == "-x \"$PY\" ]" or
+                   l.strip().startswith("if [ ! -x \"$PY\" ]"))
+    i_stage = first(lambda l: l.strip() == "stage_probe_imagenet_val")
+    assert i_check is not None, f"{name}: the torch import is not gated by `if !`"
+    assert i_exec is not None, f"{name}: no executable check on $PY"
+    assert i_stage is not None, f"{name}: staging call not found"
+    assert i_exec < i_check < i_stage, (
+        f"{name}: order must be -x check ({i_exec}) -> torch check "
+        f"({i_check}) -> staging ({i_stage})")
+    # each guard must actually abort
+    for i in (i_exec, i_check):
+        block = "\n".join(lines[i:i + 8])
+        assert "exit 1" in block, (
+            f"{name}: the guard at line {i + 1} does not exit")
+
+
+@pytest.mark.parametrize("name", TTR_JOBS)
+def test_preflight_runs_before_the_cleanup_trap_is_armed(name):
+    """Exiting from the preflight must not fire a cleanup for a stage dir
+    that was never created."""
+    lines = _job(name).splitlines()
+    i_check = next(i for i, l in enumerate(lines)
+                   if l.startswith("if ! $PY -c") and "import torch" in l)
+    i_trap = next(i for i, l in enumerate(lines)
+                  if l.strip() == "trap cleanup_probe EXIT")
+    assert i_check < i_trap
