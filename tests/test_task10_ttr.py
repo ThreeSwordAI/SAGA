@@ -1087,3 +1087,60 @@ def test_job_has_no_wildcard_or_brace_submit_shape(name):
     for bad in ["sbatch scripts/jobs/ttr_*", "sbatch scripts/jobs/*.sbatch",
                 "submit_ttr_*", "ttr_{"]:
         assert bad not in src, f"{name} contains the shape {bad!r}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Repo-wide: `set -u` must never precede the env sourcing
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _all_job_files():
+    """Every committed sbatch under scripts/, however it is named."""
+    return sorted(REPO.glob("scripts/**/*.sbatch"))
+
+
+def test_there_are_job_files_to_check():
+    """Guard against the glob silently matching nothing."""
+    files = _all_job_files()
+    assert len(files) >= 20, f"only found {len(files)} sbatch files"
+
+
+@pytest.mark.parametrize(
+    "job", _all_job_files(), ids=lambda p: p.name)
+def test_set_u_never_precedes_the_env_sourcing(job):
+    """`set -u` above `source .../env_alex.sh` kills the job during env setup.
+
+    env_alex.sh sources /etc/profile, which runs the site scripts in
+    /etc/profile.d/. At least one of them dereferences an unset variable
+    (debuginfod.sh line 8: DEBUGINFOD_URLS), and under `set -u` bash aborts
+    the CALLING script — so not one line of the job body runs and the only
+    thing in the .err is that single message.
+
+    Measured on Alex 2026-09-10 by TASK-10's ttr_validate job. The bug was
+    inherited by copying probe_attention.sbatch's header; every job file that
+    had actually completed a run (TASK-08 ft_*, TASK-09 det_*/seg_*/
+    dense_smoke_*) already had the safe ordering. This test exists so the
+    next job file cannot repeat it.
+    """
+    lines = job.read_text(encoding="utf-8").splitlines()
+
+    def first(pred):
+        return next((i for i, l in enumerate(lines) if pred(l)), None)
+
+    i_setu = first(lambda l: l.strip() == "set -u")
+    i_src = first(lambda l: l.strip().startswith("source ")
+                  and "env_alex.sh" in l)
+    if i_setu is None or i_src is None:
+        pytest.skip(f"{job.name}: set -u={i_setu}, env source={i_src}")
+    assert i_setu > i_src, (
+        f"{job.name}: `set -u` is on line {i_setu + 1}, above the env "
+        f"sourcing on line {i_src + 1}. Move it below — /etc/profile's site "
+        f"scripts reference unset variables and abort the job under set -u.")
+
+
+def test_no_job_file_name_contains_a_space():
+    """A space in an sbatch name breaks unquoted submission: `sbatch
+    scripts/jobs/ttr_validate copy.sbatch` splits into two arguments, sbatch
+    opens neither, and no job is ever queued. It also breaks plain shell
+    loops over the job files."""
+    bad = [p.name for p in _all_job_files() if " " in p.name]
+    assert not bad, f"sbatch names with spaces: {bad}"

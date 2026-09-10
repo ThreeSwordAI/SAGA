@@ -25,8 +25,6 @@
 # 500-image scan on a ViT-S, i.e. minutes. The a40 wall limit is not
 # documented — lower this if the partition refuses it.
 
-set -u
-
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 # Reuses TASK-11's committed val-only stager rather than adding a third one:
 # stage_probe_imagenet_val extracts ImageNet val to node-local scratch and
@@ -35,6 +33,18 @@ source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 # for a job that never touches it.
 source $CODE_ROOT/scripts/stage_probe.sh
 cd $CODE_ROOT
+
+# `set -u` ONLY AFTER the env sourcing, never before it.
+# env_alex.sh sources /etc/profile, which runs the site scripts in
+# /etc/profile.d/. One of them dereferences an unset variable
+# (debuginfod.sh line 8: DEBUGINFOD_URLS), and under `set -u` that aborts
+# the whole job during env setup — before one line of this script runs.
+# Measured on Alex: the .err contained exactly
+#   /etc/profile.d/debuginfod.sh: line 8: DEBUGINFOD_URLS: unbound variable
+# and nothing else. Every job file in this repo that has completed a real
+# run (TASK-08 ft_*, TASK-09 det_*/seg_*/dense_smoke_*) puts `set -u` here,
+# after the sourcing; a test pins that ordering repo-wide.
+set -u
 
 PY=$(which python)
 echo "python: $PY"

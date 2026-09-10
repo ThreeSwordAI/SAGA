@@ -1778,11 +1778,61 @@ branch and `004c152`, `git merge-tree` clean, `pytest -q` 358 passed. The two
 task branches in this one worktree remain the standing risk; CLAUDE.md's
 `git worktree add ../SAGA-<NN>` is the documented way out.
 
-**Pending from HPC (Phase B):** merge `task/10-ttr` into `main` and push,
-then `sbatch scripts/jobs/ttr_validate.sbatch` → **report the PASS/FAIL line
-back before anything else runs**. On PASS: `N_BEST=<n> sbatch
-scripts/jobs/ttr_matrix.sbatch`. On FAIL for every n the matrix must NOT run
-and Phase C writes the validated negative instead. Files expected back: the
-sweep table (`results/ttr/*/{neurons.json,sweep.csv,validate.json}`) and, on
-PASS, 4 × {eval, diag, addr} under `results/runs/ttr_*/`. Then Phase C
-locally on `task/10-ttr-c` (T_ttr.csv + `results/notes/ttr_baseline.md`).
+**Addendum (2026-09-10, Phase B attempt 1 — FAILED on my bug, now fixed):**
+The a40 partition was busy, so the human ran the job on a100 (via a copied
+job file). It died during env setup with nothing in the `.err` but
+`/etc/profile.d/debuginfod.sh: line 8: DEBUGINFOD_URLS: unbound variable`.
+**The cause was mine and had nothing to do with the partition:** `set -u` sat
+ABOVE `source .../scripts/env_alex.sh`, which sources `/etc/profile`, whose
+site scripts in `/etc/profile.d/` dereference unset variables — under
+`set -u` bash aborts the CALLING script, so not one line of the job body ran
+and no artifact came back. Reproduced locally: `set -u` before the source
+aborts with that exact shape and exit 1, after the source everything runs.
+**The mistake was my choice of reference.** I copied the header from
+`scripts/jobs/probe_attention.sbatch` because it was the only committed a40
+example, without checking it against the job files that had actually
+completed runs — every green one (TASK-08 `ft_*`, TASK-09 `det_*` / `seg_*` /
+`dense_smoke_*`) already put `set -u` AFTER the sourcing, and the only three
+files in the repo that did not were my two and `probe_attention.sbatch`
+itself.
+
+Fixed in all three. TASK-11's is a deliberate cross-task edit (flagged in the
+file, one line to revert): it carries the identical fatal line and had a job
+submitted against it, so it would have died the same way. The ordering is now
+pinned REPO-WIDE by a test over `scripts/**/*.sbatch` — verified to FAIL on
+all three pre-fix files and pass on all three after — plus a second test
+forbidding spaces in sbatch names. `ttr_matrix.sbatch` keeps its `N_BEST`
+guard at the top, since `${VAR:?}` aborts on unset or empty without needing
+`set -u`.
+
+Also removed `scripts/jobs/ttr_validate copy.sbatch`: sbatch command-line
+flags override `#SBATCH`, so `sbatch --partition=a100 --gres=gpu:a100:1
+scripts/jobs/ttr_validate.sbatch` covers a busy a40 with no duplicate file.
+That copy could not be submitted unquoted at all (the space splits it into
+two arguments and sbatch opens neither — which is the likely reason the first
+attempt produced no log), its provenance comment claimed the a100 strings came
+from the human's a40 job, and the job-file tests are keyed to the real names.
+Both landmines are now recorded in `docs/HPC_WORKFLOW.md`.
+
+`pytest -q`: **365 passed, 22 skipped** (the skips are the e2r job files,
+which have no `set -u` at all, so the ordering test has nothing to check).
+
+**Commits:** `da4e631` (the fix), plus this log entry, on `task/10-ttr-fix`.
+
+**The A3 gate has still never run.** Phase B step 1 is unchanged and must be
+resubmitted once `task/10-ttr-fix` is merged.
+
+**Pending from HPC (Phase B), restated after the failed attempt:**
+1. Merge `task/10-ttr-fix` into `main` and push (Phase A itself is already
+   merged as `ec6751b`).
+2. `sbatch scripts/jobs/ttr_validate.sbatch` — add
+   `--partition=a100 --gres=gpu:a100:1` in front of the script path if a40 is
+   busy; do NOT copy the file. **Report the PASS/FAIL line back before
+   anything else runs.**
+3. On PASS only: `N_BEST=<n> sbatch scripts/jobs/ttr_matrix.sbatch`. On FAIL
+   for every n the matrix must NOT run and Phase C writes the validated
+   negative instead.
+4. Files expected back: `results/ttr/*/{neurons.json,sweep.csv,validate.json}`
+   and, on PASS, 4 x {eval, diag, addr} under `results/runs/ttr_*/`.
+Then Phase C locally on `task/10-ttr-c` (`results/tables/T_ttr.csv` +
+`results/notes/ttr_baseline.md`).
