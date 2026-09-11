@@ -1070,7 +1070,9 @@ def test_matrix_job_covers_the_four_A5_3_cells_with_manifest_paths():
 def test_validate_job_runs_the_gate_and_says_not_to_proceed_on_fail():
     src = _job("ttr_validate.sbatch")
     assert "tools/ttr_validate.py" in src
-    assert "--n-neurons 4,8,16,32,64" in src
+    # the grid is now a variable; its default is pinned by
+    # test_validate_job_sweep_grid_is_overridable_with_a_safe_default
+    assert '--n-neurons "$N_NEURONS"' in src
     assert "e2r_vits_mixup_baseline_s1" in src
     assert "--arch vit_small --recipe mixup" in src
     assert "Do NOT submit ttr_matrix.sbatch unless this said PASS." in src
@@ -1266,3 +1268,23 @@ def test_sync_results_hint_does_not_tell_the_human_a_dead_command():
     src = (REPO / "scripts" / "sync_results.sh").read_text(encoding="utf-8")
     assert "module load python &&" in src
     assert "module load python/3.12-conda &&" not in src
+
+
+def test_validate_job_sweep_grid_is_overridable_with_a_safe_default():
+    """The A2.3 default grid is a factor-of-2 ladder, and job 4212808 showed
+    the sink/accuracy transition falling inside the 8->16 gap. Refining the
+    GRID must be possible without editing the file (a measurement fix);
+    changing the PASS thresholds must not be, so that a FAIL cannot be turned
+    into a PASS by a command-line flag in the launcher."""
+    src = _job("ttr_validate.sbatch")
+    assert "N_NEURONS=${N_NEURONS:-4,8,16,32,64}" in src
+    assert '--n-neurons "$N_NEURONS"' in src
+    # The verdict thresholds stay at the tool's defaults. Check the EXECUTED
+    # lines, not the whole text — the comment above legitimately names both
+    # flags while explaining why they are not set.
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "--min-sink-reduction" not in code
+    assert "--max-top1-drop" not in code
+    # and a rerun clobbers the previous sweep, so the file says so
+    assert "COMMIT the previous sweep" in src

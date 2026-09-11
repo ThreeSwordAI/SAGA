@@ -85,15 +85,28 @@ if [ ! -f "$CKPT" ]; then
     exit 1
 fi
 
+# The sweep grid. The default is TASK-10 A2.3's example, but it is a
+# factor-of-2 grid, and the 2026-09-10 run (job 4212808) showed the whole
+# sink/accuracy transition happening INSIDE one of its gaps: n=8 gave a 22%
+# sink reduction for -0.28 top-1, n=16 gave 79% for -2.90. Refining the grid
+# there is a measurement-resolution fix, not a moved goalpost — the PASS
+# thresholds (--min-sink-reduction / --max-top1-drop) are untouched:
+#     N_NEURONS=9,10,11,12,13,14,15 sbatch scripts/jobs/ttr_validate.sbatch
+# NOTE: a rerun OVERWRITES results/ttr/<run_id>/{sweep.csv,validate.json}
+# (neurons.json is deterministic and rewrites identically bar its
+# timestamp), so COMMIT the previous sweep before launching another.
+N_NEURONS=${N_NEURONS:-4,8,16,32,64}
+
 echo "======================================================"
 echo "  TASK-10 A3 — TTR validation gate"
 echo "  base cell: vit_small|mixup   ckpt: $CKPT"
+echo "  sweep:     $N_NEURONS"
 echo "======================================================"
 
 $PY tools/ttr_validate.py \
     --ckpt "$CKPT" \
     --arch vit_small --recipe mixup --variant baseline \
-    --n-neurons 4,8,16,32,64 \
+    --n-neurons "$N_NEURONS" \
     --data $PROBE_IN_DIR \
     --out-root results/ttr \
     --device cuda --seed 0
