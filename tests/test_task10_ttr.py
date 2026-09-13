@@ -967,7 +967,7 @@ def test_derive_patched_writes_widened_prefix_and_canon_backfills(
 REPO = Path(__file__).resolve().parents[1]
 JOBS = REPO / "scripts" / "jobs"
 TTR_JOBS = ["ttr_validate.sbatch", "ttr_matrix.sbatch",
-            "ttr_paired_ci.sbatch"]
+            "ttr_paired_ci.sbatch", "ttr_paired_ci_pass_cells.sbatch"]
 
 
 def _job(name):
