@@ -1314,3 +1314,77 @@ def test_validate_job_layer_range_and_out_root_are_overridable():
     # thresholds still not settable from the launcher
     assert "--min-sink-reduction" not in code
     assert "--max-top1-drop" not in code
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The matrix must reproduce the configuration the A3 gate actually passed
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_matrix_defaults_reproduce_the_passing_gate_configuration():
+    """The 2026-09-13 gate FAILED at every n over all 12 blocks and PASSED
+    over layers 3-12. The scan depth decides which neurons are selected, so
+    the matrix defaulting to a full-depth scan would report results that were
+    never validated."""
+    src = _job("ttr_matrix.sbatch")
+    assert "N_NEURONS=${N_NEURONS:-8,10,12,16,24}" in src
+    assert "LAYER_RANGE=${LAYER_RANGE:-3,12}" in src
+    assert "TTR_OUT_ROOT=${TTR_OUT_ROOT:-results/ttr_midlayer}" in src
+
+
+def test_matrix_propagates_the_scan_depth_to_both_steps():
+    """--layer-range must reach the per-cell scan AND be asserted again when
+    the run dir is prepared, so the two cannot drift."""
+    src = _job("ttr_matrix.sbatch")
+    assert 'EXTRA+=(--layer-range "$LAYER_RANGE")' in src
+    assert '${EXTRA[@]+"${EXTRA[@]}"}' in src
+    assert '--expect-layer-range "$EXPECT_RANGE"' in src
+    i_scan = src.index("tools/ttr_validate.py")
+    i_prep = src.index("tools/ttr_prepare_run.py")
+    i_derive = src.index("tools/ttr_derive.py")
+    assert i_scan < i_prep < i_derive
+
+
+def test_matrix_reads_and_reports_the_configured_out_root():
+    """A variant sweep must not be read from, or announced as, results/ttr."""
+    src = _job("ttr_matrix.sbatch")
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "results/ttr/" not in code
+    assert '"$TTR_OUT_ROOT/$RUN_ID/neurons.json"' in code
+    assert code.count('"$TTR_OUT_ROOT/$RUN_ID/neurons.json"') == 2  # prep+derive
+
+
+def test_prepare_run_rejects_a_scan_depth_mismatch(tmp_path):
+    """A cell scanned over a different range is a different experiment."""
+    repo = Path(__file__).resolve().parents[1]
+    write_neurons_json(
+        tmp_path / "neurons.json", [(5, 1, 9.0), (6, 2, 8.0), (7, 3, 7.0)],
+        criterion=CRITERION_MEAN_ABS, outlier_tau=20.85,
+        tau_key="vit_small|mixup", tau_source="x", seed=0, arch="vit_small",
+        variant="baseline", ckpt="/x", ckpt_sha256="ab" * 32,
+        scan_stats=dict(n_images_seen=500, n_images_scored=500,
+                        layer_range=[0, 12], num_layers_scanned=12,
+                        num_neurons_per_layer=1536, num_prefix_tokens=1,
+                        detect_outliers_layer=-1),
+        top_n_stored=8)
+
+    def run(expect):
+        return subprocess.run(
+            [sys.executable, "tools/ttr_prepare_run.py",
+             "--base-run-id", "x", "--arch", "vit_small", "--recipe", "mixup",
+             "--neurons-file", str(tmp_path / "neurons.json"),
+             "--n-neurons", "3", "--runs-root", str(tmp_path / "runs"),
+             "--expect-layer-range", expect],
+            cwd=repo, capture_output=True, text=True)
+
+    bad = run("3,12")
+    assert bad.returncode != 0
+    out = bad.stdout + bad.stderr
+    assert "scanned over layer_range [0, 12]" in out
+    assert "do not mix scan depths" in out
+
+    ok = run("")                      # empty = no check
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+
+    match = run("0,12")               # the range it really has
+    assert match.returncode == 0, match.stdout + match.stderr
