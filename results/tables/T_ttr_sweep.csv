@@ -1,0 +1,25 @@
+cell,base_run_id,arch,recipe_actual,n_neurons,n_images,top1,top1_drop,sink_canon,sink_canon_removed_abs,sink_reduction_frac,oversmooth_pairwise,meets_sink,meets_top1,passes,layers_touched,canon_tau
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,0,5000,79.14,0.0,19.7064,0.0,MISSING,0.47278879537582397,MISSING,MISSING,MISSING,,20.8515625
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,8,5000,78.86,0.28000000000000114,15.2944,4.411999999999999,0.22388665611172,0.46796536903381347,False,True,False,"4,5,6,8",20.8515625
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,10,5000,78.72,0.4200000000000017,9.6428,10.0636,0.5106767344619006,0.4510462284088135,True,True,True,"4,5,6,7,8",20.8515625
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,12,5000,78.64,0.5,9.9066,9.7998,0.4972902204360005,0.45017430362701416,False,True,False,"4,5,6,7,8,10",20.8515625
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,16,5000,78.6,0.5400000000000063,4.4524,15.253999999999998,0.7740632484878008,0.445239471578598,True,True,True,"4,5,6,7,8,10",20.8515625
+ViT-S/mixup (e2r s1),e2r_vits_mixup_baseline_s1,vit_small,mixup,24,5000,78.72,0.4200000000000017,1.8994,17.807,0.9036150692160922,0.44922167863845824,True,True,True,"3,4,5,6,7,8,10",20.8515625
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,0,5000,77.1,0.0,11.4364,0.0,MISSING,0.733403046798706,MISSING,MISSING,MISSING,,127.3125
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,8,5000,76.56,0.539999999999992,7.9914,3.445000000000001,0.30123115665768957,0.7285342735290528,False,True,False,"5,6",127.3125
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,10,5000,76.24,0.8599999999999994,7.0918,4.344600000000001,0.3798922737924522,0.7290933300018311,False,True,False,"5,6",127.3125
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,12,5000,76.3,0.7999999999999972,7.1072,4.329200000000001,0.37854569619810435,0.7335730457305908,False,True,False,"4,5,6",127.3125
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,16,5000,76.0,1.0999999999999943,6.2032,5.233200000000001,0.457591549788395,0.7332101829528809,False,False,False,"4,5,6",127.3125
+ViT-B/mixup (e2r s1),e2r_vitb_mixup_baseline_s1,vit_base,mixup,24,5000,76.08,1.019999999999996,5.1246,6.311800000000001,0.5519044454548634,0.7515452039718628,True,False,False,"3,4,5,6,9",127.3125
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,0,5000,73.14,0.0,3.7016,0.0,MISSING,0.13818568633794784,MISSING,MISSING,MISSING,,22.859375
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,8,5000,72.94,0.20000000000000284,2.1552,1.5464000000000002,0.4177652906851092,0.14716104917526246,False,True,False,11,22.859375
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,10,5000,72.94,0.20000000000000284,2.1636,1.5379999999999998,0.415496001728982,0.14836278762817381,False,True,False,11,22.859375
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,12,5000,72.94,0.20000000000000284,2.2194,1.4822000000000002,0.4004214393775665,0.1462288745164871,False,True,False,11,22.859375
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,16,5000,72.94,0.20000000000000284,2.2202,1.4813999999999998,0.40020531661984005,0.14677036588191986,False,True,False,11,22.859375
+ViT-S/nomix (e2r s1),e2r_vits_nomix_baseline_s1,vit_small,nomix,24,5000,72.98,0.1599999999999966,2.1402,1.5614,0.4218175923924789,0.14919216493368148,False,True,False,"4,10,11",22.859375
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,0,5000,79.16,0.0,15.309,0.0,MISSING,0.40110865240097043,MISSING,MISSING,MISSING,,20.8515625
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,8,5000,78.58,0.5799999999999983,3.3742,11.9348,0.7795937030504931,0.37019515686035154,True,True,True,"4,5,6",20.8515625
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,10,5000,78.82,0.3400000000000034,4.393,10.916,0.7130446142791822,0.36736280612945554,True,True,True,"4,5,6",20.8515625
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,12,5000,78.62,0.539999999999992,3.6898,11.6192,0.7589783787314651,0.35052672805786134,True,True,True,"4,5,6",20.8515625
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,16,5000,78.62,0.539999999999992,1.43,13.879,0.9065908942452152,0.35566873941421506,True,True,True,"3,4,5,6,10,11",20.8515625
+ViT-S/mixup (legacy),legacy_vits_baseline,vit_small,mixup,24,5000,78.68,0.47999999999998977,0.9252,14.383799999999999,0.939564961787184,0.3421211121082306,True,True,True,"3,4,5,6,8,9,10,11",20.8515625
