@@ -1288,3 +1288,29 @@ def test_validate_job_sweep_grid_is_overridable_with_a_safe_default():
     assert "--max-top1-drop" not in code
     # and a rerun clobbers the previous sweep, so the file says so
     assert "COMMIT the previous sweep" in src
+
+
+def test_validate_job_layer_range_and_out_root_are_overridable():
+    """The scan depth and the output root must both be settable without
+    editing the file.
+
+    layer_range: the merged 2026-09-13 sweeps showed the entire accuracy cost
+    is one neuron — rank 9 is in layer 0, and adding it moves top-1 from
+    78.86 to 76.14 while top-1 then plateaus through n=16. The paper's own
+    register neurons are mid-layer, so restricting the scan is a FAITHFULNESS
+    fix. out_root: so a variant sweep does not clobber a committed one.
+    """
+    src = _job("ttr_validate.sbatch")
+    assert "LAYER_RANGE=${LAYER_RANGE:-}" in src
+    assert 'EXTRA+=(--layer-range "$LAYER_RANGE")' in src
+    # optional-flag expansion must be safe under `set -u` with an empty array
+    assert '${EXTRA[@]+"${EXTRA[@]}"}' in src
+    assert "TTR_OUT_ROOT=${TTR_OUT_ROOT:-results/ttr}" in src
+    assert '--out-root "$TTR_OUT_ROOT"' in src
+    # no output path may stay hardcoded, or a variant run reports the wrong one
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "results/ttr/e2r_vits_mixup_baseline_s1" not in code
+    # thresholds still not settable from the launcher
+    assert "--min-sink-reduction" not in code
+    assert "--max-top1-drop" not in code
