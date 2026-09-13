@@ -1,0 +1,41 @@
+{
+  "top1": 78.684,
+  "top5": 94.118,
+  "loss": 1.0261693438919635,
+  "n_images": 50000,
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_baseline/last.pth",
+  "ckpt_sha256": "cd926200127b98cbc597ddad82d84fd823376addc0ac1075a98de73b21e7d17d",
+  "git_sha": "fa5601e395925f4ff859af50a0a92deb0b5c7a95",
+  "arch": "vit_small",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "ttr": {
+    "method": "test-time registers (Jiang et al., NeurIPS 2025)",
+    "implementation": "saga/ttr.py (reimplementation; see third_party/ttr/PROVENANCE.md)",
+    "neurons_file": "results/ttr_midlayer/legacy_vits_baseline/neurons.json",
+    "criterion": "mean_abs_act_at_outliers_v1",
+    "outlier_tau": 20.8515625,
+    "tau_key": "vit_small|mixup",
+    "tau_source": "results/diagsplit/fixed_thresholds_canon.json",
+    "tau_recalibrated_on_patched_model": false,
+    "n_neurons": 24,
+    "n_extra_tokens": 1,
+    "scale": 1.0,
+    "normal_values": "zero",
+    "layers_touched": [
+      3,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11
+    ],
+    "base_run_id": "legacy_vits_baseline"
+  },
+  "timestamp": "2026-09-13T12:30:48.053317+00:00"
+}

@@ -1,0 +1,18 @@
+{
+  "run_id": "ttr_legacy_vits_baseline",
+  "git_sha": "fa5601e395925f4ff859af50a0a92deb0b5c7a95",
+  "git_dirty": true,
+  "cmd": "tools/ttr_prepare_run.py --base-run-id legacy_vits_baseline --arch vit_small --recipe mixup --variant baseline --neurons-file results/ttr_midlayer/legacy_vits_baseline/neurons.json --expect-layer-range 3,12 --n-neurons 24 --runs-root results/runs --seed 0",
+  "seed": 0,
+  "world_size": 1,
+  "hostname": "a0902",
+  "gpu_names": [
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "torch": "2.10.0+cu128",
+  "timm": "1.0.26",
+  "python": "3.12.13",
+  "cuda": "12.8",
+  "start_time": "2026-09-13T12:29:47.299975+00:00",
+  "end_time": null
+}

@@ -1,0 +1,36 @@
+{
+  "top1": 73.138,
+  "top5": 89.828,
+  "loss": 1.3741837604697444,
+  "n_images": 50000,
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vits_nomix_baseline_s1/ckpt/last.pth",
+  "ckpt_sha256": "207a5e907fab6e3bf23abafce51b2bc55687b10ae70e65bf72c84b78fbe63c95",
+  "git_sha": "fa5601e395925f4ff859af50a0a92deb0b5c7a95",
+  "arch": "vit_small",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "ttr": {
+    "method": "test-time registers (Jiang et al., NeurIPS 2025)",
+    "implementation": "saga/ttr.py (reimplementation; see third_party/ttr/PROVENANCE.md)",
+    "neurons_file": "results/ttr_midlayer/e2r_vits_nomix_baseline_s1/neurons.json",
+    "criterion": "mean_abs_act_at_outliers_v1",
+    "outlier_tau": 22.859375,
+    "tau_key": "vit_small|nomix",
+    "tau_source": "results/diagsplit/fixed_thresholds_canon.json",
+    "tau_recalibrated_on_patched_model": false,
+    "n_neurons": 24,
+    "n_extra_tokens": 1,
+    "scale": 1.0,
+    "normal_values": "zero",
+    "layers_touched": [
+      4,
+      10,
+      11
+    ],
+    "base_run_id": "e2r_vits_nomix_baseline_s1"
+  },
+  "timestamp": "2026-09-13T12:27:18.761322+00:00"
+}

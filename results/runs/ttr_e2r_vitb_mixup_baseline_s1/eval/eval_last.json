@@ -1,0 +1,38 @@
+{
+  "top1": 76.138,
+  "top5": 90.796,
+  "loss": 1.380659931800291,
+  "n_images": 50000,
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vitb_mixup_baseline_s1/ckpt/last.pth",
+  "ckpt_sha256": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339",
+  "git_sha": "fa5601e395925f4ff859af50a0a92deb0b5c7a95",
+  "arch": "vit_base",
+  "variant": "baseline",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "ttr": {
+    "method": "test-time registers (Jiang et al., NeurIPS 2025)",
+    "implementation": "saga/ttr.py (reimplementation; see third_party/ttr/PROVENANCE.md)",
+    "neurons_file": "results/ttr_midlayer/e2r_vitb_mixup_baseline_s1/neurons.json",
+    "criterion": "mean_abs_act_at_outliers_v1",
+    "outlier_tau": 127.3125,
+    "tau_key": "vit_base|mixup",
+    "tau_source": "results/diagsplit/fixed_thresholds_canon.json",
+    "tau_recalibrated_on_patched_model": false,
+    "n_neurons": 24,
+    "n_extra_tokens": 1,
+    "scale": 1.0,
+    "normal_values": "zero",
+    "layers_touched": [
+      3,
+      4,
+      5,
+      6,
+      9
+    ],
+    "base_run_id": "e2r_vitb_mixup_baseline_s1"
+  },
+  "timestamp": "2026-09-13T12:23:13.440045+00:00"
+}

@@ -1,0 +1,76 @@
+arch: vit_small
+variant: baseline
+recipe: mixup
+ttr:
+  base_run_id: legacy_vits_baseline
+  method: test-time registers (Jiang et al., NeurIPS 2025)
+  implementation: saga/ttr.py (reimplementation; see third_party/ttr/PROVENANCE.md)
+  neurons_file: results/ttr_midlayer/legacy_vits_baseline/neurons.json
+  neurons_file_sha256: bda9c054f6349ebf83b8a6faa8b4dab0f47cc7923942d43109fb6c1fb9aa94e7
+  criterion: mean_abs_act_at_outliers_v1
+  outlier_tau: 20.8515625
+  tau_key: vit_small|mixup
+  tau_source: results/diagsplit/fixed_thresholds_canon.json
+  tau_recalibrated_on_patched_model: false
+  n_neurons: 24
+  n_extra_tokens: 1
+  scale: 1.0
+  normal_values: zero
+  layers_touched:
+  - 3
+  - 4
+  - 5
+  - 6
+  - 8
+  - 9
+  - 10
+  - 11
+  selection:
+  - - 4
+    - 71
+  - - 5
+    - 649
+  - - 4
+    - 52
+  - - 6
+    - 1144
+  - - 4
+    - 609
+  - - 5
+    - 628
+  - - 6
+    - 261
+  - - 6
+    - 1088
+  - - 5
+    - 103
+  - - 6
+    - 17
+  - - 6
+    - 799
+  - - 5
+    - 1243
+  - - 3
+    - 903
+  - - 11
+    - 824
+  - - 5
+    - 748
+  - - 10
+    - 1472
+  - - 11
+    - 507
+  - - 9
+    - 940
+  - - 9
+    - 396
+  - - 5
+    - 1500
+  - - 8
+    - 1132
+  - - 6
+    - 1111
+  - - 3
+    - 1180
+  - - 3
+    - 773
