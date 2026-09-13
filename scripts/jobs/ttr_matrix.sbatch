@@ -81,6 +81,29 @@ if ! $PY -c "import torch, timm; print('torch', torch.__version__, 'timm', timm.
     exit 1
 fi
 
+# The scan configuration MUST match whatever the A3 gate validated — it
+# decides which neurons are selected, so a different depth is a different
+# experiment. The 2026-09-13 gate passed at LAYER_RANGE=3,12 (a layer-0
+# neuron costs 2.72 top-1 points on ViT-S/mixup); full-depth FAILED at every
+# n. These defaults therefore reproduce the PASSING configuration, and
+# --expect-layer-range below turns a mismatch into an abort rather than a
+# quietly-wrong results file.
+N_NEURONS=${N_NEURONS:-8,10,12,16,24}
+LAYER_RANGE=${LAYER_RANGE:-3,12}
+TTR_OUT_ROOT=${TTR_OUT_ROOT:-results/ttr_midlayer}
+
+EXTRA=()
+EXPECT_RANGE=""
+if [ -n "$LAYER_RANGE" ]; then
+    EXTRA+=(--layer-range "$LAYER_RANGE")
+    EXPECT_RANGE="$LAYER_RANGE"
+fi
+
+echo "  sweep:     $N_NEURONS"
+echo "  layers:    ${LAYER_RANGE:-all blocks}"
+echo "  out root:  $TTR_OUT_ROOT"
+echo "  N_BEST:    $N_BEST"
+
 trap cleanup_probe EXIT
 stage_probe_imagenet_val
 
@@ -113,27 +136,33 @@ for entry in "${CELLS[@]}"; do
     echo "  $RUN_ID   ($ARCH | $RECIPE)"
     echo "=============================================================="
 
-    # 1. this cell's own register neurons + its own sweep. Deterministic for
-    #    a fixed seed and data order, so a resubmission rewrites byte-identical
-    #    content apart from the timestamp field.
+    # 1. this cell's own register neurons + its own sweep, over the SAME scan
+    #    depth the A3 gate validated. Deterministic for a fixed seed and data
+    #    order, so a resubmission rewrites byte-identical content apart from
+    #    the timestamp field.
     $PY tools/ttr_validate.py \
         --ckpt "$CKPT" --arch "$ARCH" --recipe "$RECIPE" --variant baseline \
-        --n-neurons 4,8,16,32,64 \
+        --n-neurons "$N_NEURONS" \
         --data $PROBE_IN_DIR --base-run-id "$RUN_ID" \
-        --out-root results/ttr --device cuda --seed 0 || \
+        --out-root "$TTR_OUT_ROOT" ${EXTRA[@]+"${EXTRA[@]}"} \
+        --device cuda --seed 0 || \
         echo "  (gate returned non-zero for $RUN_ID — recorded, continuing)"
 
-    # 2. the run dir the collectors will find
+    # 2. the run dir the collectors will find. --expect-layer-range makes the
+    #    scan depth a HARD precondition: the gate passed only for a mid-layer
+    #    scan, so a cell that silently got a full-depth one must abort rather
+    #    than be reported as the validated configuration.
     $PY tools/ttr_prepare_run.py \
         --base-run-id "$RUN_ID" --arch "$ARCH" --recipe "$RECIPE" \
         --variant baseline \
-        --neurons-file "results/ttr/$RUN_ID/neurons.json" \
+        --neurons-file "$TTR_OUT_ROOT/$RUN_ID/neurons.json" \
+        --expect-layer-range "$EXPECT_RANGE" \
         --n-neurons "$N_BEST" --runs-root results/runs --seed 0
 
     # 3. full 50k eval + diagnostics of the PATCHED model
     $PY tools/ttr_derive.py \
         --ckpt "$CKPT" --arch "$ARCH" --recipe "$RECIPE" --variant baseline \
-        --neurons-file "results/ttr/$RUN_ID/neurons.json" \
+        --neurons-file "$TTR_OUT_ROOT/$RUN_ID/neurons.json" \
         --n-neurons "$N_BEST" --base-run-id "$RUN_ID" \
         --data $PROBE_IN_DIR \
         --run-dir "results/runs/ttr_$RUN_ID" \
@@ -176,6 +205,6 @@ for r in "${DONE[@]}"; do
     echo "    results/runs/$r/diag/diag_last.json"
     echo "    results/runs/$r/diag/diag_last_addr.json"
 done
-echo "    results/ttr/*/{neurons.json,sweep.csv,validate.json}"
+echo "    $TTR_OUT_ROOT/*/{neurons.json,sweep.csv,validate.json}"
 echo "======================================================"
-ls -la results/ttr/*/ results/runs/ttr_*/eval/ results/runs/ttr_*/diag/*.json 2>/dev/null
+ls -la "$TTR_OUT_ROOT"/*/ results/runs/ttr_*/eval/ results/runs/ttr_*/diag/*.json 2>/dev/null

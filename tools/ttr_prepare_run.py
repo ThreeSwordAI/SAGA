@@ -56,6 +56,9 @@ def main():
                    choices=["zero", "mean", "same"])
     p.add_argument("--runs-root", default="results/runs")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--expect-layer-range", default=None, metavar="LO,HI",
+                   help="refuse unless the neurons file was scanned over this "
+                        "half-open block range (empty string = don't check)")
     args = p.parse_args()
 
     neurons_file = Path(args.neurons_file)
@@ -64,6 +67,21 @@ def main():
         raise SystemExit(
             f"--arch {args.arch} disagrees with {neurons_file}'s "
             f"{payload['arch']!r} — refusing to mislabel the cell")
+
+    # The scan depth decides WHICH neurons are selected, so a cell scanned
+    # over a different range is a different experiment. The A3 gate passed
+    # only for a mid-layer scan (a layer-0 neuron costs 2.72 top-1 points on
+    # ViT-S/mixup), so the matrix must not silently fall back to a full-depth
+    # scan and report the result as if it were the validated configuration.
+    if args.expect_layer_range:
+        want = [int(v) for v in args.expect_layer_range.split(",")]
+        got = payload["layer_range"]
+        if got != want:
+            raise SystemExit(
+                f"{neurons_file} was scanned over layer_range {got}, but "
+                f"--expect-layer-range says {want}. Rescan that cell with "
+                f"--layer-range {args.expect_layer_range}, or drop the "
+                f"expectation — do not mix scan depths across cells.")
     if args.n_neurons > len(payload["neurons"]):
         raise SystemExit(
             f"--n-neurons {args.n_neurons} exceeds the {len(payload['neurons'])} "
