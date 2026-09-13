@@ -2227,3 +2227,41 @@ Four files come back (`paired_ci.json` + `paired_ci.npz` for each of the two
 cells); then `analysis/build_ttr_tables.py` and `analysis/build_ttr_note.py`
 are re-run locally and the tables and note fill themselves in. **TASK 10 is
 content-complete once those land.**
+
+**Addendum (2026-09-13, all three paired CIs in — TASK 10 CONTENT-COMPLETE):**
+the two PASS-cell CIs returned, so every reported accuracy delta with a
+verdict riding on it now rests on the same procedure:
+
+| cell | gate | drop | 95% CI | b | c | 1.00 in CI |
+|---|---|---|---|---|---|---|
+| ViT-S/mixup e2r s1 | PASS | 0.2120 | [0.0480, 0.3760] | 932 | 826 | no |
+| ViT-S/mixup legacy | PASS | 0.1920 | [0.0300, 0.3520] | 891 | 795 | no |
+| ViT-B/mixup | FAIL | 0.9760 | [0.8120, 1.1400] | 1111 | 623 | **yes** |
+
+**Both PASS cells exclude zero AND sit entirely below the 1.00 bar** — the
+small cost is real rather than noise, and the pass is not itself a knife
+edge. ViT-B remains the only cell whose CI straddles the bar. That contrast
+is the value decision 4 bought: without the PASS CIs there was no way to know
+whether their margin was as fragile as ViT-B's. It is not. ViT-S/nomix has no
+CI by design (it fails on the sink bar, so an accuracy CI would not bear on
+its verdict) and the headline says MISSING with that reason inline.
+
+Integrity verified per cell before regenerating anything: the 2x2 partitions
+the 50 000 exactly, checkpoint sha matches the matrix eval, the committed npz
+reproduces b and c, the patched marginal equals the matrix's own full-val
+eval to 1e-9, and all three runs used layers [3,12] at n=24.
+
+`pytest -q`: **438 passed, 22 skipped**. Commit `864fcf9`.
+
+**TASK 10 COMPLETE (Phases A/B/C). Nothing pending from the HPC.** The
+deliverables are `results/tables/T_ttr.csv`, `T_ttr_sweep.csv` and
+`results/notes/ttr_baseline.md` (221 lines, fully generated — a test
+re-renders it from the committed tables). Final state of the question the
+task existed to answer: **TTR works on ViT-S/mixup (two independent
+checkpoints, ~90% of sinks removed for ~0.2 top-1) but is below SAGA on
+top-1 in every cell, by 0.22 to 1.23 points**; it fails on ViT-B/mixup by a
+margin inside measurement uncertainty, and on ViT-S/nomix because that cell
+has almost no sinks to remove. Open for the human: whether to merge
+`task/10-ttr-final` and close, and the still-unanswered questions from
+earlier tasks (the optional ViT-B true-nomix pair, registers seeded reruns,
+the PROJECT.md milestone rewrite).

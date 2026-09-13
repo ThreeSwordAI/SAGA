@@ -500,3 +500,40 @@ def test_note_states_the_post_hoc_layer_selection_plainly():
     assert "replication margin varies" in text
     assert "One address pair per cell" in text
     assert "gate and the headline measure different samples" in text
+
+
+def test_headline_carries_the_paired_ci_for_every_cell_that_has_one():
+    """Decision 4's purpose: the reported deltas share one statistical
+    footing, and a cell without a CI says MISSING rather than going blank."""
+    text = NOTE.read_text(encoding="utf-8")
+    assert "95% CI on the drop" in text
+    assert "share one statistical footing" in text
+    for r in rows():
+        if r["paired_ci_low"] in ("", MISSING):
+            continue
+        lo = f"{float(r['paired_ci_low']):.4f}"
+        hi = f"{float(r['paired_ci_high']):.4f}"
+        assert f"[{lo}, {hi}]" in text, f"{r['cell']} CI not in the headline"
+
+
+def test_all_pass_cells_have_a_paired_ci():
+    """The two PASS cells were run precisely so their deltas are comparable
+    with the ViT-B one."""
+    passed = [r for r in rows() if r["gate_verdict"] == "PASS"]
+    assert passed
+    for r in passed:
+        assert r["paired_ci_low"] != MISSING, (
+            f"{r['cell']} passed the gate but has no paired CI")
+
+
+def test_pass_cell_cis_exclude_zero_and_sit_below_the_bar():
+    """A factual property of the returned numbers, pinned so a regenerated
+    table cannot quietly contradict the note's reading."""
+    for r in rows():
+        if r["gate_verdict"] != "PASS" or r["paired_ci_low"] == MISSING:
+            continue
+        lo, hi = float(r["paired_ci_low"]), float(r["paired_ci_high"])
+        bar = float(r["gate_max_top1_drop"])
+        assert lo > 0, f"{r['cell']}: CI includes zero"
+        assert hi < bar, f"{r['cell']}: CI reaches the {bar} bar"
+        assert str(r["threshold_inside_ci"]).lower() == "false"
