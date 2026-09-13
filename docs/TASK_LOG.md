@@ -2050,3 +2050,102 @@ gating preflight), `c707021` (module rename, repo-wide), `705428e`
 **PHASE B COMPLETE.** Nothing pending from the HPC except the paired-CI run
 that decision 1 requires (command printed with Phase C).
 
+---
+
+## 2026-09-13 — TASK 10, PHASE C (T_ttr tables + ttr_baseline note)
+
+Branch `task/10-ttr-c`. Phase B was closed in its own commit first, as the
+human asked. Their three decisions drove the design and are pinned by tests
+so they cannot erode.
+
+**Done (local):**
+- `tools/ttr_paired_ci.py` — the uncertainty a bare FAIL would hide. It
+  evaluates the SAME 50 000 images twice in the same order (unpatched, then
+  TTR), recording per-image top-1 correctness, and reports the discordant
+  table `b` (TTR broke it) / `c` (TTR fixed it), a paired bootstrap CI on the
+  drop, and McNemar exact + mid-p. **This needs a run: the marginal top-1
+  values in the eval JSONs cannot give it** — from two marginals only `b - c`
+  is recoverable, never `b` and `c` separately. The bootstrap is a
+  multinomial draw over (b, c, concordant), which is the EXACT paired
+  bootstrap rather than an approximation, and a test checks it against
+  literal resampling of 50 000 paired rows (SE agrees within 10%). Writes the
+  packed per-image outcomes beside the JSON (~6 KB each) so the CI can be
+  recomputed by any method without another GPU pass.
+- `analysis/build_ttr_tables.py` → `results/tables/T_ttr.csv` (4 cells, 64
+  columns) + `T_ttr_sweep.csv` (24 rows). Pairing is by **checkpoint sha256**
+  throughout, never by filename; each cell resolves to exactly one unpatched
+  eval/diag/addr or the row is MISSING (pinned by a decoy test).
+- `analysis/build_ttr_note.py` → `results/notes/ttr_baseline.md`, generated;
+  a test re-renders it from the committed tables to prove nothing is
+  hand-typed, and §7 self-fills when `paired_ci.json` lands.
+- `tests/test_task10_phasec.py` — 19 tests.
+
+**HEADLINE (full 50 000-image val, n=24, layers 3-12, per-cell canon tau):**
+
+| cell | gate | top-1 (Δ base / Δ SAGA) | sinks base → TTR (removed) |
+|---|---|---|---|
+| ViT-S/mixup e2r s1 | PASS | 78.650 (−0.212 / −0.526) | 19.68 → 1.91 (17.76, 90.3%) |
+| ViT-S/mixup legacy | PASS | 78.684 (−0.192 / −0.492) | 15.39 → 0.97 (14.42, 93.7%) |
+| ViT-B/mixup e2r s1 | FAIL | 76.138 (−0.976 / −1.225) | 11.29 → 5.05 (6.23, 55.2%) |
+| ViT-S/nomix e2r s1 | FAIL | 73.138 (−0.058 / −0.224) | 3.67 → 2.15 (1.52, 41.5%) |
+
+So on ViT-S/mixup TTR costs ~0.2 top-1 and removes ~90% of sinks, but still
+sits **below SAGA** on top-1 in every cell (−0.22 to −1.23).
+
+**The ViT-B knife edge is sharper than it looked.** The gate's 5 000-image
+subset gives a drop of **1.0200** (FAIL by 0.02 against the frozen 1.00); the
+full **50 000**-image val gives **0.9760** for the same operating point. Both
+are in the note. The verdict stands on the gate's measurement — the threshold
+was NOT revisited — and the paired CI will say whether 1.00 is inside the
+interval. A synthetic table of the right shape (b=600, c=90) gives a 95% CI
+of roughly ±0.10, i.e. this is exactly the regime where it matters; the real
+`b`, `c` are unknown until the run.
+
+**ViT-S/nomix fails on the denominator, and the note says so without
+promoting it to a pass.** It holds 3.67 sinks per image unpatched against
+ViT-S/mixup's 19.68, so its 41.5% removes **1.52 tokens** while 90.3%
+removes 17.76 — the percentages are not measuring comparable quantities.
+TASK-07's flat-address finding is the mechanism. §6 ends: "The criterion is
+a relative sink reduction, it was frozen before the runs, and this cell does
+not meet it."
+
+**The address result is the most interesting thing Phase C found, and it is
+NOT pooled** (the cells disagree). Using TASK-07's exact permutation null
+(8 dihedral × 196 torus rolls — the iid reference is far too generous for
+these smooth maps, and a test asserts the null sd is not the iid one):
+- ViT-S/mixup, where TTR PASSES: rho −0.0930 (p 0.742) and −0.2915
+  (p 0.145) — not distinguishable from zero, i.e. the address is
+  **relocated**, at least as completely as trained registers manage
+  (TASK-07: +0.4773).
+- ViT-B/mixup, where TTR FAILS: rho **+0.9371** (p 0.0006), close to SAGA's
+  +0.7929 and far from trained registers' +0.0063 — the address is
+  **preserved**.
+- ViT-S/nomix: +0.7749, but between two near-uniform maps, so it carries a
+  different meaning and is reported separately.
+The registers/SAGA reference values are read from
+`results/tables/sink_address.csv`, not typed. **The one cell where TTR does
+not clear the accuracy bar is also the one where it does not move the
+address** — recorded as an observed association across two architectures,
+not a demonstrated mechanism.
+
+**Replication variance**, per the human's request: the two ViT-S/mixup
+checkpoints are the same cell and both PASS, but at 3 of 5 and 5 of 5 sweep
+values. The verdict replicates across an independent checkpoint; the margin
+does not. With n=2 that is a caution about reading the sweep grid finely,
+not a measured effect.
+
+`pytest -q`: **405 passed, 22 skipped**.
+
+**Commits:** `d847458` (Phase B closure), `ba927ed` (Phase C).
+
+**Pending from HPC (one job, ~25 min on one GPU):** the paired-CI run on
+ViT-B/mixup — decision 1's endorsed re-run. `paired_ci.json` +
+`paired_ci.npz` come back, then `analysis/build_ttr_tables.py` and
+`analysis/build_ttr_note.py` are re-run locally and §7 fills itself in.
+Nothing else is outstanding; the note is complete and correct with that one
+section marked MISSING.
+
+**Explicitly NOT done, per decision 3:** no denser ViT-B n-sweep. If ViT-B
+coverage is wanted it must be a tradeoff CURVE with the selection rule and
+multiplicity handling frozen in advance, and labelled as such.
+
