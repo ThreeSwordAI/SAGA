@@ -176,18 +176,43 @@ def section_headline(rows) -> list:
         "(never recalibrated on a patched model). SAGA is that cell's mean "
         "over its repeats from `e2_pooled.csv`.",
         "",
-        "| cell | verdict | top-1 TTR | vs baseline | vs SAGA |",
-        "|---|---|---|---|---|",
+        "| cell | verdict | top-1 TTR | vs baseline | 95% CI on the drop | "
+        "vs SAGA |",
+        "|---|---|---|---|---|---|",
     ]
     for r in rows:
         n = (f" (n={r['top1_saga_n_repeats']})"
              if r["top1_saga_n_repeats"] not in ("", MISSING) else "")
+        ci = MISSING
+        if r["paired_ci_low"] not in ("", MISSING):
+            ci = (f"[{num(r['paired_ci_low'],4)}, "
+                  f"{num(r['paired_ci_high'],4)}]")
         out.append(
             f"| {r['cell']} | {r['gate_verdict']} | {num(r['top1_ttr'])} | "
             f"{signed(r['top1_delta_vs_baseline'])} "
-            f"(base {num(r['top1_baseline'])}) | "
+            f"(base {num(r['top1_baseline'])}) | {ci} | "
             f"{signed(r['top1_delta_vs_saga'])} "
             f"(SAGA {num(r['top1_saga_mean'])}{n}) |")
+
+    have_ci = [r for r in rows if r["paired_ci_low"] not in ("", MISSING)]
+    if have_ci:
+        out += [
+            "",
+            f"The CI column is the paired bootstrap on the **drop** "
+            f"(baseline minus TTR, so positive means TTR costs accuracy), "
+            f"computed from the discordant counts over all 50 000 images — "
+            f"the same procedure for every cell that has one, so these "
+            f"deltas share one statistical footing. "
+            f"{len(have_ci)} of {len(rows)} cells have it.",
+        ]
+        missing = [r["cell"] for r in rows
+                   if r["paired_ci_low"] in ("", MISSING)]
+        if missing:
+            out.append(
+                f"MISSING for {', '.join(missing)}: not run, because that "
+                f"cell fails on the sink bar rather than the accuracy bar, "
+                f"so an accuracy CI would not bear on its verdict.")
+        out.append("")
 
     out += [
         "",
