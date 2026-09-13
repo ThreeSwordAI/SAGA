@@ -861,10 +861,15 @@ def test_class_absent_from_gt_but_predicted_is_scored_zero():
 # ── matrix / config contracts ────────────────────────────────────────────────
 
 MATRIX_PATH = REPO_ROOT / "configs" / "dense_matrix.yaml"
+# the six Gate-2 runs TASK-09 mandates ...
 EXPECTED_RUNS = {
     "det_vitb_baseline_s1", "det_vitb_saga_s1", "det_vitb_registers_s1",
     "seg_vitb_baseline_s1", "seg_vitb_saga_s1", "seg_vitb_registers_s1",
 }
+# ... plus the second detection seed PREPARED (not submitted) in Phase C,
+# because the Gate-2 verdict turns on a single-draw AP_S delta
+EXPECTED_SEED2_RUNS = {"det_vitb_baseline_s2", "det_vitb_saga_s2"}
+ALL_RUNS = EXPECTED_RUNS | EXPECTED_SEED2_RUNS
 
 
 @pytest.fixture(scope="module")
@@ -873,16 +878,17 @@ def matrix():
 
 
 def test_matrix_holds_exactly_the_mandated_six_runs(matrix):
-    assert set(matrix["runs"]) == EXPECTED_RUNS
+    assert set(matrix["runs"]) == ALL_RUNS
+    assert EXPECTED_RUNS <= set(matrix["runs"])
     for run_id, run in matrix["runs"].items():
         assert run["arch"] == ARCH
-        assert run["seed"] == 1
+        assert run["seed"] == (2 if run_id.endswith("_s2") else 1)
         assert run["task"] == ("detection" if run_id.startswith("det_")
                                else "segmentation")
         assert run["variant"] in ("baseline", "saga", "registers")
 
 
-@pytest.mark.parametrize("run_id", sorted(EXPECTED_RUNS))
+@pytest.mark.parametrize("run_id", sorted(ALL_RUNS))
 def test_resolved_config_is_the_committed_one(matrix, run_id):
     """Nothing about the training schedule may be re-typed in the matrix: the
     resolved config must equal the committed task config, variant switches
@@ -904,7 +910,9 @@ def test_resolved_config_is_the_committed_one(matrix, run_id):
     variant = matrix["runs"][run_id]["variant"]
     assert cfg["model"]["gate"] is (variant == "saga")
     assert cfg["model"]["registers"] == (4 if variant == "registers" else 0)
-    assert cfg["seed"] == 1
+    # the only thing a second seed changes is the seed itself; every
+    # hyperparameter above is asserted identical to the committed config
+    assert cfg["seed"] == (2 if run_id.endswith("_s2") else 1)
     assert cfg["out_root"] == f"results/{cfg['task']}"
 
 
@@ -1058,7 +1066,7 @@ def test_job_files_are_in_sync_with_the_matrix(tmp_path):
     from scripts import gen_dense_jobs as gen
     written = gen.render(yaml.safe_load(open(MATRIX_PATH)), tmp_path,
                          DENSE_BASE_PORT)
-    assert len(written) == 6 * 2 + 2
+    assert len(written) == len(ALL_RUNS) * 2 + 2
     for produced in written:
         committed = REPO_ROOT / "scripts" / produced.relative_to(tmp_path)
         assert committed.exists(), committed
@@ -1222,7 +1230,13 @@ def test_master_ports_are_unique_across_every_launcher():
         if others:
             foreign[port] = others
 
-    expected = set(range(DENSE_BASE_PORT, DENSE_BASE_PORT + 6)) |         set(DENSE_SMOKE_PORTS)
+    # ports are PINNED PER RUN in the matrix (deriving them from the
+    # sorted index renumbered already-executed runs when a seventh
+    # was added), so the expected set comes from the matrix itself
+    matrix = yaml.safe_load(open(MATRIX_PATH))
+    pinned = {int(r["port"]) for r in matrix["runs"].values()}
+    assert len(pinned) == len(matrix["runs"]), "duplicate pinned port"
+    expected = pinned | set(DENSE_SMOKE_PORTS)
     assert set(dense) == expected, sorted(dense)
     assert all(len(f) == 1 for f in dense.values()), dense
     clashes = {p: sorted(foreign[p]) for p in dense if p in foreign}
@@ -1854,7 +1868,7 @@ def test_ckpt_root_matrix_key_redirects_every_launcher(tmp_path):
     gen.render(dict(matrix, ckpt_root="/bulk/dense_ckpt"), redirected,
                DENSE_BASE_PORT)
     sbatch = sorted(redirected.rglob("*.sbatch"))
-    assert len(sbatch) == 8, [f.name for f in sbatch]
+    assert len(sbatch) == len(ALL_RUNS) + 2, [f.name for f in sbatch]
     for f in sbatch:
         text = f.read_text()
         assert "--ckpt_root /bulk/dense_ckpt" in text, f.name
@@ -1941,7 +1955,7 @@ def test_generated_jobs_stage_to_node_local_scratch_and_always_release_it():
     jobs = sorted((REPO_ROOT / "scripts" / "jobs").glob("*.sbatch"))
     dense = [j for j in jobs if j.name.startswith(("det_vitb_", "seg_vitb_",
                                                    "dense_smoke_"))]
-    assert len(dense) == 8, [j.name for j in dense]
+    assert len(dense) == len(ALL_RUNS) + 2, [j.name for j in dense]
     for job in dense:
         text = job.read_text()
         coco = "stage_coco" in text
@@ -1981,6 +1995,6 @@ def test_generated_jobs_keep_checkpoints_off_the_over_quota_filesystem():
 
     jobs = [j for j in (REPO_ROOT / "scripts" / "jobs").glob("*.sbatch")
             if j.name.startswith(("det_vitb_", "seg_vitb_", "dense_smoke_"))]
-    assert len(jobs) == 8
+    assert len(jobs) == len(ALL_RUNS) + 2
     for job in jobs:
         assert f"--ckpt_root {root} \\" in job.read_text(), job.name

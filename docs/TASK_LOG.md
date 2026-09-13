@@ -2265,3 +2265,119 @@ has almost no sinks to remove. Open for the human: whether to merge
 `task/10-ttr-final` and close, and the still-unanswered questions from
 earlier tasks (the optional ViT-B true-nomix pair, registers seeded reruns,
 the PROJECT.md milestone rewrite).
+
+---
+
+## 2026-09-13 — TASK 09, PHASE C (T4/T5 tables, F7 draft, Gate-2 verdict)
+
+Branch `task/09-dense-c`. All six dense runs came back complete
+(det_vitb_registers_s1 finished last, epoch 24). Every number below is read
+from a committed run artifact; the note is generated, not written.
+
+**Done (local):**
+- `analysis/build_dense_tables.py` -> `results/tables/T4_coco.csv`,
+  `T4_coco_per_category.csv` (80 categories), `T5_ade20k.csv`,
+  `T5_ade20k_per_class.csv` (150 classes, background rows flagged). A run
+  whose recorded `backbone_sha256` does not match the matrix candidate it
+  names yields MISSING rather than a number from an unverified checkpoint
+  (the build_ft_tables rule, pinned by a decoy test). Per-class values are
+  carried as FRACTIONS and also as IoU POINTS, because the JSONs report
+  mIoU as percent and iou_per_class as fractions and that has bitten before.
+- `analysis/build_gate2_note.py` -> `results/notes/gate2_report.md`. The
+  verdict rule is frozen in the generator and a test re-renders the note
+  from the committed tables and requires it byte-identical, so no number in
+  it can be hand-typed or drift.
+- `analysis/collect_F7.py` + `plotting/plot_F7.py` ->
+  `results/figures/F7_dense_draft.pdf`. The ADE20K half (3 probe images x
+  input/GT/baseline/registers/saga) renders from committed `preds_fixed20/`
+  files and needs no dataset. The COCO half needed a reconciliation, below.
+- `tests/test_task09_phasec.py` — 27 tests.
+
+**HEADLINE — the Gate-2 question, answered on the frozen rule:**
+
+| | AP | AP50 | AP75 | **AP_S** | AP_M | AP_L |
+|---|---|---|---|---|---|---|
+| baseline | 34.912 | 57.142 | 37.210 | **18.460** | 37.049 | 49.867 |
+| registers | 35.135 | 57.115 | 37.028 | 18.391 | 37.209 | 49.636 |
+| saga | 35.339 | 57.476 | 37.624 | **17.616** | 37.752 | 51.031 |
+| saga − baseline | +0.427 | +0.334 | +0.414 | **−0.844** | +0.703 | +1.164 |
+
+| | mIoU ss | mIoU ms | wall | sky | floor |
+|---|---|---|---|---|---|
+| baseline | 43.5768 | 43.9663 | 72.7150 | 94.1672 | 76.0690 |
+| saga | 43.3350 | 43.9685 | 72.9116 | 94.2816 | 76.6138 |
+| saga − baseline | −0.2418 | +0.0022 | +0.1966 | +0.1144 | +0.5448 |
+
+- AP_S moves **against** SAGA (−0.844): not in its favor.
+- Background-class IoU (mean of wall/sky/floor) moves **for** SAGA
+  (+0.2853 IoU points).
+- Exactly one of the two moved -> **VERDICT: PARTIAL**.
+
+**What the aggregates are made of** (section 4 of the note, because the
+AP_S number alone would mislead in both directions): SAGA is above baseline
+on AP_S in **43 of 80 categories** — a majority — yet the mean is −0.843
+while the MEDIAN is **+0.055**. The aggregate is carried by a few large
+negative swings (toaster −34.10, bed −20.00, bear −17.05), i.e. categories
+with very few small instances. On ADE20K SAGA is above baseline on 69 of
+150 classes, mean −0.2417 IoU points.
+
+**The uncertainty is stated next to the verdict and does not enter it.**
+There is exactly one run per cell, so no delta has a standard error and none
+of the project's significance machinery applies. The only noise estimate the
+data can supply is the within-run AP_S spread over the last three evals:
+0.599 (baseline), 0.759 (registers), 0.394 (saga) — the −0.844 the verdict
+turns on is the same order as the spread of a single run.
+
+**Reconciliations (stated, not improvised):**
+1. **F7's COCO half cannot be built locally.** TASK-09 A3 saved
+   `detections_val.json` so "re-inference is never needed for figures" —
+   true for boxes, but the val2017 JPEGs are HPC-only and no COCO image
+   exists in the repo. So `analysis/collect_F7.py` freezes WHICH two images
+   F7 shows, deterministically from committed detections alone (small =
+   area < 32^2 px, score >= 0.30, ranked by |n_small(saga) −
+   n_small(baseline)|, ties by image_id; chosen: **480275** and **233825**,
+   from 1825 eligible), and `tools/export_f7_crops.py` exports just those
+   two crops on the HPC — straight out of the zips, no staging, no GPU,
+   seconds on a login node. The figure builds either way and draws an
+   explicit MISSING placeholder naming the command that fills it.
+2. **Port assignment was a latent hazard.** `gen_dense_jobs.py` derived
+   each run's master port from its index in the SORTED run list, so adding
+   a seventh run renumbered every run after it alphabetically — including
+   the six whose results are already committed, whose job files would then
+   no longer match what produced them. Ports are now PINNED PER RUN in the
+   matrix; the six executed launchers are byte-identical (asserted by a test
+   that greps `git diff` for them).
+3. **`_s2` naming.** The matrix documented `_s1` as the BACKBONE's e2r seed.
+   For the two new runs the suffix denotes the DENSE trainer's seed (the
+   backbone is the same file, same pinned sha). Recorded in the header
+   rather than reconciled silently; the authority is never the name, since
+   every run writes `seed` and `backbone_run`/`backbone_sha256` into
+   meta.json and the tables pair on those.
+4. TASK-10's `set -u`-ordering test matches the line `set -u` exactly and
+   therefore SKIPS every dense job file (ours carries a trailing comment),
+   so that property went unverified for them. It is now asserted in this
+   task's own suite.
+
+**Prepared, NOT submitted — the second detection seed:**
+`det_vitb_baseline_s2` and `det_vitb_saga_s2` (ports 29856/29857, chain 4).
+Same backbones byte for byte (same `backbone:` key, same pinned sha256),
+same schedule; a test asserts the resolved `train`/`model`/`eval` blocks are
+IDENTICAL to s1 and only `seed` differs (1 -> 2), which changes the head
+init, the DistributedSampler order and the augmentation stream. This exists
+because the Gate-2 verdict turns on a single-draw AP_S delta whose magnitude
+sits inside the within-run spread; a second seed is the cheapest thing that
+can distinguish the two.
+
+`pytest -q`: **467 passed, 24 skipped** (24 pre-existing skips from TASK-10's
+sbatch parametrisation, +2 of them from the two new job files).
+
+**Commit:** `[TASK-09] Gate-2 tables, note, F7 draft + second detection seed (phase C)`
+
+**Pending from HPC (two items, both small, neither blocking the verdict):**
+1. `python tools/export_f7_crops.py` on a login node -> commit
+   `results/figures_data/f7_coco/` -> re-run `python plotting/plot_F7.py`
+   locally and F7's COCO row fills itself in.
+2. OPTIONAL, the human's call: submit the second detection seed
+   (`bash scripts/submit_det_vitb_baseline_s2.sh`,
+   `bash scripts/submit_det_vitb_saga_s2.sh`) — ~28 h each by the measured
+   31.01 img/s, well inside the 4x24 h chain.

@@ -16,9 +16,15 @@
 # never implemented warmup; it stays unimplemented (adding it would change
 # the schedule, i.e. the numbers).
 #
-# run_id = <det|seg>_vitb_<variant>_s1   —  s1 = the BACKBONE's e2r seed;
-# the dense trainer's own seed is the `seed` field below (also 1) and is
-# recorded in every output JSON.
+# run_id = <det|seg>_vitb_<variant>_s<N>.
+# NAMING, and the one place it is not uniform (recorded rather than
+# silently reconciled): for the six s1 runs the suffix denotes the
+# BACKBONE's e2r seed, which is 1 for every ViT-B backbone that exists. For
+# the two det_*_s2 runs added in Phase C it denotes the DENSE TRAINER's
+# seed — same backbone file, byte for byte. Both readings coincide on the
+# only thing that matters, because the authority is never the name: every
+# run records `seed` and `backbone_run`/`backbone_sha256` in meta.json and
+# in every results JSON, and the tables pair on those.
 
 task_configs:
   detection: detection/configs/base.yaml
@@ -126,13 +132,40 @@ backbones:
         results/legacy/checkpoint_manifest.csv. UNSEEDED (seed "rlast"), so
         the registers rows are one repeat with no seed control.
 
+# Each run PINS its master port here. The generator used to derive ports
+# from the sorted index, which meant adding a run renumbered every run after
+# it alphabetically — including ones that had already produced results, so
+# the committed job file would no longer match what ran. Ports must stay
+# disjoint from every other committed launcher (the smokes hold 29860/29861;
+# tests/test_task09_dense.py re-derives the full occupied table from the
+# repo, array-computed bases included).
 runs:
-  det_vitb_baseline_s1:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1}
-  det_vitb_saga_s1:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1}
-  det_vitb_registers_s1: {task: detection, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1}
-  seg_vitb_baseline_s1:  {task: segmentation, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1}
-  seg_vitb_saga_s1:      {task: segmentation, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1}
-  seg_vitb_registers_s1: {task: segmentation, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1}
+  det_vitb_baseline_s1:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1, port: 29850}
+  det_vitb_saga_s1:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1, port: 29852}
+  det_vitb_registers_s1: {task: detection, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1, port: 29851}
+  seg_vitb_baseline_s1:  {task: segmentation, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 1, port: 29853}
+  seg_vitb_saga_s1:      {task: segmentation, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 1, port: 29855}
+  seg_vitb_registers_s1: {task: segmentation, arch: vit_base_patch16_224, variant: registers, backbone: vitb_registers, seed: 1, port: 29854}
+
+  # ── TASK-09 Phase C: a SECOND DETECTION SEED, prepared, NOT submitted ──
+  # The Gate-2 verdict turns on AP_S(saga) - AP_S(baseline) = -0.844, which
+  # is a single draw whose magnitude sits inside the within-run epoch-to-
+  # epoch spread of AP_S (0.394-0.759 over the last three evals; see
+  # results/notes/gate2_report.md section 5). These two runs give that delta
+  # its first repeat.
+  #
+  # NAMING (reconciliation): everywhere above, the `_s1` suffix denotes the
+  # BACKBONE's e2r seed. For these two it denotes the DENSE TRAINER's seed —
+  # the backbone is the SAME e2r mixup s1 checkpoint, byte for byte, as the
+  # s1 runs (same `backbone:` key, so the same pinned sha256). What differs
+  # is `seed: 2`, which changes the detection head init, the
+  # DistributedSampler order and the augmentation stream, and nothing else.
+  # Each run records its backbone in meta.json (`backbone_run`,
+  # `backbone_sha256`), so the pairing is never inferred from the name.
+  # No registers s2 and no segmentation s2: the human asked for the
+  # detection baseline/saga pair only.
+  det_vitb_baseline_s2:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 2, port: 29856}
+  det_vitb_saga_s2:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 2, port: 29857}
 
 # Test-time-registers dense rows (registers bolted onto a trained
 # baseline/SAGA at inference) are a LATER task — noted here, not built.
