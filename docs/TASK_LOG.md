@@ -2424,3 +2424,137 @@ submitted by the human's decision; its launchers and tests remain in the
 tree, so submitting it later is two commands and no code change. Until then
 the Gate-2 PARTIAL rests on one run per cell, which section 5 of the note
 states plainly.
+
+---
+
+## 2026-09-13 — TASK 12, PHASE A (matched-init ablation: gate modes + launchers)
+
+Branch `task/12-ablation` off `main` at `754b4a3`. Phase A is tooling only —
+**no results file was created or edited**, and no number exists yet.
+
+**Session start, reported rather than worked around:** the worktree was NOT
+clean. `docs/PROJECT.md` was modified (the 2026-09-13 milestone rewrite) and
+`docs/FRAMING_MEMO.md` was untracked — both the human's own in-flight
+writing, neither belonging to any task. Per CLAUDE.md they were not
+committed, stashed or touched; this task's commits stage only their own
+explicit paths (the TASK-08/09 precedent), and both files are exactly as
+found.
+
+**Done (local, by Claude Code):**
+- A1 `saga/gate.py` — `gate_mode` in {none, const, headscalar, layerscale,
+  spatial}. `spatial` is the shipped gate UNCHANGED (same parameter name
+  `blocks.{i}.attn.gate.phi`, same shape, same forward — pinned by a test
+  that diffs it against `build_saga_vit(gate=True)`); `const` registers phi
+  and freezes it (`requires_grad=False`, G = 0.5 exactly, 0 trainable);
+  `headscalar` is the SAME code path with phi `[H,1]` broadcast over
+  positions, so arms C and E differ in the spatial dimension and nothing
+  else; `layerscale` is a new `LayerScaleGate` (gamma `[H,D]`) at the SAME
+  insertion point G1, so placement cannot be the confound. `build_gate()` is
+  the single place a mode becomes a module.
+  Two deliberate, documented properties of arm D: LayerScale scales EVERY
+  token including CLS (the standard formulation; the gate never touches
+  CLS), and its gamma carries weight decay 0.05 exactly as phi does in the
+  other arms (`wd_phi_zero: false`, the e2r legacy) — timm would exclude its
+  own 1-dim gamma from WD, and matching the arms to each other was the
+  priority. Both belong in Phase C's note.
+  **LayerScale init = 1e-6, and the number is not typed anywhere it could
+  drift**: `LAYERSCALE_INIT_DEIT3` is asserted equal to the value timm's own
+  `deit3_small_patch16_224` builds with (timm 1.0.28), by constructing that
+  model in a test and reading `blocks[0].ls1.gamma`.
+- `saga/vit.py` — `build_saga_vit(gate_mode=None, layerscale_init=...)`.
+  None derives the mode from `gate`, so every pre-TASK-12 caller (the e2r
+  trainer, the dense backbones, the figures, model_factory) builds exactly
+  what it built before; a `gate`/`gate_mode` contradiction is REFUSED rather
+  than silently resolved.
+- A2 `classification/tools/train.py` — the only trainer changes are the gate
+  wiring: `gate_mode` + `layerscale_init` resolved into `cfg["model"]`
+  (absent => legacy values, pinned by a test on the e2r matrix), matrix-wide
+  `overrides` applied before per-run ones (so the 100-epoch schedule is
+  written ONCE and no arm can drift onto its own), gate parameter counts
+  printed at startup, `dump_phi`/`GradPhiLogger` tolerate a gate with no phi
+  (arm D), and `gate_init_logit` now REFUSES to be a silent no-op or to thaw
+  the frozen arm.
+- `configs/abl_matrix.yaml` — six arms, ViT-S/16 mixup, 100 epochs, seed 0.
+  **Chain length 1, from the MEASURED cost rather than TASK-05's estimate**:
+  `results/runs/e2r_vits_mixup_saga_s1/log.csv` has a median wall_time of
+  161.4 s/epoch over 300 epochs (13.46 h of training), so 100 epochs is
+  ~4.5 h of training, ~6 h with staging and 100 full-val passes, against a
+  24 h wall. (The e2r matrix comment's "~35 h for 300 epochs" was a pre-run
+  estimate and is 2.6x too pessimistic.) A dead job is recovered by
+  re-running the submit script: `--dependency=singleton` + `--resume auto`.
+- `scripts/gen_slurm_chain.py` now templates the matrix path into the job
+  file, so one generator serves both matrices. Byte-identical for the e2r
+  jobs — pinned by a test that formats JOB_TEMPLATE with the committed
+  run's own port and compares to the committed file. Six chains on ports
+  **29770-29775** (+29769 for the smoke), asserted collision-free against
+  every launcher in the repo via TASK-09's own port derivation.
+- `scripts/jobs/abl_smoke.sbatch` — 2 epochs of ALL SIX arms in ONE job
+  (ImageNet staged once). Arms B-F have never trained, so this is not
+  optional. Carries TASK-10's lessons: `set -u` AFTER the env sourcing, the
+  env interpreter by ABSOLUTE path, a fatal torch/timm preflight and the
+  TASK-12 unit tests run on the compute node BEFORE staging, and
+  `trap cleanup_imagenet EXIT` armed before staging with exactly one caller.
+- `tools/check_abl_smoke.py` — one PASS/FAIL line per acceptance item, read
+  from the smoke's own files: contract set, exact log schema, per-arm phi
+  presence/shape, arm B's phi bit-identical across a trained epoch, arm F's
+  epoch-0 phi == +4.0, grad-phi only where requested, and a cross-arm diff
+  of the six resolved configs that FAILS on any key outside
+  {run_id, variant, model.gate, model.gate_mode, knobs.gate_init_logit,
+  instrumentation.log_grad_phi}. Missing evidence is FAIL, never an
+  assumption.
+- A3 `tests/test_task12_ablation.py` — **51 tests**. Counts pinned at the
+  real ViT-S/16 (A 0 / B 14,112 registered but **0 trainable** / C 72 /
+  D 4,608 / E,F 14,112); `gate_mode: none` bit-identical to stock timm
+  (same module type, same weights, `torch.equal` on the logits); const
+  frozen through the REAL trainer end to end (timm `create_optimizer_v2` +
+  GradScaler + grad clip, 2 epochs on fake data, phi dumps compared);
+  layerscale trains and writes no phi; **const and spatial are bit-identical
+  at init** (both are G = 0.5, so they differ only in what happens after);
+  the six arms share every non-gate weight and every activation upstream of
+  the gate; the real trainer + real loader deliver the same data in the same
+  order for two arms differing only in gate_mode; job files byte-identical
+  to the generator; the checker FAILS on a thawed const arm, on an arm given
+  its own schedule, and on a missing run.
+
+**Reconciliations (task file vs repo) — stated, not improvised:**
+1. **Phase C needs one HPC step the task file never mentions.** Phase C.1
+   asks for "sink under the cell's canon tau", but the trainer's per-epoch
+   `diag_e###.json` carries no `_norms.npz` and no fixed-threshold field, so
+   canon sinks can only come from the repo's standard derivation, run where
+   the checkpoints live. Nothing was built for it here (it cannot run until
+   Phase B finishes, by which time the Phase C session exists), but
+   `tools/{model_factory,eval,diagnose,derive_runs}.py` now carry
+   `--gate-mode` so the derivation is possible at all — without it a
+   headscalar or layerscale checkpoint cannot be strict-loaded. Defaults are
+   unchanged and pre-TASK-12 command lines stay byte-identical. The three
+   commands are in the protocol block.
+2. **`warmup_epochs` stays at base.yaml's 20**, i.e. 20% of a 100-epoch
+   schedule against 6.7% of the 300-epoch headline. The task says everything
+   except schedule length is identical to `e2r_vits_mixup_*`, so it was not
+   retuned; all six arms share it, so the ablation is internally valid, and
+   Phase C's caveat block must carry it alongside the 100-vs-300 caveat.
+3. **The production job files keep the e2r pattern** (`cleanup_imagenet` at
+   the end, not trapped) because they come from the shared generator and
+   changing the template would rewrite the finished e2r runs' files. Only
+   the hand-written smoke uses the trap.
+
+`pytest -q`: **522 passed, 30 skipped** (470 pre-existing + 51 TASK-12 + the
+smoke job file now covered by TASK-10's repo-wide `set -u` test; the six new
+production job files carry no `set -u`, so they join that test's skips).
+No trainer math, results file, eval, diagnose or plotting output was changed.
+
+**Commit:** `94a85cc` `[TASK-12] matched-init ablation: gate modes, matrix,
+launchers (phase A)`
+
+**Pending from HPC (Phase B), in order:**
+1. Human merges `task/12-ablation` into `main` and pushes (the HPC runs
+   `main`).
+2. `sbatch scripts/jobs/abl_smoke.sbatch`, then read the
+   `tools/check_abl_smoke.py` summary at the end of the log. **Report the
+   PASS/FAIL line back before anything else runs** — arms B-F have never
+   trained. Commit `results/runs_smoke/abl_*` (small; ckpt/ is git-ignored).
+3. On PASS only: the six submit scripts, ONE COMMAND PER LINE.
+4. `bash scripts/sync_results.sh` every day or two (it already globs
+   `results/runs/*`), then `I_AM_HUMAN=1 git push`.
+Then Phase C on `task/12-ablation-c` once all six report, starting with the
+derivation job in reconciliation 1.
