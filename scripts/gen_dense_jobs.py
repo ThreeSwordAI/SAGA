@@ -296,7 +296,16 @@ def render(matrix: dict, out_dir: Path, base_port: int):
     for i, (run_id, run) in enumerate(sorted(matrix["runs"].items())):
         setup = TASK_SETUP[run["task"]]
         n = int(matrix.get("chain", {}).get(run["task"], 2))
-        port = base_port + i
+        # The port is PINNED PER RUN in the matrix. Deriving it from the
+        # sorted index (the original design) meant that adding a seventh run
+        # renumbered the six that had already executed, so the committed job
+        # files would no longer match what produced the results.
+        if "port" not in run:
+            raise KeyError(
+                f"run {run_id!r} has no `port:` in the matrix — pin one "
+                f"(unused, and disjoint from every other launcher; "
+                f"tests/test_task09_dense.py enumerates the occupied ones)")
+        port = int(run["port"])
         job = JOB_TEMPLATE.format(
             run_id=run_id, task=run["task"], variant=run["variant"],
             log_dir=LOG_DIR, code_root=CODE_ROOT, python=PYTHON, port=port,
@@ -343,7 +352,9 @@ def main():
         description="Generate the TASK-09 dense SLURM chains + smokes.")
     p.add_argument("--matrix", default="configs/dense_matrix.yaml")
     p.add_argument("--out-dir", default="scripts")
-    p.add_argument("--base-port", type=int, default=29850)
+    p.add_argument("--base-port", type=int, default=29850,
+                   help="unused for runs (each pins its own `port:` in "
+                        "the matrix); kept for the smoke defaults")
     args = p.parse_args()
 
     matrix_path = Path(args.matrix)
