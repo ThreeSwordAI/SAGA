@@ -537,6 +537,108 @@ def section_sweep(sweep) -> list:
     return out
 
 
+def section_limitations(rows, gates) -> list:
+    """Stated plainly, because the reader cannot see the sequence of runs."""
+    vits = [r for r in rows if r["arch"] == "vit_small"
+            and r["recipe_actual"] == "mixup"]
+    g0 = next(iter(gates.values()))
+    lo, hi = g0["scan_stats"]["layer_range"]
+    # cells with no repeat of their own TTR measurement
+    cells_by_group = {}
+    for r in rows:
+        cells_by_group.setdefault((r["arch"], r["recipe_actual"]), []).append(r)
+    singletons = [v[0]["cell"] for v in cells_by_group.values() if len(v) == 1]
+
+    out = [
+        "## 9. Limitations",
+        "",
+        "### The scan depth was chosen after seeing the full-depth failure",
+        "",
+        f"The sequence was: the gate **failed at every n over all 12 blocks** "
+        f"-> the sweeps were inspected -> the scan was **restricted to layers "
+        f"{lo}-{hi}** -> ViT-S/mixup **passed**. That ordering is stated here "
+        f"because a reader cannot see it in the numbers, and selecting an "
+        f"analysis choice after seeing the outcome is exactly the kind of "
+        f"decision that inflates apparent effects.",
+        "",
+        "Three things bear on how much weight that should carry:",
+        "",
+        f"- **The mid-layer range is not derived from our data.** The authors' "
+        f"own register neurons are mid-layer — their published DINOv2 list is "
+        f"layers 12-17 of 24 — so scanning from layer 0 was this project's "
+        f"deviation from the method, and restricting it is a correction "
+        f"toward their setting. The justification would stand if our "
+        f"full-depth run had never happened.",
+        "- **No threshold was moved.** Both PASS criteria were fixed before "
+        "any cell ran, are recorded in every `validate.json`, and cannot be "
+        "set from any launcher (a test asserts it). The only thing that "
+        "changed was which neurons were candidates.",
+        f"- **The replication is partial, not held out.** The two ViT-S/mixup "
+        f"checkpoints are independent models of the same cell and both pass, "
+        f"which is some evidence the choice is not fitted to one checkpoint. "
+        f"It is not a held-out test: the restriction was chosen while looking "
+        f"at one of them.",
+        "",
+        "A clean test of the choice would be a cell that played no part in "
+        "selecting it. That does not exist in this task, and is not claimed.",
+        "",
+        "### Sample sizes and what has no error bar",
+        "",
+    ]
+    if singletons:
+        out.append(
+            f"- **n=1 cells.** {', '.join(singletons)} each have a single TTR "
+            f"measurement with no repeat, so their deltas carry no standard "
+            f"error and no significance statement is made about them.")
+    if len(vits) == 2:
+        a, b = vits
+        out.append(
+            f"- **The replication margin varies even where the verdict "
+            f"replicates.** The two ViT-S/mixup checkpoints qualify at "
+            f"{a['gate_n_passing']} of {a['gate_n_swept']} and "
+            f"{b['gate_n_passing']} of {b['gate_n_swept']} sweep values. With "
+            f"two checkpoints that spread is a caution about reading the "
+            f"sweep grid finely, not a measured quantity.")
+    out.append(
+        "- **One address pair per cell.** Every correlation in section 5 "
+        "compares one TTR map against one baseline map. The permutation null "
+        "handles the spatial smoothness of a single pair; it says nothing "
+        "about how the correlation would vary across seeds.")
+
+    vb = next((r for r in rows if r["arch"] == "vit_base"), None)
+    if vb is not None:
+        g = gates[vb["base_run_id"]]
+        sub = next((s for s in g["sweep"]
+                    if s["n_neurons"] == int(vb["n_neurons"])), None)
+        if sub:
+            out.append(
+                f"- **The gate and the headline measure different samples.** "
+                f"Verdicts are decided on the gate's "
+                f"{g['n_eval_images']}-image class-balanced subset; the "
+                f"headline table is the full "
+                f"{vb['n_images_eval']}-image val set. They do not agree "
+                f"exactly — ViT-B/mixup drops "
+                f"{num(sub['top1_drop'],4)} on the subset and "
+                f"{num(vb['top1_drop_vs_baseline'],4)} on the full set — and "
+                f"section 7 quantifies that gap for the one cell where it "
+                f"decides a verdict. The verdicts stand on the subset, which "
+                f"is what the frozen criterion was defined over.")
+    out += [
+        "",
+        "### Scope",
+        "",
+        "- Four checkpoints, two architectures, two recipes, one seed each "
+        "except where noted. Classification only; nothing here speaks to "
+        "detection or segmentation.",
+        "- One operating point per cell (the matrix's n), chosen as the "
+        "gate's best where the gate passed. No tradeoff curve was run, "
+        "deliberately: sweeping n on a failing cell until one value clears "
+        "the bar is a search for a pass, not a measurement.",
+        "",
+    ]
+    return out
+
+
 def main():
     p = argparse.ArgumentParser(description="TASK-10 Phase C note.")
     p.add_argument("--repo", default=".")
@@ -572,6 +674,7 @@ def main():
     lines += section_nomix(rows)
     lines += section_knife(rows, gates, repo)
     lines += section_sweep(sweep)
+    lines += section_limitations(rows, gates)
 
     out = repo / args.out
     out.parent.mkdir(parents=True, exist_ok=True)

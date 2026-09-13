@@ -425,3 +425,78 @@ def test_table_carries_the_ci_and_the_threshold_verdict_unchanged():
     assert inside == (lo <= float(vb["gate_max_top1_drop"]) <= hi)
     # the CI does NOT change the recorded verdict
     assert vb["gate_verdict"] == "FAIL"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The pass-cells CI job must track the DATA, not a stale hand-written list
+# ─────────────────────────────────────────────────────────────────────────────
+
+PASS_JOB = REPO / "scripts/jobs/ttr_paired_ci_pass_cells.sbatch"
+
+
+def _gate_verdicts():
+    out = {}
+    for p in sorted((REPO / "results/ttr_midlayer").glob("*/validate.json")):
+        v = json.loads(p.read_text())
+        out[v["base_run_id"]] = v
+    return out
+
+
+def test_pass_cells_job_lists_exactly_the_cells_that_passed():
+    """If a verdict ever changes, this job must not silently keep running the
+    old set."""
+    src = PASS_JOB.read_text(encoding="utf-8")
+    listed = {line.split("|")[0].strip().strip('"')
+              for line in src.splitlines()
+              if line.strip().startswith('"') and line.count("|") == 4}
+    passed = {rid for rid, v in _gate_verdicts().items()
+              if v["verdict"]["passed"]}
+    assert listed == passed, f"job lists {listed}, gates say {passed} passed"
+    assert len(listed) == 2
+
+
+def test_pass_cells_job_uses_each_cell_s_own_gate_best_n():
+    src = PASS_JOB.read_text(encoding="utf-8")
+    gates = _gate_verdicts()
+    for line in src.splitlines():
+        if line.strip().startswith('"') and line.count("|") == 4:
+            cell, _arch, _rec, n, _ckpt = line.strip().strip('"').split("|")
+            best = gates[cell]["verdict"]["best_n_neurons"]
+            assert int(n) == int(best), f"{cell}: job n={n}, gate best={best}"
+
+
+def test_pass_cells_job_excludes_nomix_and_says_why():
+    src = PASS_JOB.read_text(encoding="utf-8")
+    assert "e2r_vits_nomix_baseline_s1" not in src.split("CELLS=(")[1].split(")")[0]
+    assert "not endorsed" in src
+    # phrase kept on one line; comment wrapping would split a longer one
+    assert "on the sink bar rather than the accuracy bar" in src
+    # and the frozen threshold is still unsettable from the launcher
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "--threshold" not in code
+
+
+def test_pass_cells_job_checks_inputs_before_staging():
+    lines = PASS_JOB.read_text(encoding="utf-8").splitlines()
+    f = lambda pred: next(i for i, l in enumerate(lines) if pred(l))
+    i_check = f(lambda l: "required input not found" in l)
+    i_stage = f(lambda l: l.strip() == "stage_probe_imagenet_val")
+    assert i_check < i_stage
+
+
+def test_note_states_the_post_hoc_layer_selection_plainly():
+    """The sequence fail -> inspect -> restrict -> pass must be visible."""
+    text = NOTE.read_text(encoding="utf-8")
+    assert "## 9. Limitations" in text
+    assert "chosen after seeing the full-depth failure" in text
+    assert "failed at every n over all 12 blocks" in text
+    assert "not derived from our data" in text
+    assert "No threshold was moved" in text
+    assert "partial, not held out" in text
+    assert "does not exist in this task, and is not claimed" in text
+    # the other caveats the human asked to fold in
+    assert "n=1 cells" in text
+    assert "replication margin varies" in text
+    assert "One address pair per cell" in text
+    assert "gate and the headline measure different samples" in text
