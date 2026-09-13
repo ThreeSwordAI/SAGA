@@ -263,19 +263,25 @@ def test_note_carries_the_replication_variance_sentence():
     assert "3 of 5" in text and "5 of 5" in text
 
 
-def test_note_regenerates_identically_from_the_committed_tables():
-    """The note is generated, not edited: re-running must reproduce it."""
-    before = NOTE.read_text(encoding="utf-8")
+def test_note_regenerates_identically_from_the_committed_tables(tmp_path):
+    """The note is generated, not edited: re-running must reproduce it.
+
+    Generated into tmp_path via --out, never over the committed file — a
+    test that rewrites a results file would dirty the working tree on every
+    run (the `*Generated ...*` timestamp alone is enough to do it).
+    """
+    scratch = tmp_path / "note.md"
     proc = subprocess.run(
-        [sys.executable, "analysis/build_ttr_note.py"],
+        [sys.executable, "analysis/build_ttr_note.py",
+         "--out", str(scratch)],
         cwd=REPO, capture_output=True, text=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    after = NOTE.read_text(encoding="utf-8")
 
     def strip_ts(t):
         return "\n".join(l for l in t.splitlines()
                          if not l.startswith("*Generated "))
-    assert strip_ts(before) == strip_ts(after)
+    assert strip_ts(scratch.read_text(encoding="utf-8")) == \
+        strip_ts(NOTE.read_text(encoding="utf-8"))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
