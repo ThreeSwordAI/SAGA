@@ -164,8 +164,14 @@ runs:
   # `backbone_sha256`), so the pairing is never inferred from the name.
   # No registers s2 and no segmentation s2: the human asked for the
   # detection baseline/saga pair only.
-  det_vitb_baseline_s2:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 2, port: 29856}
-  det_vitb_saga_s2:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 2, port: 29857}
+  # `submitted: false` — the launchers exist and are tested, but the human
+  # decided on 2026-09-13 NOT to run them. The flag is what keeps these two
+  # OUT of the Gate-2 tables: without it they appear as MISSING rows, which
+  # reads as "a run failed or is pending" rather than "was never started".
+  # A run that IS expected and whose artifact is absent still yields MISSING
+  # — that guard is untouched. Flip this to true if they are ever submitted.
+  det_vitb_baseline_s2:  {task: detection, arch: vit_base_patch16_224, variant: baseline, backbone: vitb_baseline, seed: 2, port: 29856, submitted: false}
+  det_vitb_saga_s2:      {task: detection, arch: vit_base_patch16_224, variant: saga, backbone: vitb_saga, seed: 2, port: 29857, submitted: false}
 
 # Test-time-registers dense rows (registers bolted onto a trained
 # baseline/SAGA at inference) are a LATER task — noted here, not built.

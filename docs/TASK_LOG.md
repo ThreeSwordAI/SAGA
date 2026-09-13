@@ -2381,3 +2381,46 @@ sbatch parametrisation, +2 of them from the two new job files).
    (`bash scripts/submit_det_vitb_baseline_s2.sh`,
    `bash scripts/submit_det_vitb_saga_s2.sh`) — ~28 h each by the measured
    31.01 img/s, well inside the 4x24 h chain.
+
+**Addendum (2026-09-13, Phase C closed — F7 complete, two defects fixed):**
+Branch `task/09-dense-c-fill`. The HPC export came back (`5cd3a95`), and the
+human declined the second detection seed.
+- **F7 is complete.** `tools/export_f7_crops.py` returned both crops
+  (233825: 640x480 -> 468x301, 19 GT boxes of which 15 small; 480275:
+  640x471 -> 461x146, 12 GT / 7 small), read straight out of val2017.zip on
+  a login node. `plotting/plot_F7.py` now renders the COCO block, and a test
+  asserts the exported crops ARE the frozen selection — same image ids, same
+  rule, and a crop the exporter may only CLIP, never move. The grid is now
+  15 columns so the 5-panel ADE rows and the 3-panel COCO rows both span the
+  full width. The qualitative contrast is visible in both directions:
+  480275 baseline 37 small detections vs SAGA 9, 233825 baseline 55 vs
+  SAGA 79.
+- **Defect 1, fixed: the committed T4 carried MISSING rows for the two s2
+  runs.** They were added to the matrix after the tables were first built,
+  and the rebuild picked them up. Since the human has now declined to submit
+  them, those rows would have read as "a run failed or is pending" rather
+  than "was never started". The matrix marks them `submitted: false` — a
+  declared exclusion rather than a silent one — and the builder skips such
+  runs while leaving the MISSING guard fully live for a run that IS expected
+  and absent (both halves pinned by a test).
+- **Defect 2, fixed: T4's `note` column leaked an absolute Windows path**
+  (`F:\FAU\...\coco_eval_best.json not found`) into a committed results
+  file. Notes are repo-relative now, and a test greps every committed table,
+  the note and the F7 selection for `X:\`, `/home/<user>` or `/Users/`.
+- Verified across the rebuild: the five real T4 rows are byte-identical, and
+  T5, both appendix tables and gate2_report.md are unchanged — **the
+  PARTIAL verdict and every number behind it are untouched.**
+- A shadowing bug I introduced while widening the figure (the panel-span
+  variable `w` was rebound by the `x, y, w, h = bbox` unpacking) was caught
+  by the render failing immediately; renamed to `span`.
+
+`pytest -q`: **470 passed, 24 skipped**.
+
+**Commit:** `[TASK-09] F7 COCO half + exclude the unsubmitted seed from the tables`
+
+**TASK 09 is content-complete.** Nothing is pending from the HPC. The second
+detection seed (`det_vitb_{baseline,saga}_s2`) stays PREPARED and NOT
+submitted by the human's decision; its launchers and tests remain in the
+tree, so submitting it later is two commands and no code change. Until then
+the Gate-2 PARTIAL rests on one run per cell, which section 5 of the note
+states plainly.

@@ -24,7 +24,11 @@ for that reason. This script keeps per-class values as fractions and ALSO
 emits `*_iou_pts` columns (fraction x 100) so a delta can be read in IoU
 points without the reader having to know which convention a column follows.
 
-MISSING is never averaged, interpolated or filled.
+MISSING is never averaged, interpolated or filled. A run the matrix marks
+`submitted: false` is EXCLUDED from these tables rather than rendered as
+MISSING: it was prepared and never started, which is a different fact from
+"expected but absent", and a MISSING row would read as a failure. A run that
+IS expected and whose artifact is absent still yields MISSING.
 
     python analysis/build_dense_tables.py [--matrix configs/dense_matrix.yaml]
         [--det-root results/detection] [--seg-root results/segmentation]
@@ -49,6 +53,15 @@ def show(path: Path):
         return path.relative_to(REPO)
     except ValueError:
         return path
+
+
+def rel_note(path: Path) -> str:
+    """Paths that land in a COMMITTED table must be repo-relative — an
+    absolute local path is machine-specific noise in a results file."""
+    try:
+        return str(path.relative_to(REPO)).replace("\\", "/")
+    except ValueError:
+        return path.name
 
 AP_KEYS = ["AP", "AP50", "AP75", "AP_S", "AP_M", "AP_L"]
 AR_KEYS = ["AR_1", "AR_10", "AR_100", "AR_S", "AR_M", "AR_L"]
@@ -137,12 +150,12 @@ def load_detection(det_root: Path, matrix: dict):
     """{variant: (run_id, coco_eval_best dict or None, note)}"""
     out = {}
     for run_id, run in sorted(matrix.get("runs", {}).items()):
-        if run["task"] != "detection":
+        if run["task"] != "detection" or not run.get("submitted", True):
             continue
         path = det_root / run_id / "coco_eval_best.json"
         if not path.exists():
-            out.setdefault(run["variant"], []).append((run_id, None,
-                                                       f"{path} not found"))
+            out.setdefault(run["variant"], []).append(
+                (run_id, None, f"{rel_note(path)} not found"))
             continue
         j = load_json(path)
         ok, detail = backbone_is_verified(j, matrix)
@@ -241,14 +254,14 @@ def det_per_category(runs, out_path):
 def load_segmentation(seg_root: Path, matrix: dict):
     out = {}
     for run_id, run in sorted(matrix.get("runs", {}).items()):
-        if run["task"] != "segmentation":
+        if run["task"] != "segmentation" or not run.get("submitted", True):
             continue
         d = seg_root / run_id
         ss_p, ms_p, pc_p = (d / "miou_ss.json", d / "miou_ms.json",
                             d / "per_class_iou.csv")
         if not ss_p.exists():
             out.setdefault(run["variant"], []).append(
-                (run_id, None, None, None, f"{ss_p} not found"))
+                (run_id, None, None, None, f"{rel_note(ss_p)} not found"))
             continue
         ss = load_json(ss_p)
         ms = load_json(ms_p) if ms_p.exists() else None

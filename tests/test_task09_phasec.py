@@ -407,3 +407,65 @@ def test_dense_jobs_put_set_u_after_the_env_sourcing():
         assert i_setu > i_src, (
             f"{job.name}: `set -u` on line {i_setu + 1} is above the env "
             f"sourcing on line {i_src + 1}")
+
+
+# ── prepared-but-not-submitted runs, and path hygiene ────────────────────
+
+def test_prepared_but_unsubmitted_runs_stay_out_of_the_tables(matrix):
+    """`submitted: false` means "never started", which is a different fact
+    from "expected but absent". A MISSING row for such a run reads as a
+    failure, so it is excluded — while a run that IS expected and absent
+    must still yield MISSING."""
+    unsubmitted = {r for r, v in matrix["runs"].items()
+                   if not v.get("submitted", True)}
+    assert unsubmitted == {"det_vitb_baseline_s2", "det_vitb_saga_s2"}
+
+    for path in ("T4_coco.csv", "T5_ade20k.csv"):
+        rows = read_csv(TABLES / path)
+        assert not (unsubmitted & {r["run_id"] for r in rows}), path
+
+    # the MISSING guard is still live for an expected-but-absent run
+    m2 = yaml.safe_load(open(MATRIX))
+    m2["runs"]["det_vitb_baseline_s2"]["submitted"] = True
+    loaded = bdt.load_detection(DET_ROOT, m2)
+    rows = bdt.det_rows(loaded, m2)
+    ghost = [r for r in rows if r["run_id"] == "det_vitb_baseline_s2"]
+    assert ghost and ghost[0]["AP"] == bdt.MISSING
+    assert "not found" in ghost[0]["note"]
+
+
+def test_no_committed_artifact_leaks_an_absolute_path():
+    """A committed results file must not carry a machine-specific path."""
+    import re
+    pattern = re.compile(r"[A-Za-z]:[\/]|/home/[a-z]|/Users/")
+    targets = list(TABLES.glob("T4*.csv")) + list(TABLES.glob("T5*.csv")) + [
+        NOTE, REPO / "results" / "figures_data" / "F7_coco_selection.json"]
+    for path in targets:
+        text = path.read_text(encoding="utf-8")
+        hits = [l for l in text.splitlines() if pattern.search(l)]
+        assert not hits, f"{path.name}: {hits[:2]}"
+
+
+def test_f7_coco_half_is_present_and_matches_the_frozen_selection():
+    """The exported crops must be the images the committed selection names,
+    at the geometry it froze — not a re-pick made on the HPC."""
+    coco = REPO / "results" / "figures_data" / "f7_coco"
+    sel = json.loads((REPO / "results" / "figures_data"
+                      / "F7_coco_selection.json").read_text(encoding="utf-8"))
+    payload = json.loads((coco / "crops.json").read_text(encoding="utf-8"))
+
+    assert ({r["image_id"] for r in payload["images"]}
+            == {i["image_id"] for i in sel["images"]})
+    assert payload["selection_rule"] == sel["rule"]
+    by_id = {i["image_id"]: i for i in sel["images"]}
+    for rec in payload["images"]:
+        assert (coco / rec["crop_file"]).exists()
+        # the exporter may only CLIP the frozen crop, never move it
+        fx, fy, fw, fh = by_id[rec["image_id"]]["crop_xywh"]
+        cx, cy, cw, ch = rec["crop_xywh_original"]
+        assert cx >= fx - 1e-6 and cy >= fy - 1e-6
+        assert cx + cw <= fx + fw + 1e-6 and cy + ch <= fy + fh + 1e-6
+        assert rec["n_small"] == by_id[rec["image_id"]]["n_small"]
+        # every drawn detection count matches the selection's own tally
+        for variant, dets in rec["detections_in_crop"].items():
+            assert len(dets) == rec["n_small"][variant]
