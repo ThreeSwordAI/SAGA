@@ -50,6 +50,9 @@ def show(path: Path):
         return path
 
 N_ADE = 3                      # TASK-09 C.3: "3 fixed ADE20K images"
+# 15 divides by both 5 (ADE columns) and 3 (COCO columns), so each
+# block spans the full width instead of leaving empty cells
+NCOL = 15
 VARIANTS = ["baseline", "registers", "saga"]
 VARIANT_COLOR = {"baseline": "#888780", "registers": "#1D9E75",
                  "saga": "#7F77DD"}
@@ -93,9 +96,10 @@ def bare(ax):
 
 def draw_ade_block(fig, gs, stems, seg_root: Path, pal):
     cols = ["input", "ground truth"] + VARIANTS
+    span = NCOL // len(cols)       # 5 panels across the 15-column grid
     for r, stem in enumerate(stems):
         for c, col in enumerate(cols):
-            ax = fig.add_subplot(gs[r, c])
+            ax = fig.add_subplot(gs[r, c * span:(c + 1) * span])
             bare(ax)
             try:
                 if col == "input":
@@ -126,8 +130,11 @@ def draw_coco_block(fig, gs, row0, crops, data_dir: Path):
     for r, rec in enumerate(crops):
         img = np.array(Image.open(data_dir / rec["crop_file"]))
         gt_small = [g for g in rec["gt_in_crop"] if g.get("is_small")]
+        # NOT `w`: the bbox unpacking below rebinds that name
+        span = NCOL // len(VARIANTS)   # 3 panels across the same grid
         for c, variant in enumerate(VARIANTS):
-            ax = fig.add_subplot(gs[row0 + r, c])
+            ax = fig.add_subplot(gs[row0 + r,
+                                    c * span:(c + 1) * span])
             bare(ax)
             ax.imshow(img)
             for g in gt_small:
@@ -197,7 +204,7 @@ def main():
     n_coco = len(selection["images"])
     nrows = N_ADE + n_coco
     fig = plt.figure(figsize=(12.5, 2.5 * nrows + 1.1))
-    gs = fig.add_gridspec(nrows, 5, hspace=0.12, wspace=0.05,
+    gs = fig.add_gridspec(nrows, NCOL, hspace=0.14, wspace=0.06,
                           top=0.90, bottom=0.06, left=0.045, right=0.99)
 
     draw_ade_block(fig, gs, stems, rel(args.seg_root), ade_palette())
