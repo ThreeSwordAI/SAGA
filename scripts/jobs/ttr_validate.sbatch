@@ -97,10 +97,34 @@ fi
 # timestamp), so COMMIT the previous sweep before launching another.
 N_NEURONS=${N_NEURONS:-4,8,16,32,64}
 
+# LAYER_RANGE restricts the neuron SCAN to a half-open block range, as
+# saga.ttr.find_register_neurons's layer_range argument. Unset = all 12
+# blocks, which is what the 2026-09-10/13 runs used.
+#
+# Why it matters here: the merged sweeps show the whole accuracy cost is ONE
+# neuron. Rank 9 of the ranking is layer 0 (neuron 613), and adding it takes
+# top-1 from 78.86 to 76.14 — 2.72 points in a single step — while top-1 then
+# PLATEAUS at 76.1-76.3 from n=9 to n=16 as sink removal keeps improving.
+# The paper's register neurons are MID-layer (their published DINOv2 list is
+# layers 12-17 of 24); scanning from layer 0 is OUR deviation, so excluding
+# the earliest blocks makes this implementation MORE faithful, not less:
+#     LAYER_RANGE=3,12 N_NEURONS=8,10,12,16,24 sbatch scripts/jobs/ttr_validate.sbatch
+LAYER_RANGE=${LAYER_RANGE:-}
+
+# Where the artifacts land. Point a variant sweep somewhere else so it does
+# NOT overwrite a committed one (the run dir keeps its base_run_id name):
+#     TTR_OUT_ROOT=results/ttr_midlayer ...
+TTR_OUT_ROOT=${TTR_OUT_ROOT:-results/ttr}
+
+EXTRA=()
+if [ -n "$LAYER_RANGE" ]; then EXTRA+=(--layer-range "$LAYER_RANGE"); fi
+
 echo "======================================================"
 echo "  TASK-10 A3 — TTR validation gate"
 echo "  base cell: vit_small|mixup   ckpt: $CKPT"
 echo "  sweep:     $N_NEURONS"
+echo "  layers:    ${LAYER_RANGE:-all 12 blocks}"
+echo "  out root:  $TTR_OUT_ROOT"
 echo "======================================================"
 
 $PY tools/ttr_validate.py \
@@ -108,18 +132,19 @@ $PY tools/ttr_validate.py \
     --arch vit_small --recipe mixup --variant baseline \
     --n-neurons "$N_NEURONS" \
     --data $PROBE_IN_DIR \
-    --out-root results/ttr \
+    --out-root "$TTR_OUT_ROOT" \
+    ${EXTRA[@]+"${EXTRA[@]}"} \
     --device cuda --seed 0
 RC=$?
 
 echo "======================================================"
 echo "  exit code $RC  (0 = PASS, 3 = FAIL, other = tool error)"
 echo "  Commit and push these two, then report the PASS/FAIL line:"
-echo "    results/ttr/e2r_vits_mixup_baseline_s1/neurons.json"
-echo "    results/ttr/e2r_vits_mixup_baseline_s1/sweep.csv"
-echo "    results/ttr/e2r_vits_mixup_baseline_s1/validate.json"
+echo "    $TTR_OUT_ROOT/e2r_vits_mixup_baseline_s1/neurons.json"
+echo "    $TTR_OUT_ROOT/e2r_vits_mixup_baseline_s1/sweep.csv"
+echo "    $TTR_OUT_ROOT/e2r_vits_mixup_baseline_s1/validate.json"
 echo "  Do NOT submit ttr_matrix.sbatch unless this said PASS."
 echo "======================================================"
-cat results/ttr/e2r_vits_mixup_baseline_s1/sweep.csv 2>/dev/null
+cat "$TTR_OUT_ROOT/e2r_vits_mixup_baseline_s1/sweep.csv" 2>/dev/null
 
 exit $RC
