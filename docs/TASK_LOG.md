@@ -1925,3 +1925,128 @@ Then Phase C locally on `task/10-ttr-c` (`results/tables/T_ttr.csv` +
 has yet run `/home/vault/iwi5/iwi5359h/envs/saga/bin/python -c "import
 torch, timm"` on the cluster. The job now performs exactly that check as its
 first fatal step, so attempt 3 answers it either way in seconds.
+
+---
+
+## 2026-09-13 — TASK 10, PHASE B (the A3 gate, and the four-cell matrix)
+
+Run by the human on Alex; four failed attempts before a verdict, and **none
+of the failures were TTR**. Recorded in order because three of them were
+mine:
+
+1. A copied job file, `ttr_validate copy.sbatch`, could not be submitted
+   unquoted at all — the space splits it into two arguments and sbatch opens
+   neither (it also broke a plain shell loop over the job files). Deleted;
+   sbatch flags override `#SBATCH`, so
+   `sbatch --partition=a100 --gres=gpu:a100:1 <file>` covers a busy a40 with
+   no duplicate file.
+2. **My `set -u` ordering.** It sat ABOVE `source .../env_alex.sh`, which
+   sources `/etc/profile`, whose site scripts dereference unset variables
+   (`debuginfod.sh` line 8, `DEBUGINFOD_URLS`); under `set -u` bash aborts
+   the CALLING script, so not one line of the job body ran. My mistake was
+   the reference I copied: `probe_attention.sbatch` was the only committed
+   a40 example and had never completed a run. Every job file that HAD
+   completed one (TASK-08 `ft_*`, TASK-09 `det_*`/`seg_*`/`dense_smoke_*`)
+   already had `set -u` after the sourcing. Fixed in all three offenders and
+   pinned repo-wide by a test.
+3. **The conda module was renamed cluster-side.** `python/3.12-conda`
+   resolved on 2026-09-08 (TASK-08's ft array completed 16 runs through it)
+   and was gone by 2026-09-10, so EVERY job in the repo was broken: the load
+   failed, `source activate` failed, and jobs silently ran `/usr/bin/python`
+   with no torch. `module load python` is what works (human-confirmed). All
+   four live env scripts now try the pinned name, fall back, and warn
+   loudly. **Two further bugs of mine were exposed by it:** `PY=$(which
+   python)` fell back to the system interpreter, and my `import torch`
+   preflight ALREADY RAN AND FAILED but its exit status was never tested, so
+   the job staged 50 000 images before dying. Both now fatal, and before
+   staging.
+4. Attempt 4 (job 4212808, a100/a0905, 3:33) produced the first verdict.
+
+**The A3 gate, full-depth scan: FAIL at every n** (committed `1a2b1da`, then
+a denser grid in `457f4cb`). Merging both sweeps showed the whole accuracy
+cost is ONE neuron: rank 9 of the ranking is layer 0 / neuron 613, and
+adding it moves top-1 from 78.86 to 76.14 — 2.72 points in a single step —
+after which top-1 PLATEAUS at 76.1-76.3 through n=16 while sink removal
+keeps improving to 78.8%. Mid-layer neurons remove sinks nearly free; the
+layer-0 neuron was pure cost.
+
+**That motivated the one configuration change, and it is a faithfulness fix
+rather than a moved goalpost:** the paper's register neurons are mid-layer
+(their published DINOv2 list is layers 12-17 of 24), while our default
+scanned all 12 blocks — OUR deviation. `LAYER_RANGE` was exposed on the gate
+job; `--min-sink-reduction` / `--max-top1-drop` remain unsettable from any
+launcher and a test asserts it, so a FAIL cannot be converted from the
+command line.
+
+**Mid-layer gate (layers 3-12), job 4225990, 2:13: PASS on ViT-S/mixup** —
+n=24 gives top-1 78.72 vs 79.14 (-0.42) with sinks down 90.4%. Against the
+full-depth numbers this buys back ~2.4 points of top-1 AND removes more
+sinks.
+
+**A bug caught before the matrix ran, not after:** `ttr_matrix.sbatch`
+re-scanned each cell with `--n-neurons` hardcoded and NO `--layer-range`. It
+would have scanned all 12 blocks, re-selected layer-0 neurons, and written
+results labelled as the validated configuration when they were the one that
+FAILED. Defaults now reproduce the passing configuration, and
+`ttr_prepare_run.py` gained `--expect-layer-range`, which REFUSES a neurons
+file scanned over a different range (verified end to end).
+
+**The matrix then completed all four cells** (`65d972e`): per-cell scan +
+sweep, full 50k eval, canonical diagnostics, canon backfill and address
+maps. **14/14 integrity checks on every cell**: `layer_range [3,12]`,
+per-cell canon tau matching the committed file (20.8516 / 127.3125 /
+22.8594), `tau_recalibrated_on_patched_model: false` everywhere,
+`n_images` 50000, `num_prefix_tokens` 2, `sink_fixed_canon` backfilled with
+`canon_thr_value` == tau, eval/diag/gate sha256 agreement, no selected
+neuron below layer 3, `diag_last_addr.json` present.
+
+**Per-cell gate verdicts are MIXED, and the two failures fail for opposite
+reasons** (all from `results/ttr_midlayer/*/validate.json`):
+- ViT-S/mixup (e2r s1) **PASS**, best n=24, 3 of 5 sweep values qualifying.
+- ViT-S/mixup (legacy) **PASS**, best n=24, 5 of 5 — an independent second
+  checkpoint of the same cell.
+- ViT-B/mixup **FAIL**, 0 of 5. At n=24 it CLEARS the sink bar (55.2%) and
+  misses the accuracy bar by **0.02 points** (drop 1.02 vs the 1.00
+  threshold).
+- ViT-S/nomix **FAIL**, 0 of 5, for the opposite reason: accuracy is
+  essentially untouched (-0.16 at n=24) but sink reduction plateaus at ~42%.
+  That cell holds only 3.70 sinks unpatched against ViT-S/mixup's 19.71, so
+  there is little to remove — consistent with TASK-07's finding that the
+  sink address is a border ring for every mixup member and FLAT for
+  true-nomix.
+
+The matrix derived all four cells at n=24 including the two that failed
+their own gate (the job records the non-zero and continues, by design), so
+the full picture exists. Those two must be reported as measured-but-below-
+the-bar, never as validated operating points.
+
+**Human's decisions for Phase C, recorded verbatim in intent:**
+1. **Threshold HELD at 1.00, not revisited; ViT-B/mixup reports FAIL** — but
+   the paired uncertainty on the 1.02 drop must be computed (bootstrap /
+   McNemar on the discordant counts at n=50 000) and stated as a knife-edge
+   miss inside measurement uncertainty if that is what the CI shows. A bare
+   FAIL under-reports; a moved threshold is indefensible.
+2. **All four cells in the headline table with their own verdicts** —
+   excluding failures is selection on outcome. Absolute sink COUNTS beside
+   every percentage (42% of 3.70 is ~1.5 sinks; 55% of 19.71 is ~10.8 — the
+   percentages are not comparable), and nomix's failure framed as a
+   denominator/scope consequence consistent with TASK-07, without promoting
+   it to a pass.
+3. **No denser ViT-B n-sweep as a search for a passing point.** ViT-B
+   coverage, if wanted, must be a tradeoff CURVE with the selection rule and
+   multiplicity handling frozen in advance, and said so. The endorsed re-run
+   is the paired-bootstrap CI on the existing n=24 ViT-B point.
+
+Also from Phase B: `/home/hpc` went over its soft quota (114.7 G of 104.9 G
+on 2026-09-10) and was back under by 2026-09-13 (94.1 G).
+
+**Commits (local):** `8199011` (phase A log), `da4e631` + `8aabdfb`
+(set -u ordering + branch policy), `ae2def0` (absolute interpreter +
+gating preflight), `c707021` (module rename, repo-wide), `705428e`
+(N_NEURONS override), `8b70f18` (LAYER_RANGE / TTR_OUT_ROOT), `e6a2e69`
+(matrix runs the validated configuration).
+**Commits (HPC):** `1a2b1da`, `457f4cb`, `63f34a9`, `65d972e`.
+
+**PHASE B COMPLETE.** Nothing pending from the HPC except the paired-CI run
+that decision 1 requires (command printed with Phase C).
+
