@@ -1,0 +1,99 @@
+# configs/abl_matrix.yaml — TASK-12 matched-init ablation (6 runs)
+# =================================================================
+# The question: is SAGA's gain the LEARNED SPATIAL STRUCTURE, or would any
+# per-layer/per-head rescaling at the same insertion point do as well?
+# Nothing in results/ currently separates the two, and TASK-07 makes the
+# question sharp: the gate's suppression map is significantly anti-correlated
+# with the sink address at layers 7-8 in all four ViT-S/mixup repeats.
+#
+# Consumed by classification/tools/train.py (--matrix ... --run <run_id>)
+# and scripts/gen_slurm_chain.py, exactly like configs/e2r_matrix.yaml.
+# Every run resolves onto the SAME legacy config (classification/configs/
+# base.yaml, the mixup recipe) and the SAME matrix-wide `overrides` block,
+# so the six arms differ in NOTHING except `gate_mode` (and gate_init_logit
+# for arm F). That is a structural guarantee, not a claim: tests/
+# test_task12_ablation.py resolves all six configs and diffs them.
+#
+# Cell: ViT-S/16, mixup recipe, 100 epochs, seed 0.
+# 100 epochs (not the headline 300) is the ablation's budget; it makes every
+# arm-vs-arm comparison internally valid and every comparison against
+# e2_pooled.csv's 300-epoch numbers a DIFFERENT SCHEDULE — Phase C states
+# that caveat and flags any ranking inversion loudly.
+
+config_dir: ../classification/configs
+
+# Applied to every run before any per-run override — the schedule and the
+# recipe are written ONCE so no arm can drift.
+overrides:
+  train:
+    epochs: 100
+    # warmup_epochs stays at base.yaml's 20 (20% of this schedule vs 6.7% of
+    # the 300-epoch one — a consequence of shortening the schedule, recorded
+    # rather than retuned: retuning would make the arms incomparable to the
+    # headline runs in a second, uncontrolled way).
+
+defaults:
+  gate_init_logit: 0.0        # phi = 0  ->  gate = 0.5  (arms B, C, E)
+  layerscale_init: 1.0e-6     # DeiT-III; see saga/gate.py LAYERSCALE_INIT_DEIT3
+  wd_phi_zero: false          # weight decay applies to phi, as in e2r
+  drop_path_rate: 0.0
+  diag_freq: 10               # diag/diag_e###.json every N epochs
+  diag_split: results/diagsplit/val_diag_split.json
+  diag_n_effrank: 10000
+  grad_log_every: 100         # log_grad_phi cadence (iters)
+  grad_log_epochs: 31         # ... for epochs 0..30 (A2: "first 30 epochs")
+
+# SLURM chain length — ONE job per run, from the MEASURED cost of this exact
+# configuration rather than TASK-05's pre-run estimate (which said ~35 h for
+# 300 epochs and was 2.6x too pessimistic):
+# results/runs/e2r_vits_mixup_saga_s1/log.csv has a median wall_time of
+# 161.4 s/epoch over its 300 epochs (13.46 h of training in total), so 100
+# epochs is ~4.5 h of training. Add 100 full-val passes and ~20-40 min of
+# staging and a run is ~6 h against the 24 h wall — a 4x margin.
+# If a job does die, `bash scripts/submit_<run_id>.sh` simply queues another
+# (--dependency=singleton) and --resume auto continues from ckpt/last.pth.
+chain:
+  vit_small_patch16_224: 1
+
+runs:
+  # arm A — reference: plain ViT-S, no gate module at all.
+  abl_vits_mixup_baseline_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: baseline, seed: 0,
+     gate_mode: none}
+
+  # arm B — floor: the gate exists and is FROZEN at sigmoid(0) = 0.5.
+  # Isolates the init-scale effect alone (0 trainable gate params).
+  abl_vits_mixup_const05_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
+     gate_mode: const}
+
+  # arm C — SAGA minus the spatial dimension: one learnable scalar per
+  # (layer, head), broadcast over all 196 positions. 72 params.
+  abl_vits_mixup_headscalar_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
+     gate_mode: headscalar}
+
+  # arm D — the rescaling control a reviewer means: standard LayerScale
+  # (per-channel gamma, init 1e-6) at the SAME insertion point G1. 4,608
+  # params. Two properties, both reported rather than left implicit:
+  #   * LayerScale scales every token, CLS included; the gate never touches
+  #     CLS. That is the standard formulation.
+  #   * gamma carries weight decay 0.05 like phi does in every other arm
+  #     (wd_phi_zero: false, the e2r legacy). timm would exclude its own
+  #     1-dim LayerScale gamma from WD; matching the arms to each other was
+  #     the priority here, and the choice is recorded in every meta.json.
+  abl_vits_mixup_layerscale_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
+     gate_mode: layerscale}
+
+  # arm E — SAGA as shipped: full phi[L,H,N], init 0 -> 0.5. 14,112 params.
+  abl_vits_mixup_spatial_i0_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
+     gate_mode: spatial, log_grad_phi: true}
+
+  # arm F — same gate, identity-ish init: phi = +4 -> sigmoid(4) = 0.982.
+  # Answers "does the halving at init matter?" separately from "does the
+  # spatial structure matter?".
+  abl_vits_mixup_spatial_i4_s0:
+    {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
+     gate_mode: spatial, gate_init_logit: 4.0, log_grad_phi: true}

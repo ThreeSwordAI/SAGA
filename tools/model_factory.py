@@ -26,6 +26,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from saga import build_saga_vit
+from saga.gate import LAYERSCALE_INIT_DEIT3
 
 ARCH_MAP = {
     "vit_small": "vit_small_patch16_224",
@@ -42,14 +43,25 @@ def build_model(
     patch_size: int = 16,
     num_classes: int = 1000,
     reg_tokens: int = 4,
+    gate_mode: "str | None" = None,
+    layerscale_init: float = LAYERSCALE_INIT_DEIT3,
 ) -> torch.nn.Module:
     """Build a {baseline, registers, saga} model exactly as trained.
-    `arch` is 'vit_small'/'vit_base'/'vit_large' or a full timm model name."""
+    `arch` is 'vit_small'/'vit_base'/'vit_large' or a full timm model name.
+
+    `gate_mode` (TASK-12) selects the ablation arm's gate parameterisation
+    and must match the run's `model.gate_mode` in config.resolved.yaml, or
+    the strict load will (rightly) fail on the gate's shape. None keeps the
+    pre-TASK-12 behaviour: 'spatial' for saga, 'none' otherwise."""
     timm_arch = ARCH_MAP.get(arch, arch)
     if variant not in VARIANTS:
         raise ValueError(f"variant must be one of {VARIANTS}, got {variant!r}")
 
     if variant == "registers":
+        if gate_mode not in (None, "none"):
+            raise ValueError(
+                f"variant 'registers' has no gate; got gate_mode="
+                f"{gate_mode!r}")
         import timm
         return timm.create_model(
             timm_arch,
@@ -59,9 +71,14 @@ def build_model(
             reg_tokens=reg_tokens,
         )
 
+    if gate_mode is None:
+        gate_mode = "spatial" if variant == "saga" else "none"
+
     return build_saga_vit(
         arch=timm_arch,
-        gate=(variant == "saga"),
+        gate=(gate_mode != "none"),
+        gate_mode=gate_mode,
+        layerscale_init=layerscale_init,
         img_size=img_size,
         patch_size=patch_size,
         num_classes=num_classes,

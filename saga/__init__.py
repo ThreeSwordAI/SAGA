@@ -22,7 +22,10 @@ Public API:
 That is the entire interface. Two imports, one function call.
 """
 
-from saga.gate import SpatialGate
+from saga.gate import (GATE_MODES, LAYERSCALE_INIT_DEIT3, PHI_MODES,
+                       LayerScaleGate, SpatialGate, build_gate)
 from saga.vit  import build_saga_vit, GatedAttention, SAGAViT
 
-__all__ = ['SpatialGate', 'build_saga_vit', 'GatedAttention', 'SAGAViT']
+__all__ = ['SpatialGate', 'LayerScaleGate', 'build_gate', 'GATE_MODES',
+           'PHI_MODES', 'LAYERSCALE_INIT_DEIT3',
+           'build_saga_vit', 'GatedAttention', 'SAGAViT']

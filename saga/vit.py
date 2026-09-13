@@ -25,7 +25,7 @@ import torch.nn.functional as F
 import timm
 from typing import Optional, List, Tuple
 
-from saga.gate import SpatialGate
+from saga.gate import GATE_MODES, LAYERSCALE_INIT_DEIT3, build_gate
 
 
 class GatedAttention(nn.Module):
@@ -42,7 +42,8 @@ class GatedAttention(nn.Module):
     which is used when build_saga_vit is called with gate=False.
     """
 
-    def __init__(self, original_attn: nn.Module, gate: Optional[SpatialGate]):
+    def __init__(self, original_attn: nn.Module,
+                 gate: Optional[nn.Module] = None):
         super().__init__()
 
         # Copy all components from the timm attention module
@@ -63,7 +64,9 @@ class GatedAttention(nn.Module):
         self.q_norm = getattr(original_attn, 'q_norm', nn.Identity())
         self.k_norm = getattr(original_attn, 'k_norm', nn.Identity())
 
-        # The spatial gate — None for baseline, SpatialGate for SAGA
+        # The gate — None for baseline, SpatialGate for SAGA (and for the
+        # TASK-12 const/headscalar arms), LayerScaleGate for the LayerScale
+        # control. All of them act at G1, below.
         self.gate = gate
 
     def forward(self, x: torch.Tensor, attn_mask=None, **kwargs) -> torch.Tensor:
@@ -308,6 +311,8 @@ def build_saga_vit(
     patch_size:  int  = 16,
     num_classes: int  = 1000,
     pretrained:  bool = False,
+    gate_mode:   Optional[str]   = None,
+    layerscale_init: float       = LAYERSCALE_INIT_DEIT3,
     **timm_kwargs,
 ) -> SAGAViT:
     """
@@ -317,6 +322,15 @@ def build_saga_vit(
         arch        timm model name, e.g. 'vit_base_patch16_224'
         gate        True  → insert SpatialGate at G1 in every attention block
                     False → return standard timm ViT (baseline, no modification)
+        gate_mode   TASK-12 ablation arms: 'none' | 'const' | 'headscalar' |
+                    'layerscale' | 'spatial'. None (the default) derives the
+                    mode from `gate` — 'spatial' if True, 'none' if False —
+                    so every pre-TASK-12 caller builds exactly what it built
+                    before. Passing a mode that contradicts `gate` is refused
+                    rather than silently resolved.
+        layerscale_init
+                    init value for gate_mode='layerscale' (default: the
+                    DeiT-III value; see saga/gate.py). Ignored otherwise.
         img_size    Input image size (square assumed).
         patch_size  Patch size. Must match arch name.
         num_classes Number of output classes.
@@ -336,6 +350,20 @@ def build_saga_vit(
             "build_saga_vit cannot build register-token models: SAGAViT "
             "supports one prefix token only (bug B6). Build the timm model "
             "directly for the registers variant.")
+
+    # ── gate_mode resolution (TASK-12) ────────────────────────────────────
+    if gate_mode is None:
+        gate_mode = "spatial" if gate else "none"
+    elif gate_mode not in GATE_MODES:
+        raise ValueError(f"gate_mode must be one of {GATE_MODES}, "
+                         f"got {gate_mode!r}")
+    elif bool(gate) != (gate_mode != "none"):
+        raise ValueError(
+            f"gate={gate} contradicts gate_mode={gate_mode!r}: gate=False "
+            f"means no gate module at all (gate_mode='none'), gate=True "
+            f"means one of {GATE_MODES[1:]}. Refusing to guess which was "
+            f"meant.")
+
     model = timm.create_model(
         arch,
         pretrained       = pretrained,
@@ -355,16 +383,29 @@ def build_saga_vit(
         raise ValueError(
             f"patch_size={patch_size} disagrees with the built model's "
             f"patch size {ps} (arch {arch!r})")
-    num_heads = model.blocks[0].attn.num_heads
+    attn0 = model.blocks[0].attn
+    num_heads = attn0.num_heads
+    # head_dim exactly as GatedAttention derives it, so LayerScale's gamma
+    # matches the tensor it multiplies on every timm version.
+    head_dim = getattr(attn0, "head_dim", None)
+    if head_dim is None:
+        head_dim = attn0.qkv.weight.shape[0] // (3 * num_heads)
 
-    if gate:
-        # Replace every attention block with GatedAttention
+    if gate_mode != "none":
+        # Replace every attention block with GatedAttention. Every arm of the
+        # TASK-12 ablation reaches G1 through this ONE code path — only the
+        # module build_gate returns differs.
         for block in model.blocks:
-            spatial_gate = SpatialGate(
-                grid_h    = grid_h,
-                grid_w    = grid_w,
-                num_heads = num_heads,
+            block.attn = GatedAttention(
+                block.attn,
+                gate=build_gate(
+                    gate_mode,
+                    grid_h          = grid_h,
+                    grid_w          = grid_w,
+                    num_heads       = num_heads,
+                    head_dim        = head_dim,
+                    layerscale_init = layerscale_init,
+                ),
             )
-            block.attn = GatedAttention(block.attn, gate=spatial_gate)
 
     return SAGAViT(model)

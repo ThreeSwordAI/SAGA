@@ -33,6 +33,7 @@ from saga.metrics import compute_diagnostics
 from saga.run_registry import file_sha256, git_sha
 from tools.build_diag_split import DiagSplitDataset
 from tools.eval import build_val_transform
+from saga.gate import GATE_MODES
 from tools.model_factory import build_model, load_checkpoint
 
 
@@ -43,6 +44,11 @@ def main():
     parser.add_argument("--arch", required=True, choices=["vit_small", "vit_base"])
     parser.add_argument("--variant", required=True,
                         choices=["baseline", "registers", "saga"])
+    parser.add_argument("--gate-mode", default=None, choices=list(GATE_MODES),
+                        help="TASK-12 ablation arms: the run's "
+                             "model.gate_mode from config.resolved.yaml. "
+                             "Default None = the pre-TASK-12 construction "
+                             "('spatial' for saga, 'none' otherwise).")
     parser.add_argument("--data", required=True, metavar="ROOT",
                         help="ImageNet root containing val/ (ImageFolder layout)")
     parser.add_argument("--split-file",
@@ -65,7 +71,8 @@ def main():
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
 
-    model = build_model(args.arch, args.variant)
+    model = build_model(args.arch, args.variant,
+                        gate_mode=args.gate_mode)
     load_checkpoint(model, args.ckpt)
     model = model.to(device).eval()
 
@@ -94,6 +101,7 @@ def main():
         "git_sha": git_sha(),
         "arch": args.arch,
         "variant": args.variant,
+        "gate_mode": args.gate_mode,
         **diag,
         "seed": args.seed,
         "timestamp": datetime.now(timezone.utc).isoformat(),

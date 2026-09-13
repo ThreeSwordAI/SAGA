@@ -13,9 +13,23 @@ results/
     log.csv                 # one row per epoch (training tasks; later)
     ckpt/                   # *.pth — git-ignored
     gates/phi_e###.npz      # SAGA gate params per epoch (small; committed)
+                            # [TASK-12] shape [L, H, N] for gate_mode
+                            # spatial/const and [L, H, 1] for headscalar;
+                            # the layerscale arm has no phi and writes none
     diag/diag_e###.json     # periodic diagnostics (later tasks)
     eval/*.json             # full-val evaluations
     attn/*.npz              # probe attention dumps — git-ignored
+  runs/abl_<...>_s0/        # [TASK-12] matched-init ablation, ViT-S/mixup,
+                            # 100 epochs, six arms that differ ONLY in
+                            # model.gate_mode (none | const | headscalar |
+                            # layerscale | spatial) and, for one arm,
+                            # knobs.gate_init_logit. Same run contract as
+                            # every other runs/ entry; config.resolved.yaml
+                            # records the arm.
+  runs_smoke/<run_id>/      # 2-epoch contract smokes (never a result).
+                            # ckpt/ is git-ignored; the contract files are
+                            # committed so the smoke can be verified from
+                            # files (tools/check_abl_smoke.py).
   detection/<run_id>/       # [TASK-09] COCO detection runs (det_vitb_*_s1)
     meta.json  config.resolved.yaml  log.csv
     coco_eval_best.json     # six APs + ARs + per-category, at the best epoch

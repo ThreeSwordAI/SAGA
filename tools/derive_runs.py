@@ -65,20 +65,26 @@ def run_complete(run_dir: Path):
 
 
 def run_meta(run_dir: Path):
-    """(arch_short, variant) from the run's committed config.resolved.yaml."""
+    """(arch_short, variant, gate_mode) from the run's committed
+    config.resolved.yaml. gate_mode is None for every pre-TASK-12 run (the
+    key did not exist), which is exactly the flag value that reproduces the
+    construction those runs trained with."""
     cfg = yaml.safe_load(open(run_dir / "config.resolved.yaml"))
     arch = ARCH_SHORT.get(cfg["model"]["arch"])
     if arch is None:
         raise ValueError(f"{run_dir.name}: unsupported arch "
                          f"{cfg['model']['arch']!r}")
-    return arch, cfg["variant"]
+    return arch, cfg["variant"], cfg["model"].get("gate_mode")
 
 
 def plan_steps(run_dir: Path, data_root: str, split_file: str,
                python=sys.executable):
     """[(step_name, output_json, ckpt_path, argv)] for one run dir.
     Steps whose checkpoint file is missing are omitted (reported upstream)."""
-    arch, variant = run_meta(run_dir)
+    arch, variant, gate_mode = run_meta(run_dir)
+    # only passed on when the run recorded one — pre-TASK-12 command lines
+    # stay byte-identical
+    gm = ["--gate-mode", gate_mode] if gate_mode else []
     steps = []
     for tag in ("best", "last"):
         ckpt = run_dir / "ckpt" / f"{tag}.pth"
@@ -90,13 +96,13 @@ def plan_steps(run_dir: Path, data_root: str, split_file: str,
         steps.append((
             f"{run_dir.name}:eval:{tag}", eval_out, ckpt,
             [python, "tools/eval.py", "--ckpt", str(ckpt), "--arch", arch,
-             "--variant", variant, "--data", data_root,
+             "--variant", variant, *gm, "--data", data_root,
              "--out", str(eval_out)]))
         diag_out = run_dir / "diag" / f"diag_final_{tag}.json"
         steps.append((
             f"{run_dir.name}:diag:{tag}", diag_out, ckpt,
             [python, "tools/diagnose.py", "--ckpt", str(ckpt), "--arch", arch,
-             "--variant", variant, "--data", data_root,
+             "--variant", variant, *gm, "--data", data_root,
              "--split-file", split_file, "--out", str(diag_out), "--attn"]))
     return steps
 
