@@ -966,7 +966,8 @@ def test_derive_patched_writes_widened_prefix_and_canon_backfills(
 
 REPO = Path(__file__).resolve().parents[1]
 JOBS = REPO / "scripts" / "jobs"
-TTR_JOBS = ["ttr_validate.sbatch", "ttr_matrix.sbatch"]
+TTR_JOBS = ["ttr_validate.sbatch", "ttr_matrix.sbatch",
+            "ttr_paired_ci.sbatch"]
 
 
 def _job(name):
@@ -1388,3 +1389,41 @@ def test_prepare_run_rejects_a_scan_depth_mismatch(tmp_path):
 
     match = run("0,12")               # the range it really has
     assert match.returncode == 0, match.stdout + match.stderr
+
+
+def test_paired_ci_job_defaults_to_the_endorsed_run_only():
+    """Decision 1 endorses the ViT-B/mixup n=24 point and nothing else;
+    decision 3 forbids sweeping for a passing point. The defaults therefore
+    reproduce exactly that run, and the frozen threshold is not settable
+    from the launcher."""
+    src = _job("ttr_paired_ci.sbatch")
+    assert "CELL=${CELL:-e2r_vitb_mixup_baseline_s1}" in src
+    assert "ARCH=${ARCH:-vit_base}" in src
+    assert "RECIPE=${RECIPE:-mixup}" in src
+    assert "N_BEST=${N_BEST:-24}" in src
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.lstrip().startswith("#"))
+    assert "--threshold" not in code, (
+        "the frozen 1.00 threshold must not be settable from the launcher")
+    assert "no verdict is recomputed" in src
+
+
+def test_paired_ci_job_checks_scipy_and_its_inputs_before_staging():
+    """McNemar needs scipy, and a missing checkpoint or neurons file must
+    abort in seconds rather than after a 10-minute stage."""
+    lines = _job("ttr_paired_ci.sbatch").splitlines()
+    f = lambda pred: next(i for i, l in enumerate(lines) if pred(l))
+    i_pre = f(lambda l: l.startswith("if ! $PY -c"))
+    i_inputs = f(lambda l: l.strip().startswith("for f in \"$CKPT\""))
+    i_stage = f(lambda l: l.strip() == "stage_probe_imagenet_val")
+    assert "import torch, timm, scipy" in lines[i_pre]
+    assert i_pre < i_inputs < i_stage
+
+
+def test_paired_ci_job_names_both_artifacts_for_commit():
+    """The npz carries the per-image outcomes; without it the CI cannot be
+    recomputed without another GPU pass."""
+    src = _job("ttr_paired_ci.sbatch")
+    assert "$OUT" in src
+    assert "${OUT%.json}.npz" in src
+    assert "build_ttr_note.py" in src   # tells the human the next step
