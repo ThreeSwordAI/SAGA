@@ -11,6 +11,10 @@ by TASK-05 design).
     python scripts/gen_slurm_chain.py [--matrix configs/e2r_matrix.yaml] \
         [--out-dir scripts]
 
+The matrix path is written into the generated job files, so the same
+generator serves configs/abl_matrix.yaml (TASK-12) — see the ports note
+below before adding a matrix.
+
 Emits: scripts/jobs/e2r_<run_id>.sbatch and scripts/submit_<run_id>.sh.
 The #SBATCH header and environment/staging lines copy the known-good
 patterns of classification/scripts/e2_train_alex.sh and How to Run.md.
@@ -19,8 +23,10 @@ patterns of classification/scripts/e2_train_alex.sh and How to Run.md.
 leaves every other run's existing files byte-identical. Ports are then
 assigned within the selected set from --base-port, so pass a base that
 does not collide with previously generated job files (the original 10
-runs hold 29700..29709, the TASK-07 additions 29750..29753; the smoke
-scripts hold 29698/29699).
+runs hold 29700..29709, the TASK-07 additions 29750..29753, the TASK-12
+ablation 29770..29775; the smoke scripts hold 29698/29699 and 29769).
+tests/test_task09_dense.py derives every port in the repo and asserts
+they are unique — including the arithmetic ones.
 
 Since TASK-07 grew the matrix, a full regeneration would REWRITE every
 existing job file with reshuffled ports (ports follow the sorted index).
@@ -65,7 +71,7 @@ stage_imagenet
     --master_addr=localhost \\
     --master_port={port} \\
     classification/tools/train.py \\
-        --matrix configs/e2r_matrix.yaml \\
+        --matrix {matrix} \\
         --run {run_id} \\
         --data_root $STAGE_DIR \\
         --resume auto
@@ -135,12 +141,15 @@ def main():
             sys.exit(f"--only run ids not in the matrix: {unknown}")
         runs = [(rid, matrix["runs"][rid]) for rid in wanted]
 
+    # posix form so a Windows-style path can never reach a job file
+    matrix_ref = Path(args.matrix).as_posix()
+
     for i, (run_id, run) in enumerate(runs):
         n = int(chain.get(run["arch"], 2))
         port = args.base_port + i
         job_path = jobs_dir / f"{run_id}.sbatch"
         job_path.write_text(
-            JOB_TEMPLATE.format(run_id=run_id, port=port),
+            JOB_TEMPLATE.format(run_id=run_id, port=port, matrix=matrix_ref),
             encoding="utf-8", newline="\n")
 
         est = f"{n}x24h walltime, arch {run['arch']}"
@@ -152,7 +161,7 @@ def main():
               f"{submit_path.name} + jobs/{job_path.name}")
 
     print(f"\n{len(runs)} chains generated. Submit with e.g.:")
-    print("  bash scripts/submit_e2r_vits_nomix_baseline_s1.sh")
+    print(f"  bash scripts/submit_{runs[0][0]}.sh")
 
 
 if __name__ == "__main__":

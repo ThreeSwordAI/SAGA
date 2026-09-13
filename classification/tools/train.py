@@ -70,6 +70,7 @@ import yaml
 # ── SAGA ──────────────────────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from saga import build_saga_vit
+from saga.gate import GATE_MODES, LAYERSCALE_INIT_DEIT3
 from saga.run_registry import create_run, finalize_run
 
 LOG_FIELDS = ["epoch", "lr", "train_loss", "val_top1_full", "val_top5_full",
@@ -103,6 +104,8 @@ def resolve_run_config(matrix_path: str, run_id: str) -> dict:
     if run_id not in matrix["runs"]:
         raise KeyError(f"run {run_id!r} not in {matrix_path}")
     run = matrix["runs"][run_id]
+    if run is None:
+        raise ValueError(f"run {run_id!r} has an empty definition")
 
     cfg_dir = Path(matrix_path).parent / matrix.get(
         "config_dir", "../classification/configs")
@@ -115,9 +118,22 @@ def resolve_run_config(matrix_path: str, run_id: str) -> dict:
         raise ValueError(f"unknown recipe {run['recipe']!r}")
 
     variant = run["variant"]
+    # gate_mode (TASK-12). Absent  ->  exactly the pre-TASK-12 behaviour:
+    # 'spatial' for the saga variant, 'none' for everything else. `gate`
+    # stays the boolean the trainer already branches on.
+    gate_mode = run.get("gate_mode",
+                        "spatial" if variant == "saga" else "none")
+    if gate_mode not in GATE_MODES:
+        raise ValueError(f"run {run_id!r}: gate_mode must be one of "
+                         f"{GATE_MODES}, got {gate_mode!r}")
     cfg["model"] = deep_merge(cfg["model"], {
         "arch": run["arch"],
-        "gate": variant == "saga",
+        "gate": gate_mode != "none",
+        "gate_mode": gate_mode,
+        "layerscale_init": float(run.get(
+            "layerscale_init",
+            matrix.get("defaults", {}).get("layerscale_init",
+                                           LAYERSCALE_INIT_DEIT3))),
         "registers": 4 if variant == "registers" else 0,
     })
 
@@ -149,7 +165,11 @@ def resolve_run_config(matrix_path: str, run_id: str) -> dict:
         "grad_log_every": int(defaults.get("grad_log_every", 100)),
         "grad_log_epochs": int(defaults.get("grad_log_epochs", 31)),
     }
-    # per-run overrides (used by tests / smoke runs; empty in production)
+    # matrix-wide overrides FIRST, then per-run ones (used by tests / smoke
+    # runs; empty in the e2r matrix). The matrix-wide block is what keeps the
+    # TASK-12 arms on one schedule: the 100-epoch setting is written once, so
+    # no arm can silently train a different number of epochs.
+    cfg = deep_merge(cfg, matrix.get("overrides", {}))
     cfg = deep_merge(cfg, run.get("overrides", {}))
     return cfg
 
@@ -213,6 +233,11 @@ def build_model(cfg: dict) -> nn.Module:
             patch_size=patch_size,
             num_classes=n_classes,
             pretrained=False,
+            # TASK-12: absent from the config -> None -> derived from `gate`,
+            # i.e. the legacy construction, bit for bit.
+            gate_mode=m.get('gate_mode'),
+            layerscale_init=float(m.get('layerscale_init',
+                                        LAYERSCALE_INIT_DEIT3)),
         )
 
     return model
@@ -222,11 +247,27 @@ def apply_knobs(model: nn.Module, knobs: dict):
     """All knobs default to legacy values, where this function is a NO-OP."""
     logit = knobs.get("gate_init_logit", 0.0)
     if logit != 0.0:
+        n_filled = 0
         with torch.no_grad():
             for blk in model.blocks:
                 gate = getattr(blk.attn, "gate", None)
-                if gate is not None:
-                    gate.phi.fill_(logit)
+                phi = getattr(gate, "phi", None)   # None for LayerScaleGate
+                if phi is None:
+                    continue
+                if not phi.requires_grad:
+                    # TASK-12 arm B is defined as G = 0.5 exactly; a non-zero
+                    # init on a frozen gate would silently redefine the arm.
+                    raise ValueError(
+                        f"gate_init_logit={logit} on a FROZEN gate "
+                        f"(gate_mode='const'): that arm is defined as "
+                        f"sigmoid(0) = 0.5 everywhere. Refusing.")
+                phi.fill_(logit)
+                n_filled += 1
+        if n_filled == 0:
+            raise ValueError(
+                f"gate_init_logit={logit} was requested but this model has "
+                f"no gate phi to initialise (gate_mode 'none'/'layerscale'?) "
+                f"— the knob would be a silent no-op.")
 
     dpr = knobs.get("drop_path_rate", 0.0)
     if dpr > 0.0:
@@ -238,6 +279,19 @@ def apply_knobs(model: nn.Module, knobs: dict):
             if p > 0:
                 blk.drop_path1 = DropPath(p)
                 blk.drop_path2 = DropPath(p)
+
+
+def gate_param_counts(model: nn.Module) -> "tuple[int, int]":
+    """(registered, trainable) parameter counts of the gate modules — the
+    per-arm numbers TASK-12 reports (arm B registers 14,112 and trains 0)."""
+    total = trainable = 0
+    for name, p in model.named_parameters():
+        if ".attn.gate." not in name:
+            continue
+        total += p.numel()
+        if p.requires_grad:
+            trainable += p.numel()
+    return total, trainable
 
 
 def optimizer_parameters(model: nn.Module, knobs: dict):
@@ -387,13 +441,17 @@ def save_checkpoint(path, model_sd, optimizer, scheduler, scaler, epoch,
 # ── Instrumentation ───────────────────────────────────────────────────────────
 
 def dump_phi(model, epoch, gates_dir: Path):
+    """phi_e###.npz for every phi-parameterised gate (spatial/const/
+    headscalar). A LayerScale gate (TASK-12 arm D) has no phi — nothing is
+    written for it, which is exactly what the ablation expects."""
     blocks = getattr(model, "blocks", None)
     phis = []
     for blk in blocks:
         gate = getattr(blk.attn, "gate", None)
-        if gate is None:
+        phi = getattr(gate, "phi", None)
+        if phi is None:
             return
-        phis.append(gate.phi.detach().float().cpu().numpy())
+        phis.append(phi.detach().float().cpu().numpy())
     gates_dir.mkdir(parents=True, exist_ok=True)
     atomic_npz_save(gates_dir / f"phi_e{epoch:03d}.npz", phi=np.stack(phis))
 
@@ -445,10 +503,11 @@ class GradPhiLogger:
         rows = []
         for i, blk in enumerate(model.blocks):
             gate = getattr(blk.attn, "gate", None)
-            if gate is None or gate.phi.grad is None:
+            phi = getattr(gate, "phi", None)   # None for LayerScaleGate
+            if phi is None or phi.grad is None:
                 continue
             rows.append([epoch, step, i,
-                         float(gate.phi.grad.detach().norm().item())])
+                         float(phi.grad.detach().norm().item())])
         if rows:
             with open(self.path, "a", newline="") as f:
                 csv.writer(f).writerows(rows)
@@ -569,8 +628,11 @@ def run_training(matrix_path, run_id, data_root, out_root="results/runs",
 
     if rank == 0:
         n_total = sum(p.numel() for p in model.parameters()) / 1e6
+        g_all, g_train = gate_param_counts(model)
         print(f"\n{'=' * 60}\n  {run_id}\n  Total params: {n_total:.1f}M  |  "
               f"GPUs: {world_size}  |  Batch: {cfg['train']['batch_size']}"
+              f"\n  gate_mode: {cfg['model'].get('gate_mode', 'none')}  |  "
+              f"gate params: {g_all} ({g_train} trainable)"
               f"\n{'=' * 60}\n", flush=True)
 
     # Legacy runs were UNSEEDED: every rank's augmentation/dropout streams
