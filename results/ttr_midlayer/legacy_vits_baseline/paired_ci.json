@@ -1,0 +1,59 @@
+{
+  "schema": "saga.ttr.paired_ci/v1",
+  "arch": "vit_small",
+  "recipe": "mixup",
+  "variant": "baseline",
+  "ckpt": "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-S_baseline/last.pth",
+  "ckpt_sha256": "cd926200127b98cbc597ddad82d84fd823376addc0ac1075a98de73b21e7d17d",
+  "git_sha": "2d22794c2d8f08e461cea9923bd20a2e0976d2d3",
+  "neurons_file": "results/ttr_midlayer/legacy_vits_baseline/neurons.json",
+  "criterion": "mean_abs_act_at_outliers_v1",
+  "layer_range": [
+    3,
+    12
+  ],
+  "n_neurons": 24,
+  "layers_touched": [
+    3,
+    4,
+    5,
+    6,
+    8,
+    9,
+    10,
+    11
+  ],
+  "n_extra_tokens": 1,
+  "scale": 1.0,
+  "normal_values": "zero",
+  "amp": "off",
+  "seed": 0,
+  "n_images": 50000,
+  "n_both_correct": 38547,
+  "n_both_wrong": 9767,
+  "b_unpatched_correct_patched_wrong": 891,
+  "c_unpatched_wrong_patched_correct": 795,
+  "n_discordant": 1686,
+  "top1_unpatched": 78.876,
+  "top1_patched": 78.684,
+  "top1_drop": 0.19200000000000728,
+  "bootstrap": {
+    "method": "exact paired bootstrap via multinomial over (b, c, concordant); equivalent to resampling the paired per-image outcomes",
+    "n_boot": 100000,
+    "seed": 0,
+    "alpha": 0.05,
+    "ci_low": 0.03,
+    "ci_high": 0.352,
+    "se": 0.08197214541730773
+  },
+  "mcnemar": {
+    "test": "exact binomial on the discordant pairs (McNemar)",
+    "p_value": 0.020660419084172113,
+    "p_value_midp": 0.01939701872291272,
+    "backend": "scipy.stats.binomtest"
+  },
+  "frozen_threshold": 1.0,
+  "threshold_inside_ci": false,
+  "note": "The A3 verdict is NOT recomputed here and is not affected by this file. The threshold is frozen at 1.0 and the cell's verdict stands as tools/ttr_validate.py recorded it; these numbers only quantify how precisely the drop was measured.",
+  "timestamp": "2026-09-13T14:28:45.240799+00:00"
+}

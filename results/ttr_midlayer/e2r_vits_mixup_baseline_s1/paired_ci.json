@@ -1,0 +1,58 @@
+{
+  "schema": "saga.ttr.paired_ci/v1",
+  "arch": "vit_small",
+  "recipe": "mixup",
+  "variant": "baseline",
+  "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vits_mixup_baseline_s1/ckpt/last.pth",
+  "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+  "git_sha": "2d22794c2d8f08e461cea9923bd20a2e0976d2d3",
+  "neurons_file": "results/ttr_midlayer/e2r_vits_mixup_baseline_s1/neurons.json",
+  "criterion": "mean_abs_act_at_outliers_v1",
+  "layer_range": [
+    3,
+    12
+  ],
+  "n_neurons": 24,
+  "layers_touched": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    10
+  ],
+  "n_extra_tokens": 1,
+  "scale": 1.0,
+  "normal_values": "zero",
+  "amp": "off",
+  "seed": 0,
+  "n_images": 50000,
+  "n_both_correct": 38499,
+  "n_both_wrong": 9743,
+  "b_unpatched_correct_patched_wrong": 932,
+  "c_unpatched_wrong_patched_correct": 826,
+  "n_discordant": 1758,
+  "top1_unpatched": 78.862,
+  "top1_patched": 78.65,
+  "top1_drop": 0.21199999999998909,
+  "bootstrap": {
+    "method": "exact paired bootstrap via multinomial over (b, c, concordant); equivalent to resampling the paired per-image outcomes",
+    "n_boot": 100000,
+    "seed": 0,
+    "alpha": 0.05,
+    "ci_low": 0.048,
+    "ci_high": 0.376,
+    "se": 0.08397795933904889
+  },
+  "mcnemar": {
+    "test": "exact binomial on the discordant pairs (McNemar)",
+    "p_value": 0.012248979848774382,
+    "p_value_midp": 0.011470132330695094,
+    "backend": "scipy.stats.binomtest"
+  },
+  "frozen_threshold": 1.0,
+  "threshold_inside_ci": false,
+  "note": "The A3 verdict is NOT recomputed here and is not affected by this file. The threshold is frozen at 1.0 and the cell's verdict stands as tools/ttr_validate.py recorded it; these numbers only quantify how precisely the drop was measured.",
+  "timestamp": "2026-09-13T14:26:47.227792+00:00"
+}
