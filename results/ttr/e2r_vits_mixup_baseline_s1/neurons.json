@@ -10,8 +10,8 @@
   "variant": "baseline",
   "ckpt": "/home/hpc/iwi5/iwi5359h/my_repos/SAGA/results/runs/e2r_vits_mixup_baseline_s1/ckpt/last.pth",
   "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
-  "git_sha": "de3f2cf06009e4078e0dd7d50015d45ecd4a38fc",
-  "timestamp": "2026-09-10T19:34:25.822195+00:00",
+  "git_sha": "a6355799dfa0c0e8b8468c60658bd575eb952d6b",
+  "timestamp": "2026-09-11T18:54:18.823616+00:00",
   "n_images_seen": 500,
   "n_images_scored": 500,
   "layer_range": [
