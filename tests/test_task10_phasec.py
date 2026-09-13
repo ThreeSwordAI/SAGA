@@ -361,3 +361,67 @@ def test_paired_ci_cli_end_to_end(tmp_path, monkeypatch):
         assert int(z["n_images"][0]) == n
     assert int((unp & ~pat).sum()) == r["b_unpatched_correct_patched_wrong"]
     assert int((~unp & pat).sum()) == r["c_unpatched_wrong_patched_correct"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The returned paired CI (decision 1), once it is on disk
+# ─────────────────────────────────────────────────────────────────────────────
+
+CI_JSON = (REPO / "results/ttr_midlayer/e2r_vitb_mixup_baseline_s1"
+           / "paired_ci.json")
+
+
+@pytest.mark.skipif(not CI_JSON.exists(), reason="paired CI not yet run")
+def test_paired_ci_partitions_the_sample_and_matches_the_matrix_eval():
+    r = json.loads(CI_JSON.read_text())
+    ev = json.loads((REPO / "results/runs/ttr_e2r_vitb_mixup_baseline_s1"
+                     / "eval/eval_last.json").read_text())
+    n = r["n_images"]
+    assert n == 50000
+    assert (r["n_both_correct"] + r["n_both_wrong"]
+            + r["b_unpatched_correct_patched_wrong"]
+            + r["c_unpatched_wrong_patched_correct"]) == n
+    assert r["ckpt_sha256"] == ev["ckpt_sha256"]
+    assert r["layer_range"] == [3, 12]
+    assert r["n_neurons"] == 24
+    # the patched marginal must equal the matrix's independent full-val eval
+    assert r["top1_patched"] == pytest.approx(ev["top1"], abs=1e-9)
+
+
+@pytest.mark.skipif(not CI_JSON.exists(), reason="paired CI not yet run")
+def test_paired_ci_npz_reproduces_the_json_counts():
+    """The committed npz must let anyone recompute the CI without a GPU."""
+    r = json.loads(CI_JSON.read_text())
+    with np.load(CI_JSON.with_suffix(".npz")) as z:
+        n = int(z["n_images"][0])
+        unp = np.unpackbits(z["unpatched_correct"])[:n].astype(bool)
+        pat = np.unpackbits(z["patched_correct"])[:n].astype(bool)
+    assert n == r["n_images"]
+    assert int((unp & ~pat).sum()) == r["b_unpatched_correct_patched_wrong"]
+    assert int((~unp & pat).sum()) == r["c_unpatched_wrong_patched_correct"]
+    redone = paired_stats(unp, pat, n_boot=20000, seed=r["seed"])
+    assert redone["top1_drop"] == pytest.approx(r["top1_drop"], abs=1e-9)
+
+
+@pytest.mark.skipif(not CI_JSON.exists(), reason="paired CI not yet run")
+def test_note_distinguishes_mcnemar_from_the_threshold_question():
+    """p vs ZERO and the CI vs the BAR answer different questions; the note
+    must not let an overwhelming p be read as settling the threshold."""
+    text = NOTE.read_text(encoding="utf-8")
+    assert "tests the drop against ZERO, not against the threshold" in text
+    assert "Two separate facts, both true" in text
+    # and a tiny p must never render as 0.000000
+    assert "McNemar exact p = 0.000000" not in text
+    assert "e-" in text.split("McNemar exact p = ")[1][:12]
+
+
+@pytest.mark.skipif(not CI_JSON.exists(), reason="paired CI not yet run")
+def test_table_carries_the_ci_and_the_threshold_verdict_unchanged():
+    vb = next(r for r in rows() if r["arch"] == "vit_base")
+    assert vb["paired_ci_low"] != MISSING
+    lo, hi = float(vb["paired_ci_low"]), float(vb["paired_ci_high"])
+    assert lo < float(vb["paired_drop"]) < hi
+    inside = str(vb["threshold_inside_ci"]).lower() == "true"
+    assert inside == (lo <= float(vb["gate_max_top1_drop"]) <= hi)
+    # the CI does NOT change the recorded verdict
+    assert vb["gate_verdict"] == "FAIL"

@@ -39,6 +39,17 @@ def signed(v, nd=3):
     return f"{float(v):+.{nd}f}"
 
 
+def pval(v):
+    """p-values need scientific notation: %.6f renders 5.3e-32 as 0.000000,
+    which reads as exactly zero."""
+    if v in ("", MISSING, None):
+        return MISSING
+    x = float(v)
+    if x == 0.0:
+        return "0"
+    return f"{x:.4g}" if x >= 1e-4 else f"{x:.3e}"
+
+
 def pct(v, nd=1):
     if v in ("", MISSING, None):
         return MISSING
@@ -477,13 +488,23 @@ def section_knife(rows, gates, repo: Path) -> list:
             f"**[{num(vb['paired_ci_low'],4)}, {num(vb['paired_ci_high'],4)}]** "
             f"(SE {num(vb['paired_ci_se'],4)}, "
             f"{vb['paired_n_boot']} resamples).",
-            f"- McNemar exact p = {num(vb['mcnemar_p'],6)}.",
+            f"- McNemar exact p = {pval(vb['mcnemar_p'])}. **This tests the "
+            f"drop against ZERO, not against the threshold.** It is "
+            f"overwhelming, and it says only that TTR really does cost this "
+            f"model accuracy — which was never in doubt. Whether that cost "
+            f"exceeds the "
+            f"{num(vb['gate_max_top1_drop'],2)}-point bar is a different "
+            f"question, and the CI is what answers it.",
             "",
             (f"The frozen {num(vb['gate_max_top1_drop'],2)}-point threshold "
              f"**lies inside** that interval, so the measured drop is not "
              f"distinguishable from the bar at this sample size: the FAIL is "
              f"a knife-edge miss within measurement uncertainty, and should "
-             f"be read as such rather than as a demonstrated shortfall."
+             f"be read as such rather than as a demonstrated shortfall. Two "
+             f"separate facts, both true: the accuracy cost is real "
+             f"(p vs zero above), and its size relative to the bar is "
+             f"unresolved at n="
+             f"{vb['n_images_eval']}."
              if inside else
              f"The frozen {num(vb['gate_max_top1_drop'],2)}-point threshold "
              f"lies OUTSIDE that interval, so the drop is distinguishable "
