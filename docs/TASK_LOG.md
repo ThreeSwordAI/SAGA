@@ -2185,3 +2185,45 @@ whether to merge `task/10-ttr-ci-fill` and close the task, and whether any
 of the optional follow-ups are wanted (a ViT-B tradeoff CURVE with the
 selection rule frozen in advance — never an n-sweep hunting for a passing
 point — or paired CIs on the other three cells, which were not endorsed).
+
+**Addendum (2026-09-13, limitations + the two PASS-cell CIs):** the human's
+five-option call came back YES/YES/NO/PARTIAL-YES.
+
+- **Limitations (§9 of the note, generated).** The post-hoc layer selection
+  is now stated plainly: gate FAILED at every n over all 12 blocks → sweeps
+  inspected → scan restricted to layers 3-12 → ViT-S/mixup PASSED. Three
+  qualifiers, as facts not as a defence: the mid-layer range comes from the
+  authors' paper and would justify itself if our full-depth run had never
+  happened; no threshold was moved; and the two ViT-S/mixup checkpoints are
+  **partial replication, not a held-out test**, because the restriction was
+  chosen while looking at one of them. It closes by saying a clean test would
+  need a cell that played no part in selecting the range, that no such cell
+  exists here, and that none is claimed. The other caveats are folded in and
+  COMPUTED, not typed: the n=1 cells, the 3/5-vs-5/5 replication margin, one
+  address pair per cell, the 5k-gate vs 50k-headline sample difference (ViT-B
+  1.0200 vs 0.9760 as the worked case), and a scope paragraph recording that
+  no tradeoff curve was run.
+- **`scripts/jobs/ttr_paired_ci_pass_cells.sbatch`** — paired CIs for the two
+  PASS cells only (`e2r_vits_mixup_baseline_s1`, `legacy_vits_baseline`, both
+  at their own gate best_n = 24), in ONE job so val is staged once.
+  ViT-S/nomix is excluded and the file says why: not endorsed, and it fails
+  on the sink bar rather than the accuracy bar, so an accuracy CI would not
+  bear on its verdict. **Two tests tie the job to the DATA** — the cells it
+  runs must be exactly those whose `validate.json` says passed, and each n
+  must equal that cell's recorded `best_n`, so a changed verdict cannot leave
+  a stale list running.
+- **No ViT-B tradeoff curve** (decision 3): that would be hunting for a pass.
+
+**Branch reconciliation, stated rather than improvised:** the human asked for
+`task/10-ttr-limitations` off `main`, but `task/10-ttr-ci-fill` had not been
+merged, so branching off `main` would have discarded the §7 fill and forced
+it to be redone. The branch is therefore cut off `task/10-ttr-ci-fill`
+instead; merging `task/10-ttr-limitations` brings BOTH, in one merge.
+
+`pytest -q`: **435 passed, 22 skipped**. Commit `c1733b7`.
+
+**Pending from HPC:** one job — `scripts/jobs/ttr_paired_ci_pass_cells.sbatch`.
+Four files come back (`paired_ci.json` + `paired_ci.npz` for each of the two
+cells); then `analysis/build_ttr_tables.py` and `analysis/build_ttr_note.py`
+are re-run locally and the tables and note fill themselves in. **TASK 10 is
+content-complete once those land.**
