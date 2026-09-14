@@ -15,7 +15,8 @@ numpy/yaml — it runs on a login node as happily as inside the smoke job.
 Checked per arm (all of it from FILES the run wrote, never from this
 process re-deriving what the run should have done):
   - the contract: meta.json (with end_time), config.resolved.yaml, log.csv
-    with the exact e2r schema, ckpt/last.pth
+    with the exact e2r schema, and last.pth wherever meta.json says the
+    checkpoints went (--ckpt_root can move them off the repo filesystem)
   - the resolved config differs from the other arms ONLY in run_id /
     variant / model.gate / model.gate_mode / knobs.gate_init_logit
   - gates/phi_e###.npz present for const/headscalar/spatial, ABSENT for
@@ -119,8 +120,11 @@ def check_arm(run_dir: Path, run_id: str, spec: dict, rep: Report):
     rep.check(all(r["val_top1_full"] not in ("", None) for r in rows),
               "full-val top-1 recorded every epoch")
 
-    rep.check((run_dir / "ckpt" / "last.pth").exists(),
-              "ckpt/last.pth present")
+    # the checkpoint may live off the repo filesystem (--ckpt_root); the run
+    # records where it actually went, so ask it rather than assume
+    ckpt_dir = Path(meta.get("ckpt_dir") or (run_dir / "ckpt"))
+    rep.check((ckpt_dir / "last.pth").exists(), "last.pth present",
+              ckpt_dir.as_posix())
 
     # ── gate artifacts ────────────────────────────────────────────────────
     gates = sorted((run_dir / "gates").glob("phi_e*.npz"))
@@ -147,9 +151,24 @@ def check_arm(run_dir: Path, run_id: str, spec: dict, rep: Report):
                           "arm C: one value per (layer, head), no spatial axis")
             init = float(spec.get("gate_init_logit", 0.0))
             if init:
-                rep.check(bool(np.allclose(phis[0], init, atol=1e-6)),
-                          f"epoch-0 phi == gate_init_logit ({init})",
-                          f"mean {float(phis[0].mean()):.4f}")
+                # phi_e000.npz is dumped AFTER epoch 0 has trained (the
+                # trainer's dump follows train_one_epoch), so it can never
+                # equal the init exactly. Weight decay alone accounts for
+                # most of the gap: AdamW's decoupled wd=0.05 over epoch 0's
+                # LR ramp gives prod(1 - lr*wd) = 0.99838, i.e. +4.0 -> 3.9935
+                # (measured on the real smoke: 3.9926). The question this
+                # check exists to answer is whether the init REACHED the
+                # model, so it asks that the epoch-0 value still sits near
+                # the init and nowhere near 0.
+                mean0 = float(phis[0].mean())
+                tol = max(0.05, 0.02 * abs(init))
+                rep.check(abs(mean0 - init) <= tol,
+                          f"epoch-0 phi still ~= gate_init_logit ({init}, "
+                          f"tol {tol:g}; dumped after epoch 0 trains)",
+                          f"mean {mean0:.4f}")
+                rep.check(abs(mean0 - init) < abs(init) / 2,
+                          f"the init reached the model (phi is near {init}, "
+                          f"not near 0)", f"mean {mean0:.4f}")
             if spec["gate_mode"] != "const":
                 rep.check(not np.array_equal(phis[0], phis[-1]),
                           "learnable phi actually moved in 2 epochs")

@@ -389,6 +389,24 @@ def test_arms_see_the_same_data_in_the_same_order(tmp_path, monkeypatch):
     assert seen["tinyA"] and seen["tinyA"] == seen["tinyB"]
 
 
+def test_a_zero_duration_epoch_does_not_kill_the_run(tmp_path, monkeypatch):
+    """A patched-out epoch can measure 0.0 s on Windows' 15.6 ms clock, and
+    the img_per_sec division then raised ZeroDivisionError AFTER the epoch's
+    work was done. Real epochs are minutes long, so this only ever bit
+    instrumented runs — but it bit them at the worst possible moment."""
+    data_root = _fake_imagenet(tmp_path / "data")
+    matrix = _tiny_two_arm_matrix(tmp_path, data_root)
+    monkeypatch.setattr(trainer, "train_one_epoch",
+                        lambda *a, **kw: (0.0, 0))
+    monkeypatch.setattr(trainer.time, "time", lambda: 1234.0)  # frozen clock
+    run_dir = trainer.run_training(matrix, "tinyA", data_root,
+                                   out_root=tmp_path / "runs",
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu")
+    rows = list(csv.DictReader(open(run_dir / "log.csv", newline="")))
+    assert len(rows) == 1 and rows[0]["img_per_sec"] not in ("", None)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # trainer wiring: knob refusals, phi dump, grad logging
 # ─────────────────────────────────────────────────────────────────────────────
@@ -522,6 +540,19 @@ def test_job_and_submit_files_exist_and_name_the_right_run(arm):
     assert f"scripts/jobs/{arm}.sbatch" in submit
 
 
+def _committed_bytes(rel_path: str) -> bytes:
+    """The bytes git actually ships — i.e. what the HPC checks out.
+
+    NOT the Windows working-tree bytes: this clone has core.autocrlf=true,
+    so a `.sh` comes back out of a checkout with CRLF while its blob (and
+    every Linux checkout of it) stays LF. `.gitattributes` pins `*.sbatch`
+    to LF for that reason; `*.sh` is not pinned, so the working tree is the
+    wrong thing to compare against."""
+    return subprocess.run(["git", "show", f"HEAD:{rel_path}"],
+                          cwd=str(REPO), check=True,
+                          capture_output=True).stdout
+
+
 def test_job_files_are_exactly_what_the_generator_emits(tmp_path):
     """A hand-edited job file is how a run stops matching its matrix."""
     out = tmp_path / "scripts"
@@ -532,10 +563,25 @@ def test_job_files_are_exactly_what_the_generator_emits(tmp_path):
          "--base-port", "29770", "--only", ",".join(sorted(ARMS))],
         cwd=str(REPO), check=True, capture_output=True)
     for arm in ARMS:
+        # *.sbatch is pinned to LF by .gitattributes, so it compares byte for
+        # byte in any checkout. *.sh is not pinned, and core.autocrlf=true
+        # hands it back as CRLF on Windows — compare its CONTENT and leave
+        # the line endings to test_committed_launchers_ship_with_unix_...
         assert (out / "jobs" / f"{arm}.sbatch").read_bytes() == \
             (REPO / "scripts" / "jobs" / f"{arm}.sbatch").read_bytes(), arm
         assert (out / f"submit_{arm}.sh").read_bytes() == \
-            (REPO / "scripts" / f"submit_{arm}.sh").read_bytes(), arm
+            (REPO / "scripts" / f"submit_{arm}.sh"
+             ).read_bytes().replace(b"\r\n", b"\n"), arm
+
+
+def test_committed_launchers_ship_with_unix_line_endings():
+    """A CRLF script fails on the HPC with `$'\\r': command not found`.
+    What ships is the blob, so that is what is checked."""
+    for arm in ARMS:
+        for rel in (f"scripts/jobs/{arm}.sbatch",
+                    f"scripts/submit_{arm}.sh"):
+            assert b"\r\n" not in _committed_bytes(rel), rel
+    assert b"\r\n" not in _committed_bytes("scripts/jobs/abl_smoke.sbatch")
 
 
 def test_generator_template_still_produces_the_committed_e2r_files():
@@ -548,7 +594,7 @@ def test_generator_template_still_produces_the_committed_e2r_files():
     committed = _job("e2r_vits_mixup_saga_s1.sbatch")
     assert gen_slurm_chain.JOB_TEMPLATE.format(
         run_id="e2r_vits_mixup_saga_s1", port=29704,
-        matrix="configs/e2r_matrix.yaml") == committed
+        matrix="configs/e2r_matrix.yaml", ckpt_root_arg="") == committed
 
 
 def test_ablation_ports_collide_with_nothing_in_the_repo():
@@ -566,6 +612,37 @@ def test_ablation_ports_collide_with_nothing_in_the_repo():
                 if "--master_port=" in l][0]
         assert 29770 <= int(line.split("=")[1].strip().rstrip("\\").strip()) \
             <= 29775
+
+
+def test_production_jobs_send_checkpoints_to_the_matrix_ckpt_root():
+    matrix = yaml.safe_load(MATRIX.read_text())
+    root = matrix["ckpt_root"]
+    assert root and str(root).startswith("/home/woody/"), \
+        "the bulk filesystem per How to Run.md §1, not hpc or vault"
+    for arm in ARMS:
+        assert f"--ckpt_root {root}\n" in _job(f"{arm}.sbatch"), arm
+
+
+def test_smoke_and_production_never_share_a_ckpt_root():
+    """They share run_ids. A shared root would leave the smoke's 2-epoch
+    last.pth exactly where the 100-epoch run's `--resume auto` looks, and
+    the trainer would resume from it with only a schedule warning."""
+    production = str(yaml.safe_load(MATRIX.read_text())["ckpt_root"])
+    src = _job("abl_smoke.sbatch")
+    smoke = [l.split(":-", 1)[1].rstrip("}") for l in src.splitlines()
+             if l.startswith("SMOKE_CKPT_ROOT=")][0]
+    assert smoke != production
+    assert not smoke.startswith(production.rstrip("/") + "/")
+    assert "--ckpt_root $SMOKE_CKPT_ROOT" in src
+    assert production not in src, \
+        "the production root must not appear anywhere in the smoke job"
+
+
+def test_e2r_matrix_has_no_ckpt_root_so_its_jobs_are_unchanged():
+    """Those runs are finished; their job files are provenance."""
+    e2r = yaml.safe_load((REPO / "configs" / "e2r_matrix.yaml").read_text())
+    assert "ckpt_root" not in e2r
+    assert "--ckpt_root" not in _job("e2r_vits_mixup_saga_s1.sbatch")
 
 
 def test_smoke_job_covers_every_arm_and_gates_before_staging():
@@ -606,7 +683,8 @@ def test_smoke_job_covers_every_arm_and_gates_before_staging():
 # tools/check_abl_smoke.py — it must FAIL on a broken smoke, not just pass
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _write_smoke_tree(root: Path, break_const=False, break_config=False):
+def _write_smoke_tree(root: Path, break_const=False, break_config=False,
+                      init_drift=0.0, break_init=False):
     matrix = yaml.safe_load(MATRIX.read_text())
     for run_id, run in matrix["runs"].items():
         mode = run.get("gate_mode",
@@ -632,6 +710,10 @@ def _write_smoke_tree(root: Path, break_const=False, break_config=False):
         if slots:
             (d / "gates").mkdir()
             init = float(run.get("gate_init_logit", 0.0))
+            if init:
+                # epoch-0 dumps land AFTER one trained epoch, so a real run's
+                # phi has drifted a little (weight decay on phi, mostly)
+                init = 0.0 if break_init else init - init_drift
             base = np.full((12, 6, slots), init, dtype=np.float32)
             for e in (0, 1):
                 phi = base.copy()
@@ -658,6 +740,21 @@ def test_checker_passes_a_good_smoke(tmp_path):
     res = _run_checker(tmp_path)
     assert res.returncode == 0, res.stdout + res.stderr
     assert ", 0 failed" in res.stdout
+
+
+def test_checker_accepts_the_real_epoch0_drift_but_not_a_lost_init(tmp_path):
+    """The 2026-09-13 smoke read 3.9926 for arm F's epoch-0 phi, because the
+    dump happens after the epoch trains and AdamW's decoupled wd=0.05 has
+    already contracted phi by prod(1 - lr*wd) = 0.99838 over epoch 0's LR
+    ramp. That must PASS; an init that never reached the model must not."""
+    _write_smoke_tree(tmp_path, init_drift=0.0074)      # the measured value
+    res = _run_checker(tmp_path)
+    assert res.returncode == 0, res.stdout + res.stderr
+
+    _write_smoke_tree(tmp_path / "broken", break_init=True)
+    broken = _run_checker(tmp_path / "broken")
+    assert broken.returncode == 1
+    assert "the init reached the model" in broken.stdout
 
 
 def test_checker_fails_a_thawed_const_arm(tmp_path):
@@ -759,6 +856,57 @@ def test_end_to_end_const_arm_never_learns(tmp_path):
     ckpt = torch.load(run_dir / "ckpt" / "last.pth", map_location="cpu",
                       weights_only=False)
     assert torch.all(ckpt["model"]["blocks.0.attn.gate.phi"] == 0.0)
+
+
+def test_ckpt_root_moves_only_the_checkpoints(tmp_path):
+    """--ckpt_root keeps multi-GB checkpoints off the code filesystem while
+    every small artifact stays under out_root, where sync_results.sh globs
+    for it. Resume must follow, and meta.json must record where they went."""
+    data_root = _fake_imagenet(tmp_path / "data")
+    m = _tiny_two_arm_matrix(tmp_path, data_root)
+    out_root, ckpt_root = tmp_path / "runs", tmp_path / "bulk"
+
+    run_dir = trainer.run_training(m, "tinyA", data_root, out_root=out_root,
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu", ckpt_root=ckpt_root)
+    moved = ckpt_root / "tinyA" / "ckpt"
+    assert (moved / "last.pth").exists() and (moved / "best.pth").exists()
+    assert not (run_dir / "ckpt").exists(), "no ckpt/ in the run dir"
+    for name in ("meta.json", "config.resolved.yaml", "log.csv"):
+        assert (run_dir / name).exists(), name
+    assert (run_dir / "gates").is_dir()
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert meta["ckpt_dir"] == moved.as_posix()
+
+    # and --resume auto finds it there (epoch 1 continues, does not restart)
+    trainer.run_training(m, "tinyA", data_root, out_root=out_root,
+                         resume="auto", max_epochs=2, device_str="cpu",
+                         ckpt_root=ckpt_root)
+    rows = list(csv.DictReader(open(run_dir / "log.csv", newline="")))
+    assert [int(r["epoch"]) for r in rows] == [0, 1]
+    ckpt = torch.load(moved / "last.pth", map_location="cpu",
+                      weights_only=False)
+    assert ckpt["epoch"] == 1
+
+
+def test_ckpt_root_default_is_unchanged(tmp_path):
+    data_root = _fake_imagenet(tmp_path / "data")
+    m = _tiny_two_arm_matrix(tmp_path, data_root)
+    run_dir = trainer.run_training(m, "tinyA", data_root,
+                                   out_root=tmp_path / "runs",
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu")
+    assert (run_dir / "ckpt" / "last.pth").exists()
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert meta["ckpt_dir"] == (run_dir / "ckpt").as_posix()
+
+
+def test_posix_ckpt_root_is_not_rebased_under_the_repo():
+    """TASK-09's lesson: '/home/woody/...' is not is_absolute() on Windows,
+    so a naive Path() would silently put HPC checkpoints inside the repo."""
+    from tools.dense_runtime import repo_path
+    assert repo_path("/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt").as_posix() \
+        == "/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt"
 
 
 def test_end_to_end_layerscale_arm_trains_and_dumps_no_phi(tmp_path):

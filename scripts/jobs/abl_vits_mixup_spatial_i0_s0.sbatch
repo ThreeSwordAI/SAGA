@@ -29,7 +29,8 @@ stage_imagenet
         --matrix configs/abl_matrix.yaml \
         --run abl_vits_mixup_spatial_i0_s0 \
         --data_root $STAGE_DIR \
-        --resume auto
+        --resume auto \
+        --ckpt_root /home/woody/iwi5/iwi5359h/SAGA/abl_ckpt
 STATUS=$?
 
 cleanup_imagenet

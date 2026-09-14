@@ -25,9 +25,17 @@
 # six, ~1.5 h with staging. --time=04:00:00 is that plus a wide margin.
 #
 # Output goes to results/runs_smoke/ (NOT results/runs/), so a smoke can
-# never be mistaken for a run; ckpt/ under it is git-ignored, the contract
-# files are not. Verify with:
+# never be mistaken for a run; the contract files are committed from there.
+# Verify with:
 #     python tools/check_abl_smoke.py --runs-root results/runs_smoke
+#
+# CHECKPOINTS: a separate root from the production one in
+# configs/abl_matrix.yaml, and that separation is load bearing. The smoke
+# uses the SAME run_ids, so a shared root would put a 2-epoch last.pth
+# exactly where the 100-epoch run's `--resume auto` looks — it would resume
+# from smoke weights and only warn about the changed schedule. Delete this
+# tree once check_abl_smoke.py has read the run dirs:
+#     rm -rf /home/woody/iwi5/iwi5359h/SAGA/abl_smoke_ckpt
 #
 # Submit:  sbatch scripts/jobs/abl_smoke.sbatch
 # (prefix --partition=a40 --gres=gpu:a40:4 only if a100 is unavailable; the
@@ -39,6 +47,8 @@ set -u
 cd $CODE_ROOT
 
 SAGA_PY=${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
+# NEVER the production ckpt_root of configs/abl_matrix.yaml — see the header
+SMOKE_CKPT_ROOT=${SMOKE_CKPT_ROOT:-/home/woody/iwi5/iwi5359h/SAGA/abl_smoke_ckpt}
 
 # ── preflight: FATAL, and before staging ──────────────────────────────────
 # TASK-10 lost a job to a `which python` fallback and to an import check
@@ -90,6 +100,7 @@ for RUN in $ARMS; do
             --data_root $STAGE_DIR \
             --resume auto \
             --out_root results/runs_smoke \
+            --ckpt_root $SMOKE_CKPT_ROOT \
             --max_epochs 2
     if [ $? -ne 0 ]; then
         echo "SMOKE FAILED: $RUN"

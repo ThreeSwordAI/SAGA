@@ -2558,3 +2558,109 @@ launchers (phase A)`
    `results/runs/*`), then `I_AM_HUMAN=1 git push`.
 Then Phase C on `task/12-ablation-c` once all six report, starting with the
 derivation job in reconciliation 1.
+
+**Addendum (2026-09-14, the six-arm smoke came back — job 4228405):** a100/
+a0603, 01:10:25 elapsed, staging + 6 arms x 2 epochs, GPU util 62-86%.
+`tools/check_abl_smoke.py`: **75 passed, 1 failed**, and the one failure was
+the CHECKER's.
+
+- **All six arms trained and the contract holds.** Per arm: meta/end_time,
+  config.resolved.yaml with the right `gate_mode`, exact log schema, 2
+  contiguous epochs with full-val top-1, `ckpt/last.pth`. phi dumped every
+  epoch for const/headscalar/spatial with shapes `[12,6,196]` / `[12,6,1]` /
+  `[12,6,196]`, none for baseline/layerscale. **Arm B's phi is exactly 0 and
+  BIT-IDENTICAL across a trained epoch** — the frozen-gate claim now measured
+  on 4xA100 through DDP, not only on CPU. grad_phi.csv (312 rows) on exactly
+  the two spatial arms. The cross-arm config diff: 5/5 PASS.
+- **The FAIL was `epoch-0 phi == gate_init_logit (4.0)`, reading 3.9926.**
+  `phi_e000.npz` is dumped AFTER epoch 0 trains, so it can never equal the
+  init: AdamW's decoupled wd=0.05 over epoch 0's LR ramp gives
+  prod(1 - lr*wd) = 0.99838, i.e. +4.0 -> 3.9935 predicted against 3.9926
+  measured. The init reached the model (a broken one reads 0.0000). The check
+  now asks phi ~= init within tolerance AND nearer the init than 0, pinned by
+  a test in both directions using the measured value.
+- **A real asymmetry, found while computing that factor, recorded in the
+  matrix for Phase C:** phi = 0 is a fixed point of decoupled weight decay, so
+  arm E is untouched by it while arm F's phi = +4 is pulled toward 0
+  throughout. Over this schedule (1251 steps/epoch, cosine 1e-3 -> 1e-6, 20
+  warmup epochs, wd 0.05) prod(1 - lr*wd) = **0.0784**: weight decay ALONE
+  would carry +4.0 to +0.31, gate 0.982 -> 0.578. So "does init matter (E vs
+  F)" partly measures how fast decay erases the difference. Left MATCHED and
+  unchanged — the arms may differ only in gate_mode/gate_init_logit, and wd on
+  phi is the shipped e2r treatment — and the per-epoch phi dumps make decay
+  and gradient separable after the fact. **Phase C's note must state this.**
+- **Test-harness defect fixed while there:** the "job files match the
+  generator" test compared Windows WORKING-TREE bytes, which `core.autocrlf=
+  true` turns to CRLF for `*.sh` on checkout (`.gitattributes` pins only
+  `*.sbatch`). It only surfaced once the human's merge re-checked the files
+  out. It now compares the committed BLOB — what the HPC runs — and a new test
+  asserts no ablation launcher ships with CRLF. Every blob is LF; the HPC was
+  never at risk.
+- Timing datum for later: 70 min for staging + 12 ViT-S epochs across six
+  arms, consistent with the ~6 h/run projection for 100 epochs.
+- Quota at smoke end: `/home/hpc` **100.2G of 104.9G** soft (4.7 G free)
+  against ~3.2 G of production checkpoints, so the smoke's own ckpt/ must be
+  deleted before the six chains go out.
+
+`pytest -q`: **524 passed, 30 skipped**. Commit `9849135` on
+`task/12-ablation-fix` (cut off `main` at `0918940`, the human's Phase-A
+merge; nothing task-related was committed to `main`).
+
+**Addendum (2026-09-14, `--ckpt_root` — the ablation checkpoints move to
+woody):** the smoke measured what a run actually costs and the estimate in
+the Phase-A entry was wrong by ~2x. `du -ch results/runs_smoke/abl_*/ckpt`
+returned **6.0 G for six ViT-S runs** — ~1.0 G per run (last + best), not the
+0.53 G the legacy manifest's 264,946,269 B checkpoint implies. `/home/hpc`
+had ~10.8 G free after the smoke was cleaned up, and the six production runs
+need the same 6.0 G, so the human asked to use the space on vault or woody.
+
+- **woody, not vault**: How to Run.md §1 designates `/home/woody` the bulk
+  filesystem (244 G of 1000 G at the smoke's epilogue), while `/home/vault`
+  was at 1021 G of 1048 G — ~27 G of space and 146 K of its 200 K file limit.
+  TASK-09 put the dense checkpoints on woody for the same reasons.
+- `classification/tools/train.py` gains **`--ckpt_root`**, the same flag,
+  layout and semantics as the dense trainers: ckpt/ moves to
+  `<ckpt_root>/<run_id>/ckpt`, and ONLY ckpt/ moves — `log.csv`, `meta.json`,
+  `config.resolved.yaml`, `gates/` and `diag/` stay under `--out_root` in the
+  repo, which is what `scripts/sync_results.sh` globs. The resolved path is
+  recorded in `meta.json["ckpt_dir"]`; `repo_path()` is imported from
+  `tools/dense_runtime.py` rather than reimplemented, so a POSIX absolute HPC
+  path cannot be rebased under the repo on Windows. Default unchanged, and
+  `tools/check_abl_smoke.py` now reads `ckpt_dir` instead of assuming
+  `<run_dir>/ckpt`.
+- `configs/abl_matrix.yaml` gains `ckpt_root:
+  /home/woody/iwi5/iwi5359h/SAGA/abl_ckpt`; the generator emits the flag only
+  when the matrix defines one, so the **e2r job files stay byte-identical**
+  (finished runs; their launchers are provenance).
+- **The smoke uses a DIFFERENT root** (`abl_smoke_ckpt`), and that separation
+  is load bearing, not tidiness: the smoke shares the production run_ids, so
+  a shared root would leave its 2-epoch `last.pth` exactly where the
+  100-epoch run's `--resume auto` looks — the run would resume from smoke
+  weights and only WARN about the changed schedule. Two tests pin it (roots
+  differ, and neither is a prefix of the other).
+- **Latent hazard recorded in TASK-09's committed files, not fixed here:**
+  `scripts/jobs/dense_smoke_det.sbatch` and `det_vitb_saga_s1.sbatch` share
+  BOTH the run id `det_vitb_saga_s1` and `--ckpt_root
+  /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt`. It never bit — the smokes ran
+  on 2026-09-08 BEFORE `--ckpt_root` existed, wrote to hpc, and were deleted
+  before the six chains went out — but re-running that smoke today would seed
+  the production run's resume. One line to fix (a distinct smoke root) if the
+  human wants it; TASK-09 is closed, so it is flagged rather than touched.
+- **A real crash fixed in the trainer, found by my own test flaking 1 in 6:**
+  `img_per_sec` divides by `epoch_seconds`, which measures exactly 0.0 when
+  an epoch does no work and the clock advances in 15.6 ms steps (Windows).
+  That raised ZeroDivisionError at the log line — AFTER the epoch's work was
+  done. The duration is now clamped to 1e-6 s; real epochs are minutes long,
+  so no logged number changes. A test freezes the clock to pin it.
+- **Checked because that flake looked like a seeding problem, and it is
+  worth recording:** the training data order IS reproducible for a fixed
+  seed — 12/12 identical orders across repeats of one arm and across two arms
+  differing only in `gate_mode`, through the real trainer and the real
+  loader.
+
+`pytest -q`: **531 passed, 30 skipped**. Commit `11d86ad` on
+`task/12-ablation-fix`. **The six chains must not be submitted until this is
+merged and pushed**: the job files now pass `--ckpt_root`, and submitting the
+old ones would put the checkpoints back on hpc — after which a resubmission
+against the new files would look for `last.pth` in the new location, not find
+it, and start from epoch 0.

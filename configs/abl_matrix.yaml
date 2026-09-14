@@ -55,6 +55,19 @@ defaults:
 chain:
   vit_small_patch16_224: 1
 
+# Checkpoints (the only multi-GB artifact) go on the BULK filesystem, not on
+# CODE_ROOT. Measured on Alex 2026-09-14: the six-arm smoke's last+best pairs
+# came to 6.0 G, i.e. ~1.0 G per ViT-S run, against ~10.8 G free on
+# /home/hpc — while /home/woody sat at 244 G of 1000 G. How to Run.md §1
+# designates woody as the bulk filesystem and TASK-09 already put the dense
+# checkpoints there. null restores the old behaviour (ckpt/ inside the run
+# dir). Every SMALL artifact stays under out_root in the repo, which is what
+# scripts/sync_results.sh globs.
+# NOTE: scripts/jobs/abl_smoke.sbatch deliberately uses a DIFFERENT root —
+# the smoke shares these run_ids, so a shared root would leave a 2-epoch
+# last.pth exactly where the production run's `--resume auto` looks.
+ckpt_root: /home/woody/iwi5/iwi5359h/SAGA/abl_ckpt
+
 runs:
   # arm A — reference: plain ViT-S, no gate module at all.
   abl_vits_mixup_baseline_s0:
@@ -94,6 +107,20 @@ runs:
   # arm F — same gate, identity-ish init: phi = +4 -> sigmoid(4) = 0.982.
   # Answers "does the halving at init matter?" separately from "does the
   # spatial structure matter?".
+  #
+  # KNOWN ASYMMETRY, to be stated in Phase C's note rather than discovered
+  # there: weight decay is not neutral between E and F. phi = 0 is a fixed
+  # point of decoupled AdamW weight decay, so arm E is untouched by it; arm
+  # F's phi = +4 is pulled toward 0 throughout. Computed over this exact
+  # schedule (1251 steps/epoch, cosine 1e-3 -> 1e-6, 20 warmup epochs,
+  # wd 0.05): prod(1 - lr*wd) = 0.0784, i.e. WEIGHT DECAY ALONE would carry
+  # phi = +4.0 to +0.31 (gate 0.982 -> 0.578) over 100 epochs — and 0.99838
+  # over epoch 0 alone, which is the 4.0 -> 3.9935 the smoke measured as
+  # 3.9926. So if F converges toward E's gate profile, part of that is decay,
+  # not preference. It is left MATCHED (wd_phi_zero: false everywhere, the
+  # shipped e2r treatment of phi) because the arms may differ only in
+  # gate_mode and gate_init_logit; the per-epoch phi dumps make the two
+  # contributions separable after the fact.
   abl_vits_mixup_spatial_i4_s0:
     {arch: vit_small_patch16_224, recipe: mixup, variant: saga, seed: 0,
      gate_mode: spatial, gate_init_logit: 4.0, log_grad_phi: true}

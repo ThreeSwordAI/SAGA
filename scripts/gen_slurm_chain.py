@@ -74,7 +74,7 @@ stage_imagenet
         --matrix {matrix} \\
         --run {run_id} \\
         --data_root $STAGE_DIR \\
-        --resume auto
+        --resume auto{ckpt_root_arg}
 STATUS=$?
 
 cleanup_imagenet
@@ -144,12 +144,20 @@ def main():
     # posix form so a Windows-style path can never reach a job file
     matrix_ref = Path(args.matrix).as_posix()
 
+    # matrix-level `ckpt_root` (TASK-12): absent or null => the flag is not
+    # emitted at all, so job files generated before it existed stay
+    # byte-identical (the e2r ones are provenance for finished runs).
+    ckpt_root = matrix.get("ckpt_root")
+    ckpt_root_arg = ("" if not ckpt_root
+                     else " \\\n        --ckpt_root " + str(ckpt_root))
+
     for i, (run_id, run) in enumerate(runs):
         n = int(chain.get(run["arch"], 2))
         port = args.base_port + i
         job_path = jobs_dir / f"{run_id}.sbatch"
         job_path.write_text(
-            JOB_TEMPLATE.format(run_id=run_id, port=port, matrix=matrix_ref),
+            JOB_TEMPLATE.format(run_id=run_id, port=port, matrix=matrix_ref,
+                                ckpt_root_arg=ckpt_root_arg),
             encoding="utf-8", newline="\n")
 
         est = f"{n}x24h walltime, arch {run['arch']}"
