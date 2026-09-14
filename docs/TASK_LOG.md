@@ -2558,3 +2558,50 @@ launchers (phase A)`
    `results/runs/*`), then `I_AM_HUMAN=1 git push`.
 Then Phase C on `task/12-ablation-c` once all six report, starting with the
 derivation job in reconciliation 1.
+
+**Addendum (2026-09-14, the six-arm smoke came back — job 4228405):** a100/
+a0603, 01:10:25 elapsed, staging + 6 arms x 2 epochs, GPU util 62-86%.
+`tools/check_abl_smoke.py`: **75 passed, 1 failed**, and the one failure was
+the CHECKER's.
+
+- **All six arms trained and the contract holds.** Per arm: meta/end_time,
+  config.resolved.yaml with the right `gate_mode`, exact log schema, 2
+  contiguous epochs with full-val top-1, `ckpt/last.pth`. phi dumped every
+  epoch for const/headscalar/spatial with shapes `[12,6,196]` / `[12,6,1]` /
+  `[12,6,196]`, none for baseline/layerscale. **Arm B's phi is exactly 0 and
+  BIT-IDENTICAL across a trained epoch** — the frozen-gate claim now measured
+  on 4xA100 through DDP, not only on CPU. grad_phi.csv (312 rows) on exactly
+  the two spatial arms. The cross-arm config diff: 5/5 PASS.
+- **The FAIL was `epoch-0 phi == gate_init_logit (4.0)`, reading 3.9926.**
+  `phi_e000.npz` is dumped AFTER epoch 0 trains, so it can never equal the
+  init: AdamW's decoupled wd=0.05 over epoch 0's LR ramp gives
+  prod(1 - lr*wd) = 0.99838, i.e. +4.0 -> 3.9935 predicted against 3.9926
+  measured. The init reached the model (a broken one reads 0.0000). The check
+  now asks phi ~= init within tolerance AND nearer the init than 0, pinned by
+  a test in both directions using the measured value.
+- **A real asymmetry, found while computing that factor, recorded in the
+  matrix for Phase C:** phi = 0 is a fixed point of decoupled weight decay, so
+  arm E is untouched by it while arm F's phi = +4 is pulled toward 0
+  throughout. Over this schedule (1251 steps/epoch, cosine 1e-3 -> 1e-6, 20
+  warmup epochs, wd 0.05) prod(1 - lr*wd) = **0.0784**: weight decay ALONE
+  would carry +4.0 to +0.31, gate 0.982 -> 0.578. So "does init matter (E vs
+  F)" partly measures how fast decay erases the difference. Left MATCHED and
+  unchanged — the arms may differ only in gate_mode/gate_init_logit, and wd on
+  phi is the shipped e2r treatment — and the per-epoch phi dumps make decay
+  and gradient separable after the fact. **Phase C's note must state this.**
+- **Test-harness defect fixed while there:** the "job files match the
+  generator" test compared Windows WORKING-TREE bytes, which `core.autocrlf=
+  true` turns to CRLF for `*.sh` on checkout (`.gitattributes` pins only
+  `*.sbatch`). It only surfaced once the human's merge re-checked the files
+  out. It now compares the committed BLOB — what the HPC runs — and a new test
+  asserts no ablation launcher ships with CRLF. Every blob is LF; the HPC was
+  never at risk.
+- Timing datum for later: 70 min for staging + 12 ViT-S epochs across six
+  arms, consistent with the ~6 h/run projection for 100 epochs.
+- Quota at smoke end: `/home/hpc` **100.2G of 104.9G** soft (4.7 G free)
+  against ~3.2 G of production checkpoints, so the smoke's own ckpt/ must be
+  deleted before the six chains go out.
+
+`pytest -q`: **524 passed, 30 skipped**. Commit `9849135` on
+`task/12-ablation-fix` (cut off `main` at `0918940`, the human's Phase-A
+merge; nothing task-related was committed to `main`).
