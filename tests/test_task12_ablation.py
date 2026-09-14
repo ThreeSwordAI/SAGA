@@ -522,6 +522,19 @@ def test_job_and_submit_files_exist_and_name_the_right_run(arm):
     assert f"scripts/jobs/{arm}.sbatch" in submit
 
 
+def _committed_bytes(rel_path: str) -> bytes:
+    """The bytes git actually ships — i.e. what the HPC checks out.
+
+    NOT the Windows working-tree bytes: this clone has core.autocrlf=true,
+    so a `.sh` comes back out of a checkout with CRLF while its blob (and
+    every Linux checkout of it) stays LF. `.gitattributes` pins `*.sbatch`
+    to LF for that reason; `*.sh` is not pinned, so the working tree is the
+    wrong thing to compare against."""
+    return subprocess.run(["git", "show", f"HEAD:{rel_path}"],
+                          cwd=str(REPO), check=True,
+                          capture_output=True).stdout
+
+
 def test_job_files_are_exactly_what_the_generator_emits(tmp_path):
     """A hand-edited job file is how a run stops matching its matrix."""
     out = tmp_path / "scripts"
@@ -533,9 +546,19 @@ def test_job_files_are_exactly_what_the_generator_emits(tmp_path):
         cwd=str(REPO), check=True, capture_output=True)
     for arm in ARMS:
         assert (out / "jobs" / f"{arm}.sbatch").read_bytes() == \
-            (REPO / "scripts" / "jobs" / f"{arm}.sbatch").read_bytes(), arm
+            _committed_bytes(f"scripts/jobs/{arm}.sbatch"), arm
         assert (out / f"submit_{arm}.sh").read_bytes() == \
-            (REPO / "scripts" / f"submit_{arm}.sh").read_bytes(), arm
+            _committed_bytes(f"scripts/submit_{arm}.sh"), arm
+
+
+def test_committed_launchers_ship_with_unix_line_endings():
+    """A CRLF script fails on the HPC with `$'\\r': command not found`.
+    What ships is the blob, so that is what is checked."""
+    for arm in ARMS:
+        for rel in (f"scripts/jobs/{arm}.sbatch",
+                    f"scripts/submit_{arm}.sh"):
+            assert b"\r\n" not in _committed_bytes(rel), rel
+    assert b"\r\n" not in _committed_bytes("scripts/jobs/abl_smoke.sbatch")
 
 
 def test_generator_template_still_produces_the_committed_e2r_files():
@@ -606,7 +629,8 @@ def test_smoke_job_covers_every_arm_and_gates_before_staging():
 # tools/check_abl_smoke.py — it must FAIL on a broken smoke, not just pass
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _write_smoke_tree(root: Path, break_const=False, break_config=False):
+def _write_smoke_tree(root: Path, break_const=False, break_config=False,
+                      init_drift=0.0, break_init=False):
     matrix = yaml.safe_load(MATRIX.read_text())
     for run_id, run in matrix["runs"].items():
         mode = run.get("gate_mode",
@@ -632,6 +656,10 @@ def _write_smoke_tree(root: Path, break_const=False, break_config=False):
         if slots:
             (d / "gates").mkdir()
             init = float(run.get("gate_init_logit", 0.0))
+            if init:
+                # epoch-0 dumps land AFTER one trained epoch, so a real run's
+                # phi has drifted a little (weight decay on phi, mostly)
+                init = 0.0 if break_init else init - init_drift
             base = np.full((12, 6, slots), init, dtype=np.float32)
             for e in (0, 1):
                 phi = base.copy()
@@ -658,6 +686,21 @@ def test_checker_passes_a_good_smoke(tmp_path):
     res = _run_checker(tmp_path)
     assert res.returncode == 0, res.stdout + res.stderr
     assert ", 0 failed" in res.stdout
+
+
+def test_checker_accepts_the_real_epoch0_drift_but_not_a_lost_init(tmp_path):
+    """The 2026-09-13 smoke read 3.9926 for arm F's epoch-0 phi, because the
+    dump happens after the epoch trains and AdamW's decoupled wd=0.05 has
+    already contracted phi by prod(1 - lr*wd) = 0.99838 over epoch 0's LR
+    ramp. That must PASS; an init that never reached the model must not."""
+    _write_smoke_tree(tmp_path, init_drift=0.0074)      # the measured value
+    res = _run_checker(tmp_path)
+    assert res.returncode == 0, res.stdout + res.stderr
+
+    _write_smoke_tree(tmp_path / "broken", break_init=True)
+    broken = _run_checker(tmp_path / "broken")
+    assert broken.returncode == 1
+    assert "the init reached the model" in broken.stdout
 
 
 def test_checker_fails_a_thawed_const_arm(tmp_path):
