@@ -2605,3 +2605,62 @@ the CHECKER's.
 `pytest -q`: **524 passed, 30 skipped**. Commit `9849135` on
 `task/12-ablation-fix` (cut off `main` at `0918940`, the human's Phase-A
 merge; nothing task-related was committed to `main`).
+
+**Addendum (2026-09-14, `--ckpt_root` — the ablation checkpoints move to
+woody):** the smoke measured what a run actually costs and the estimate in
+the Phase-A entry was wrong by ~2x. `du -ch results/runs_smoke/abl_*/ckpt`
+returned **6.0 G for six ViT-S runs** — ~1.0 G per run (last + best), not the
+0.53 G the legacy manifest's 264,946,269 B checkpoint implies. `/home/hpc`
+had ~10.8 G free after the smoke was cleaned up, and the six production runs
+need the same 6.0 G, so the human asked to use the space on vault or woody.
+
+- **woody, not vault**: How to Run.md §1 designates `/home/woody` the bulk
+  filesystem (244 G of 1000 G at the smoke's epilogue), while `/home/vault`
+  was at 1021 G of 1048 G — ~27 G of space and 146 K of its 200 K file limit.
+  TASK-09 put the dense checkpoints on woody for the same reasons.
+- `classification/tools/train.py` gains **`--ckpt_root`**, the same flag,
+  layout and semantics as the dense trainers: ckpt/ moves to
+  `<ckpt_root>/<run_id>/ckpt`, and ONLY ckpt/ moves — `log.csv`, `meta.json`,
+  `config.resolved.yaml`, `gates/` and `diag/` stay under `--out_root` in the
+  repo, which is what `scripts/sync_results.sh` globs. The resolved path is
+  recorded in `meta.json["ckpt_dir"]`; `repo_path()` is imported from
+  `tools/dense_runtime.py` rather than reimplemented, so a POSIX absolute HPC
+  path cannot be rebased under the repo on Windows. Default unchanged, and
+  `tools/check_abl_smoke.py` now reads `ckpt_dir` instead of assuming
+  `<run_dir>/ckpt`.
+- `configs/abl_matrix.yaml` gains `ckpt_root:
+  /home/woody/iwi5/iwi5359h/SAGA/abl_ckpt`; the generator emits the flag only
+  when the matrix defines one, so the **e2r job files stay byte-identical**
+  (finished runs; their launchers are provenance).
+- **The smoke uses a DIFFERENT root** (`abl_smoke_ckpt`), and that separation
+  is load bearing, not tidiness: the smoke shares the production run_ids, so
+  a shared root would leave its 2-epoch `last.pth` exactly where the
+  100-epoch run's `--resume auto` looks — the run would resume from smoke
+  weights and only WARN about the changed schedule. Two tests pin it (roots
+  differ, and neither is a prefix of the other).
+- **Latent hazard recorded in TASK-09's committed files, not fixed here:**
+  `scripts/jobs/dense_smoke_det.sbatch` and `det_vitb_saga_s1.sbatch` share
+  BOTH the run id `det_vitb_saga_s1` and `--ckpt_root
+  /home/woody/iwi5/iwi5359h/SAGA/dense_ckpt`. It never bit — the smokes ran
+  on 2026-09-08 BEFORE `--ckpt_root` existed, wrote to hpc, and were deleted
+  before the six chains went out — but re-running that smoke today would seed
+  the production run's resume. One line to fix (a distinct smoke root) if the
+  human wants it; TASK-09 is closed, so it is flagged rather than touched.
+- **A real crash fixed in the trainer, found by my own test flaking 1 in 6:**
+  `img_per_sec` divides by `epoch_seconds`, which measures exactly 0.0 when
+  an epoch does no work and the clock advances in 15.6 ms steps (Windows).
+  That raised ZeroDivisionError at the log line — AFTER the epoch's work was
+  done. The duration is now clamped to 1e-6 s; real epochs are minutes long,
+  so no logged number changes. A test freezes the clock to pin it.
+- **Checked because that flake looked like a seeding problem, and it is
+  worth recording:** the training data order IS reproducible for a fixed
+  seed — 12/12 identical orders across repeats of one arm and across two arms
+  differing only in `gate_mode`, through the real trainer and the real
+  loader.
+
+`pytest -q`: **531 passed, 30 skipped**. Commit `11d86ad` on
+`task/12-ablation-fix`. **The six chains must not be submitted until this is
+merged and pushed**: the job files now pass `--ckpt_root`, and submitting the
+old ones would put the checkpoints back on hpc — after which a resubmission
+against the new files would look for `last.pth` in the new location, not find
+it, and start from epoch 0.
