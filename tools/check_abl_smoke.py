@@ -15,7 +15,8 @@ numpy/yaml — it runs on a login node as happily as inside the smoke job.
 Checked per arm (all of it from FILES the run wrote, never from this
 process re-deriving what the run should have done):
   - the contract: meta.json (with end_time), config.resolved.yaml, log.csv
-    with the exact e2r schema, ckpt/last.pth
+    with the exact e2r schema, and last.pth wherever meta.json says the
+    checkpoints went (--ckpt_root can move them off the repo filesystem)
   - the resolved config differs from the other arms ONLY in run_id /
     variant / model.gate / model.gate_mode / knobs.gate_init_logit
   - gates/phi_e###.npz present for const/headscalar/spatial, ABSENT for
@@ -119,8 +120,11 @@ def check_arm(run_dir: Path, run_id: str, spec: dict, rep: Report):
     rep.check(all(r["val_top1_full"] not in ("", None) for r in rows),
               "full-val top-1 recorded every epoch")
 
-    rep.check((run_dir / "ckpt" / "last.pth").exists(),
-              "ckpt/last.pth present")
+    # the checkpoint may live off the repo filesystem (--ckpt_root); the run
+    # records where it actually went, so ask it rather than assume
+    ckpt_dir = Path(meta.get("ckpt_dir") or (run_dir / "ckpt"))
+    rep.check((ckpt_dir / "last.pth").exists(), "last.pth present",
+              ckpt_dir.as_posix())
 
     # ── gate artifacts ────────────────────────────────────────────────────
     gates = sorted((run_dir / "gates").glob("phi_e*.npz"))

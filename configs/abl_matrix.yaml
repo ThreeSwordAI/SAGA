@@ -55,6 +55,19 @@ defaults:
 chain:
   vit_small_patch16_224: 1
 
+# Checkpoints (the only multi-GB artifact) go on the BULK filesystem, not on
+# CODE_ROOT. Measured on Alex 2026-09-14: the six-arm smoke's last+best pairs
+# came to 6.0 G, i.e. ~1.0 G per ViT-S run, against ~10.8 G free on
+# /home/hpc — while /home/woody sat at 244 G of 1000 G. How to Run.md §1
+# designates woody as the bulk filesystem and TASK-09 already put the dense
+# checkpoints there. null restores the old behaviour (ckpt/ inside the run
+# dir). Every SMALL artifact stays under out_root in the repo, which is what
+# scripts/sync_results.sh globs.
+# NOTE: scripts/jobs/abl_smoke.sbatch deliberately uses a DIFFERENT root —
+# the smoke shares these run_ids, so a shared root would leave a 2-epoch
+# last.pth exactly where the production run's `--resume auto` looks.
+ckpt_root: /home/woody/iwi5/iwi5359h/SAGA/abl_ckpt
+
 runs:
   # arm A — reference: plain ViT-S, no gate module at all.
   abl_vits_mixup_baseline_s0:

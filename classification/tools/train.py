@@ -72,6 +72,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from saga import build_saga_vit
 from saga.gate import GATE_MODES, LAYERSCALE_INIT_DEIT3
 from saga.run_registry import create_run, finalize_run
+# ONE implementation of "interpret this config path" — a POSIX absolute HPC
+# path is not is_absolute() on Windows, and a naive check would rebase it
+# under the repo (TASK-09).
+from tools.dense_runtime import repo_path
 
 LOG_FIELDS = ["epoch", "lr", "train_loss", "val_top1_full", "val_top5_full",
               "val_loss", "img_per_sec", "wall_time"]
@@ -566,7 +570,8 @@ def train_one_epoch(model, loader, optimizer, criterion, mixup_fn,
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def run_training(matrix_path, run_id, data_root, out_root="results/runs",
-                 resume="auto", max_epochs=None, device_str=None):
+                 resume="auto", max_epochs=None, device_str=None,
+                 ckpt_root=None):
     distributed = int(os.environ.get("WORLD_SIZE", 1)) > 1
     if distributed:
         dist.init_process_group("nccl" if torch.cuda.is_available() else "gloo")
@@ -592,7 +597,14 @@ def run_training(matrix_path, run_id, data_root, out_root="results/runs",
     set_seed(seed)
 
     run_dir = Path(out_root) / run_id
-    ckpt_dir = run_dir / "ckpt"
+    # TASK-12: checkpoints are the only multi-GB artifact here (a ViT-S
+    # last+best pair measured ~1.0 GB on Alex), and CODE_ROOT lives on the
+    # small `hpc` filesystem. --ckpt_root moves ONLY ckpt/ elsewhere; every
+    # small artifact stays under out_root in the repo, which is what
+    # scripts/sync_results.sh globs. Same flag and same layout as the dense
+    # trainers (TASK-09).
+    ckpt_dir = (repo_path(ckpt_root) / run_id / "ckpt" if ckpt_root
+                else run_dir / "ckpt")
     last_path = ckpt_dir / "last.pth"
     log_path = run_dir / "log.csv"
     resuming = resume == "auto" and last_path.exists()
@@ -615,6 +627,9 @@ def run_training(matrix_path, run_id, data_root, out_root="results/runs",
         meta_path = run_dir / "meta.json"
         meta = json.load(open(meta_path))
         meta["knobs"] = cfg["knobs"]        # resolved knob values (TASK-05)
+        # where the checkpoints actually went (TASK-12): a run whose ckpt/
+        # is off the repo filesystem must say so in its own provenance
+        meta["ckpt_dir"] = ckpt_dir.as_posix()
         atomic_json_dump(meta, meta_path)
         ckpt_dir.mkdir(parents=True, exist_ok=True)
     if distributed:
@@ -786,7 +801,13 @@ def run_training(matrix_path, run_id, data_root, out_root="results/runs",
             grad_logger=grad_logger, model_unwrapped=model_unwrapped)
         if distributed:
             dist.barrier()
-        epoch_seconds = time.time() - t0
+        # clamped to the clock's own resolution: time.time() advances in
+        # ~15.6 ms steps on Windows, so an epoch that does no work (an
+        # instrumented test, a patched train_one_epoch) can measure exactly
+        # 0.0 and take the whole run down on the img_per_sec division below
+        # — after the epoch's work is already done. Real training epochs are
+        # minutes long, so no logged number changes.
+        epoch_seconds = max(time.time() - t0, 1e-6)
 
         val_metrics = validate_full(model, val_loader, device, n_val,
                                     amp_on, distributed)
@@ -854,11 +875,21 @@ def main():
                              "command fresh-starts and resumes)")
     parser.add_argument("--max_epochs", type=int, default=None)
     parser.add_argument("--device", default=None)
+    parser.add_argument("--ckpt_root", default=None,
+                        help="put ckpt/ under <ckpt_root>/<run_id>/ instead "
+                             "of <out_root>/<run_id>/, to keep multi-GB "
+                             "checkpoints off the code filesystem. Every "
+                             "small artifact stays under --out_root. A SMOKE "
+                             "must use a different --ckpt_root from the "
+                             "production run of the same run_id, or its "
+                             "2-epoch last.pth becomes what --resume auto "
+                             "picks up.")
     args = parser.parse_args()
 
     run_training(args.matrix, args.run, args.data_root,
                  out_root=args.out_root, resume=args.resume,
-                 max_epochs=args.max_epochs, device_str=args.device)
+                 max_epochs=args.max_epochs, device_str=args.device,
+                 ckpt_root=args.ckpt_root)
 
 
 if __name__ == '__main__':

@@ -389,6 +389,24 @@ def test_arms_see_the_same_data_in_the_same_order(tmp_path, monkeypatch):
     assert seen["tinyA"] and seen["tinyA"] == seen["tinyB"]
 
 
+def test_a_zero_duration_epoch_does_not_kill_the_run(tmp_path, monkeypatch):
+    """A patched-out epoch can measure 0.0 s on Windows' 15.6 ms clock, and
+    the img_per_sec division then raised ZeroDivisionError AFTER the epoch's
+    work was done. Real epochs are minutes long, so this only ever bit
+    instrumented runs — but it bit them at the worst possible moment."""
+    data_root = _fake_imagenet(tmp_path / "data")
+    matrix = _tiny_two_arm_matrix(tmp_path, data_root)
+    monkeypatch.setattr(trainer, "train_one_epoch",
+                        lambda *a, **kw: (0.0, 0))
+    monkeypatch.setattr(trainer.time, "time", lambda: 1234.0)  # frozen clock
+    run_dir = trainer.run_training(matrix, "tinyA", data_root,
+                                   out_root=tmp_path / "runs",
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu")
+    rows = list(csv.DictReader(open(run_dir / "log.csv", newline="")))
+    assert len(rows) == 1 and rows[0]["img_per_sec"] not in ("", None)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # trainer wiring: knob refusals, phi dump, grad logging
 # ─────────────────────────────────────────────────────────────────────────────
@@ -545,10 +563,15 @@ def test_job_files_are_exactly_what_the_generator_emits(tmp_path):
          "--base-port", "29770", "--only", ",".join(sorted(ARMS))],
         cwd=str(REPO), check=True, capture_output=True)
     for arm in ARMS:
+        # *.sbatch is pinned to LF by .gitattributes, so it compares byte for
+        # byte in any checkout. *.sh is not pinned, and core.autocrlf=true
+        # hands it back as CRLF on Windows — compare its CONTENT and leave
+        # the line endings to test_committed_launchers_ship_with_unix_...
         assert (out / "jobs" / f"{arm}.sbatch").read_bytes() == \
-            _committed_bytes(f"scripts/jobs/{arm}.sbatch"), arm
+            (REPO / "scripts" / "jobs" / f"{arm}.sbatch").read_bytes(), arm
         assert (out / f"submit_{arm}.sh").read_bytes() == \
-            _committed_bytes(f"scripts/submit_{arm}.sh"), arm
+            (REPO / "scripts" / f"submit_{arm}.sh"
+             ).read_bytes().replace(b"\r\n", b"\n"), arm
 
 
 def test_committed_launchers_ship_with_unix_line_endings():
@@ -571,7 +594,7 @@ def test_generator_template_still_produces_the_committed_e2r_files():
     committed = _job("e2r_vits_mixup_saga_s1.sbatch")
     assert gen_slurm_chain.JOB_TEMPLATE.format(
         run_id="e2r_vits_mixup_saga_s1", port=29704,
-        matrix="configs/e2r_matrix.yaml") == committed
+        matrix="configs/e2r_matrix.yaml", ckpt_root_arg="") == committed
 
 
 def test_ablation_ports_collide_with_nothing_in_the_repo():
@@ -589,6 +612,37 @@ def test_ablation_ports_collide_with_nothing_in_the_repo():
                 if "--master_port=" in l][0]
         assert 29770 <= int(line.split("=")[1].strip().rstrip("\\").strip()) \
             <= 29775
+
+
+def test_production_jobs_send_checkpoints_to_the_matrix_ckpt_root():
+    matrix = yaml.safe_load(MATRIX.read_text())
+    root = matrix["ckpt_root"]
+    assert root and str(root).startswith("/home/woody/"), \
+        "the bulk filesystem per How to Run.md §1, not hpc or vault"
+    for arm in ARMS:
+        assert f"--ckpt_root {root}\n" in _job(f"{arm}.sbatch"), arm
+
+
+def test_smoke_and_production_never_share_a_ckpt_root():
+    """They share run_ids. A shared root would leave the smoke's 2-epoch
+    last.pth exactly where the 100-epoch run's `--resume auto` looks, and
+    the trainer would resume from it with only a schedule warning."""
+    production = str(yaml.safe_load(MATRIX.read_text())["ckpt_root"])
+    src = _job("abl_smoke.sbatch")
+    smoke = [l.split(":-", 1)[1].rstrip("}") for l in src.splitlines()
+             if l.startswith("SMOKE_CKPT_ROOT=")][0]
+    assert smoke != production
+    assert not smoke.startswith(production.rstrip("/") + "/")
+    assert "--ckpt_root $SMOKE_CKPT_ROOT" in src
+    assert production not in src, \
+        "the production root must not appear anywhere in the smoke job"
+
+
+def test_e2r_matrix_has_no_ckpt_root_so_its_jobs_are_unchanged():
+    """Those runs are finished; their job files are provenance."""
+    e2r = yaml.safe_load((REPO / "configs" / "e2r_matrix.yaml").read_text())
+    assert "ckpt_root" not in e2r
+    assert "--ckpt_root" not in _job("e2r_vits_mixup_saga_s1.sbatch")
 
 
 def test_smoke_job_covers_every_arm_and_gates_before_staging():
@@ -802,6 +856,57 @@ def test_end_to_end_const_arm_never_learns(tmp_path):
     ckpt = torch.load(run_dir / "ckpt" / "last.pth", map_location="cpu",
                       weights_only=False)
     assert torch.all(ckpt["model"]["blocks.0.attn.gate.phi"] == 0.0)
+
+
+def test_ckpt_root_moves_only_the_checkpoints(tmp_path):
+    """--ckpt_root keeps multi-GB checkpoints off the code filesystem while
+    every small artifact stays under out_root, where sync_results.sh globs
+    for it. Resume must follow, and meta.json must record where they went."""
+    data_root = _fake_imagenet(tmp_path / "data")
+    m = _tiny_two_arm_matrix(tmp_path, data_root)
+    out_root, ckpt_root = tmp_path / "runs", tmp_path / "bulk"
+
+    run_dir = trainer.run_training(m, "tinyA", data_root, out_root=out_root,
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu", ckpt_root=ckpt_root)
+    moved = ckpt_root / "tinyA" / "ckpt"
+    assert (moved / "last.pth").exists() and (moved / "best.pth").exists()
+    assert not (run_dir / "ckpt").exists(), "no ckpt/ in the run dir"
+    for name in ("meta.json", "config.resolved.yaml", "log.csv"):
+        assert (run_dir / name).exists(), name
+    assert (run_dir / "gates").is_dir()
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert meta["ckpt_dir"] == moved.as_posix()
+
+    # and --resume auto finds it there (epoch 1 continues, does not restart)
+    trainer.run_training(m, "tinyA", data_root, out_root=out_root,
+                         resume="auto", max_epochs=2, device_str="cpu",
+                         ckpt_root=ckpt_root)
+    rows = list(csv.DictReader(open(run_dir / "log.csv", newline="")))
+    assert [int(r["epoch"]) for r in rows] == [0, 1]
+    ckpt = torch.load(moved / "last.pth", map_location="cpu",
+                      weights_only=False)
+    assert ckpt["epoch"] == 1
+
+
+def test_ckpt_root_default_is_unchanged(tmp_path):
+    data_root = _fake_imagenet(tmp_path / "data")
+    m = _tiny_two_arm_matrix(tmp_path, data_root)
+    run_dir = trainer.run_training(m, "tinyA", data_root,
+                                   out_root=tmp_path / "runs",
+                                   resume="auto", max_epochs=1,
+                                   device_str="cpu")
+    assert (run_dir / "ckpt" / "last.pth").exists()
+    meta = json.loads((run_dir / "meta.json").read_text())
+    assert meta["ckpt_dir"] == (run_dir / "ckpt").as_posix()
+
+
+def test_posix_ckpt_root_is_not_rebased_under_the_repo():
+    """TASK-09's lesson: '/home/woody/...' is not is_absolute() on Windows,
+    so a naive Path() would silently put HPC checkpoints inside the repo."""
+    from tools.dense_runtime import repo_path
+    assert repo_path("/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt").as_posix() \
+        == "/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt"
 
 
 def test_end_to_end_layerscale_arm_trains_and_dumps_no_phi(tmp_path):
