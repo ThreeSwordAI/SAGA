@@ -1,0 +1,26 @@
+{
+  "run_id": "abl_vits_mixup_const05_s0",
+  "git_sha": "09189400b6d999766785c0cd9e3d30e47086bbac",
+  "git_dirty": true,
+  "cmd": "classification/tools/train.py --matrix configs/abl_matrix.yaml --run abl_vits_mixup_const05_s0 --data_root /scratch/iwi5359h/imagenet_4228405 --resume auto --out_root results/runs_smoke --max_epochs 2",
+  "seed": 0,
+  "world_size": 4,
+  "hostname": "a0603",
+  "gpu_names": [
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB",
+    "NVIDIA A100-SXM4-40GB"
+  ],
+  "torch": "2.10.0+cu128",
+  "timm": "1.0.26",
+  "python": "3.12.13",
+  "cuda": "12.8",
+  "start_time": "2026-09-13T23:49:36.154536+00:00",
+  "end_time": "2026-09-13T23:58:39.731670+00:00",
+  "knobs": {
+    "gate_init_logit": 0.0,
+    "wd_phi_zero": false,
+    "drop_path_rate": 0.0
+  }
+}
