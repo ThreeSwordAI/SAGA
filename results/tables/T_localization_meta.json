@@ -1,0 +1,16 @@
+{
+  "archs": {
+    "vit_base": [
+      "e2r_vitb_mixup_baseline_s1",
+      "e2r_vitb_mixup_saga_s1"
+    ],
+    "vit_small": [
+      "e2r_vits_mixup_baseline_s1",
+      "e2r_vits_mixup_saga_s1",
+      "legacy_vits_registers"
+    ]
+  },
+  "git_sha": "22701b2178239aa9e36ce1d4e437c432a345c244",
+  "n_rows": 24,
+  "source": "results\\figures_data\\F1_localization.csv"
+}
