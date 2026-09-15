@@ -2756,3 +2756,80 @@ the checkpoints are — `tools/derive_runs.py --pattern 'abl_*'`, then
 `apply_fixed_thr --version canon`, then `tools/sink_address.py`. Until those
 land, T2_ablation has no canon sinks, no fp32 top-1 and no gate-vs-address
 correlation — and reading 4 above is exactly what the canon tau decides.
+
+---
+
+## 2026-09-15 — TASK 12, PHASE C part 1 (tables, address, figure, note — built ahead of the derivation)
+
+Branch `task/12-ablation-c` off updated `main` (`dec855f`, the human's merge
+of the Phase-B verification). The four deliverables exist and are correct
+BEFORE the canonical numbers do; every canonical cell reads MISSING and names
+the job that fills it. **No result is claimed in this phase.**
+
+**The blocker, and the job that clears it:**
+`scripts/jobs/abl_derive.sbatch` — `tools/derive_runs.py --pattern 'abl_*'`
+(exact fp32 full-50k eval + canonical diagnostics + norm summaries, best and
+last), then `apply_fixed_thr --version canon`, then `sink_address.py`. The
+backfill precedes the address maps because `sink_address.py` hard-checks its
+canon mass against the field the backfill writes (TASK-10's ordering, same
+reason). a40 / 1 GPU / 8 h against derive_runs' own "~3-5 h for 6 runs";
+`set -u` after the env sourcing, absolute interpreter, a fatal torch
+preflight AND a canon-tau key check both before staging, trap-released
+scratch. The checkpoints are on woody and `derive_runs` reads each run's
+`meta.json["ckpt_dir"]`, so the job names no path.
+
+**Done (local):**
+- `analysis/build_ablation_tables.py` → `results/tables/T2_ablation.csv`.
+  Gate parameter counts are COUNTED from a model built at each run's own
+  recorded `gate_mode` — A 0 · **B 14,112 registered / 0 trainable** · C 72 ·
+  D 4,608 · E/F 14,112 — never tabulated. THREE provenances are carried in
+  separate columns and never merged: the canonical fp32 eval, the trainer's
+  bf16 per-epoch log value, and the trainer's in-training diagnostics
+  (`*_intrain`). A row whose eval and diag describe different checkpoints is
+  VOIDED, not reported (decoy-tested).
+- `analysis/ablation_address.py` → `T2_ablation_address.csv`. `rho_spatial`
+  and `head_mean_gate` are IMPORTED from TASK-07, so the exact permutation
+  null (8 dihedral × 196 torus rolls) cannot drift; the extremal layer
+  carries a Bonferroni correction over the 12 it was chosen from. **The
+  frozen and head-scalar arms get no correlation at all** — their gate is
+  constant across positions, so rho is undefined, not zero, and a printed
+  0.0 would read as a claim about the model rather than about arithmetic.
+- `plotting/plot_T2.py` → `results/figures/F_ablation_draft.{pdf,png}`:
+  top-1 by arm with the 100-epoch schedule in the title and the y-axis
+  labelled with WHICH quantity is plotted (bars hatched while it is the bf16
+  value), the final gate maps on a shared colorbar, and spatial std against
+  depth. Arms with no phi are ABSENT from the map panels, not drawn as zeros.
+- `analysis/build_ablation_note.py` → `results/notes/ablation.md` (148
+  lines, generated; a test re-renders it from the committed tables and
+  requires it byte-identical). It answers TASK-12's four questions or says
+  PENDING and names the job; it flags a sign inversion against the 300-epoch
+  headline loudly AND calibrates it against that cell's own per-repeat
+  spread; it records that arm F's init does not survive its own weight decay;
+  it carries the four caveats.
+- `tests/test_task12_phasec.py` — 16 tests.
+
+**Visible in the figure, and deliberately NOT interpreted yet:** arms E and F
+both show a clear border-ring structure in their final gate maps (layer 10,
+the layer of maximal spatial std). Whether that ring is aligned WITH or
+AGAINST this cell's sink address is exactly what `ablation_address.py`
+computes once the maps exist — TASK-07 found the gate anti-correlated with
+the address at layers 7-8 on the 300-epoch runs, and eyeballing a sign off a
+colormap is not a result.
+
+**Phase D is NOT prepared, deliberately.** Its trigger is evaluated in the
+note's Q1, which is PENDING: choosing which two arms get seeds 1-2 from the
+bf16 ordering would be selecting arms on a non-canonical number. The task
+says the human decides after reading the note; the note is not yet complete.
+(On the bf16 first look both of Phase D's conditions would fire — E's margin
+over the better of {C, D} is +0.272 against an arm-to-arm spread of 0.704,
+and E vs F disagree on the recommended init — so it is likely, not settled.)
+
+`pytest -q`: **549 passed, 30 skipped**.
+
+**Commit:** `eafbe5f` `[TASK-12] ablation tables, address correlation,
+figure and note (phase C)`.
+
+**Pending from HPC (one job):** `sbatch scripts/jobs/abl_derive.sbatch`, then
+commit `results/runs/abl_*/{eval,diag}` and push. Then, locally, re-running
+the three generators fills T2, the address table, the figure and the note in
+place — and only then can Q1/Q2/Q3 be answered and Phase D decided.
