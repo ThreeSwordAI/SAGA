@@ -57,6 +57,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 MISSING = "MISSING"
+N_PATCHES = 196          # ViT-S/16 at 224: the saturation denominator
 
 # arm letters are TASK-12's own design table, keyed by gate_mode + init so a
 # renamed run cannot silently change what a row means
@@ -75,6 +76,7 @@ FIELDS = [
     "top1_last", "delta_top1_vs_A", "top5_last",
     "top1_last_bf16_log", "delta_top1_bf16_vs_A",
     "sink_fixed_canon", "canon_thr_value", "delta_sink_canon_vs_A",
+    "sink_canon_saturated",
     "sink_mad_k5", "oversmooth_pairwise", "oversmooth_pairwise_nosink",
     "eff_rank",
     # the trainer's OWN periodic diagnostics at its last diag epoch. Same
@@ -192,6 +194,18 @@ def build_rows(runs_root: Path, matrix: dict):
             if dg.get("sink_fixed_canon") is None:
                 why.append("sink_fixed_canon not backfilled "
                            "(apply_fixed_thr --version canon)")
+            else:
+                # TASK-02B's own flag: a fixed threshold that counts >=95% of
+                # the 196 patch tokens as sinks is SATURATED and orders
+                # nothing. Recorded, never silently compared.
+                sat = float(dg["sink_fixed_canon"]) >= 0.95 * N_PATCHES
+                row["sink_canon_saturated"] = sat
+                if sat:
+                    why.append(
+                        f"canon tau SATURATED: "
+                        f"{dg['sink_fixed_canon']:.4f} of {N_PATCHES} patch "
+                        f"tokens counted as sinks (>=95%) — the primary sink "
+                        f"metric orders nothing in this cell")
             if (ev is not None and dg.get("ckpt_sha256")
                     and ev.get("ckpt_sha256")
                     and dg["ckpt_sha256"] != ev["ckpt_sha256"]):

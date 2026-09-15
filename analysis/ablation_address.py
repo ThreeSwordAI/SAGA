@@ -137,6 +137,25 @@ def main():
                     comparator=f"baseline={base_id}", note=why)
                 continue
             target = addr_maps[basis]
+            # The ADDRESS map itself can be degenerate: when the cell's tau
+            # saturates, every position is a sink in every image and
+            # freq is exactly 1.0 everywhere. Attribute that to the map, not
+            # to the gate — the two have opposite implications and the
+            # per-layer branch below would otherwise blame the wrong side.
+            if float(target.std()) == 0.0:
+                for li in range(gate.shape[0]):
+                    add(arm=arm, run_id=run_id, gate_mode=mode,
+                        map_basis=basis, layer=li,
+                        gate_mean_layer=round(float(gate[li].mean()), 6),
+                        gate_spatial_std_layer=round(float(gate[li].std()), 8)
+                        if not constant else 0.0,
+                        comparator=f"baseline={base_id}",
+                        note=f"the ADDRESS MAP is constant "
+                             f"(freq_{basis} = {float(target[0]):.4f} at "
+                             f"every position) — the threshold saturated on "
+                             f"this cell, so the map carries no spatial "
+                             f"information and rho is undefined, not zero")
+                continue
             if constant or gate.shape[1] != target.size:
                 reason = ("gate is CONSTANT across positions by construction "
                           f"(gate_mode={mode}) — a rank correlation against "

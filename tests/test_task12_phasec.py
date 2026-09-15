@@ -272,11 +272,34 @@ def test_constant_gate_arms_get_no_correlation_only_words(tmp_path, arm):
         assert "undefined, not zero" in r["note"]
 
 
-def test_address_reports_missing_when_the_baseline_map_is_absent():
+def test_committed_address_table_separates_its_three_blank_reasons():
+    """A blank rho has three causes and they mean different things: the gate
+    is constant by construction, the ADDRESS map is degenerate, or one layer
+    never moved from its init. Conflating them would either credit or accuse
+    an arm wrongly."""
     rows = list(csv.DictReader(open(T2_ADDR, newline="", encoding="utf-8")))
     assert rows
-    assert all(r["rho"] == MISSING for r in rows)
-    assert any("abl_derive.sbatch" in r["note"] for r in rows)
+    by_mode = {}
+    for r in rows:
+        by_mode.setdefault(r["gate_mode"], []).append(r)
+
+    # the spatial arms get real correlations on a basis that has a map
+    spatial = [r for r in by_mode["spatial"] if r["rho"] != MISSING]
+    assert spatial, "the spatial arms must be correlated where a map exists"
+    assert all(r["map_basis"] == "mad" for r in spatial), \
+        "only the mad basis has a usable map in this cell"
+
+    # a degenerate address map is attributed to the MAP, never to the gate
+    degen = [r for r in rows if "ADDRESS MAP is constant" in r["note"]]
+    assert degen and all(r["rho"] == MISSING for r in degen)
+    assert all(r["map_basis"] == "canon" for r in degen)
+    assert any(r["gate_mode"] == "spatial" for r in degen), \
+        "the spatial arms also meet the degenerate canon map"
+
+    # a constant-by-construction gate never gets a number
+    for mode in ("const", "headscalar"):
+        assert all(r["rho"] == MISSING for r in by_mode[mode])
+        assert any("undefined, not zero" in r["note"] for r in by_mode[mode])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -310,11 +333,19 @@ def test_note_answers_the_four_questions_or_says_pending():
     for caveat in ("One seed per arm", "100 epochs, not the headline's 300",
                    "One cell"):
         assert caveat in text, caveat
-    # the pending sections must name the job that fills them, never
-    # substitute the bf16 numbers
-    assert "abl_derive.sbatch" in text
+    # anything still PENDING must name the job that fills it, rather than
+    # being answered from a substitute number
+    if "PENDING" in text:
+        assert "abl_derive.sbatch" in text
     assert "NOT CANONICAL" not in text.split("## 8.")[0], \
         "no provisional value may appear before the provenance section"
+    # a saturated threshold is a measured result, not a pending one, and
+    # must be labelled as ordering nothing rather than quietly compared
+    rows = list(csv.DictReader(open(T2, newline="", encoding="utf-8")))
+    if any(str(r["sink_canon_saturated"]).lower() == "true" for r in rows):
+        assert "SATURATE" in text
+        assert "orders nothing" in text
+        assert "Nothing was recalibrated" in text
 
 
 def test_note_flags_a_sign_inversion_loudly(tmp_path):
