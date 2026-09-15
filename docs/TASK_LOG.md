@@ -2883,13 +2883,20 @@ found — not committed, not stashed, not touched.
      dataset's own, computed over the **TRAIN split only** — never the test
      split — so "test touched once" stays airtight; the value, its source and
      the image count are recorded in every output JSON.
-- A2 launcher `scripts/jobs/ft_ring_ablation.sbatch` (NEW): a40 per
-  `docs/HPC_WORKFLOW.md` ("Partitions"), cpus-per-task=4 per the same a40
-  precedent, `set -u` AFTER the env sourcing, the torch/timm import gate
-  BEFORE any staging, and `trap ... EXIT` so node-local scratch is released
-  when the job is killed at the wall. `--time=06:00:00` is the one value with
-  no measured source (same request as TASK-11's a40 job; the a40 wall limit
-  is still undocumented).
+- A2 launcher `scripts/jobs/ft_ring_ablation.sbatch` (NEW): `set -u` AFTER
+  the env sourcing, the torch/timm import gate BEFORE any staging, and
+  `trap ... EXIT` so node-local scratch is released when the job is killed at
+  the wall. **Partition a100 at the human's explicit instruction
+  (2026-09-15); an a40 header was written first and replaced.** Every SLURM
+  value is then taken from the ft pipeline's OWN committed single-GPU
+  launcher — the one that completed all 16 TASK-08 fine-tunes on a100 —
+  so `--partition=a100`, `--gres=gpu:a100:1`, `--cpus-per-task=8` and
+  `--time=06:00:00` all have the same provenance and nothing was carried over
+  from the a40 header (whose cpus-per-task=4 belongs to a different
+  partition). A test pins the four values EQUAL to that committed ft header,
+  so they cannot drift apart, and asserts no a40 value survives. `--time` is
+  generous by construction: the header was sized for a 100-epoch fine-tune
+  and this job is eval-only.
 - A3 third dataset: **NOT built** — the task makes it conditional on the
   human confirming a staged path, and writing Cars/Flowers parsers against an
   unknown on-disk layout is exactly the invention CLAUDE.md forbids. The
