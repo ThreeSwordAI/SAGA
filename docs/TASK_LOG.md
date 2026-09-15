@@ -3369,3 +3369,60 @@ revertible with `git reset --hard 0e1090e` on `main` if they disagree.
 handoff commit.
 
 **Pending from HPC:** nothing. TASK 13 is complete.
+
+---
+
+## 2026-09-15 — EARLY HANDOFF DOC (consolidated, no new experiments)
+
+Human asked for `docs/early_handoff.md` on `main`: ALL results and ALL
+experiments, TASK-00 through TASK-13, in one document. No run, no
+re-derivation, no results file touched. Committed directly to `main` per
+the human's explicit instruction (the handoff-doc exception TASK-08/10/13
+established), from the `SAGA-13` worktree (`main` is checked out there;
+the primary checkout carries another session's branch).
+
+**Done (local):**
+- `analysis/build_early_handoff.py` → `docs/early_handoff.md` (223
+  lines). Follows the TASK-07/08/13 generator convention: every
+  experimental number READ from committed tables/JSONs/notes (12 tables,
+  the canon threshold file, gate verdict lines), fixed prose around them,
+  MISSING when a source cannot supply a value. Sections: project, how to
+  read the numbers (recipe_actual doctrine, threshold generations, stats
+  discipline, bf16-vs-fp32), the VOID list, run inventory (counted from
+  disk), results 5.0-5.10 (legacy re-derivation + robustness + F6
+  relocation; pooled classification incl. oversmoothing/eff_rank; gate
+  agreement; grad-phi; sink address; ablation; fine-grained; ring
+  ablation; dense + Gate-2; TTR; localization), gate verdicts, what was
+  built/fixed (B1-B7 + the dense frame bug + the review-caught
+  inversions), open items, file map, provenance warnings.
+- `tests/test_early_handoff.py` — 3 tests: headline numbers must equal
+  the committed tables' values, scope/VOID/honesty statements retained,
+  no local absolute path leaked.
+- **Adversarial verification (3-agent workflow + 1 re-verify agent):
+  every transcribed number in the document checked against its source
+  file — ~70 numbers verified exact.** Real defects it caught, all
+  fixed BEFORE commit: a background-class mean computed over 2 of 3
+  classes (ADE20K's floor is named "floor, flooring" — name filter
+  replaced by the is_background_class flag; +0.1555 → +0.2853); ring
+  contrast SEs averaged over per-cell rows instead of the pooled
+  arch=ALL rows (±0.184/0.294 → ±0.137/0.368); a FALSE sentence carried
+  over from the TASK-13 log ("n=1 headlines were the largest of the
+  three seeds" — CUB f1 +1.761 > f0 +1.329; now computed and file-true);
+  missing oversmoothing/eff_rank results (added: S/mixup SAGA
+  −0.1296±0.0316 and +14.10±2.65, both 2×SE); missing TASK-02B
+  robustness + F6 relocation headlines (added as §5.0, computed from
+  sink_robustness.csv / legacy_e2_corrected.csv); two dropped caveats
+  restored (B/mixup registers address map is MC-noise dominated; dense
+  registers runs use the fallback backbone — mixed comparison); raw
+  float noise in the TTR table; the ViT-B gate drop 1.0200 now read
+  from T_ttr_sweep.csv.
+- NOTE for future sessions: the TASK-13 Phase C log entry (2026-09-15)
+  contains the same false "largest of the three seeds" sentence,
+  self-contradicted two lines later by its own +1.761; the tables are
+  the record.
+- `pytest -q`: **605 passed, 30 skipped** (602 pre-existing + 3 new).
+
+**Commit:** `[HANDOFF] early_handoff.md: consolidated all-results
+document (generated)` on `main`.
+
+**Pending from HPC:** nothing.
