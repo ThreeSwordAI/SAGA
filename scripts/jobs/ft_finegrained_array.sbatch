@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:a100:1
 #SBATCH --time=06:00:00
 #SBATCH --cpus-per-task=8
-#SBATCH --array=0-15
+#SBATCH --array=0-23
 #SBATCH --output=/home/vault/iwi5/iwi5359h/SAGA/logs/saga_ft16_%A_%a.log
 #SBATCH --error=/home/vault/iwi5/iwi5359h/SAGA/logs/saga_ft16_%A_%a.err
 
@@ -34,6 +34,14 @@ RUN_IDS=(
     "ft_cub_vitb_saga_bs1_f0"        # 13
     "ft_aircraft_vitb_baseline_bs1_f0"        # 14
     "ft_aircraft_vitb_saga_bs1_f0"        # 15
+    "ft_cub_vitb_baseline_bs1_f1"        # 16
+    "ft_cub_vitb_baseline_bs1_f2"        # 17
+    "ft_cub_vitb_saga_bs1_f1"        # 18
+    "ft_cub_vitb_saga_bs1_f2"        # 19
+    "ft_aircraft_vitb_baseline_bs1_f1"        # 20
+    "ft_aircraft_vitb_baseline_bs1_f2"        # 21
+    "ft_aircraft_vitb_saga_bs1_f1"        # 22
+    "ft_aircraft_vitb_saga_bs1_f2"        # 23
 )
 RUN_ID=${RUN_IDS[$SLURM_ARRAY_TASK_ID]:-}
 echo "array task $SLURM_ARRAY_TASK_ID -> $RUN_ID"
