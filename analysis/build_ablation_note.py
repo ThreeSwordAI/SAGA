@@ -98,7 +98,13 @@ def build(table, address, pooled, today):
         L.append(s)
 
     derived = all(num(r["top1_last"]) is not None for r in table)
-    canon = all(num(r["sink_fixed_canon"]) is not None for r in table)
+    canon_present = all(num(r["sink_fixed_canon"]) is not None
+                        for r in table)
+    saturated = [r for r in table
+                 if str(r.get("sink_canon_saturated", "")).lower() == "true"]
+    # a saturated threshold has been MEASURED but orders nothing, which is
+    # not the same state as "not yet derived" and must not be reported as it
+    canon = canon_present and not saturated
     has_addr = any(num(r["rho"]) is not None for r in address)
 
     w("# TASK-12 — matched-init ablation: is the spatial structure the "
@@ -115,10 +121,14 @@ def build(table, address, pooled, today):
     w(f"- exact fp32 full-50k top-1 for every arm: "
       f"**{'derived' if derived else 'PENDING'}**")
     w(f"- primary-metric sink counts (the cell's canon tau): "
-      f"**{'derived' if canon else 'PENDING'}**")
+      + ("**derived**" if canon else
+         ("**DERIVED BUT SATURATED — see §5, they order nothing**"
+          if saturated else "**PENDING**")))
     w(f"- gate-vs-address correlations: "
       f"**{'derived' if has_addr else 'PENDING'}**")
-    if not (derived and canon and has_addr):
+    # only for what is genuinely NOT YET DERIVED. A saturated threshold has
+    # been measured; re-running the job would not change it.
+    if not (derived and canon_present and has_addr):
         w()
         w("What is PENDING above comes from one job — "
           "`sbatch scripts/jobs/abl_derive.sbatch` — which runs "
@@ -166,12 +176,16 @@ def build(table, address, pooled, today):
         pairs = [(k, num(by_arm[k]["top1_last"])) for k in ("B", "C", "D")]
         for k, v in pairs:
             w(f"- E − {k} = **{e - v:+.3f}**")
-        best_ctrl = max(v for _, v in pairs)
+        # TASK-12's Phase-D trigger names {C, D} specifically — B is the
+        # floor, not a control — so the margin is computed over those two
+        best_ctrl_arm, best_ctrl = max(
+            ((k, v) for k, v in pairs if k in ("C", "D")),
+            key=lambda t: t[1])
         margin = e - best_ctrl
         spread = (max(num(r["top1_last"]) for r in table)
                   - min(num(r["top1_last"]) for r in table))
         w()
-        w(f"E's margin over the best non-spatial control is "
+        w(f"E's margin over the better of {{C, D}} (arm {best_ctrl_arm}) is "
           f"**{margin:+.3f}**, against an arm-to-arm")
         w(f"spread of **{spread:.3f}**. "
           + ("Because that margin is SMALLER than the spread, TASK-12's "
@@ -270,6 +284,60 @@ def build(table, address, pooled, today):
           "achieves is the effect of")
         w("the 0.5 scaling alone, with no learning and no spatial structure "
           "of any kind.")
+    elif saturated:
+        tau = f(table[0]["canon_thr_value"], 4)
+        counts = ", ".join(f"{r['arm']} {f(r['sink_fixed_canon'], 4)}"
+                           for r in table)
+        w("### The primary sink metric SATURATES in this cell and orders "
+          "nothing")
+        w()
+        w(f"Under the committed ViT-S/mixup canon tau ({tau}) every arm "
+          f"counts essentially all 196")
+        w(f"patch tokens as sinks: {counts}. That is above TASK-02B's own "
+          f"saturation flag (>= 95% of")
+        w("the patch tokens), and a threshold that every token clears cannot "
+          "rank anything. The")
+        w("differences between those numbers are the last decimal of a "
+          "saturated count and are not")
+        w("evidence about any arm.")
+        w()
+        w("**The cause is a schedule mismatch, not a fault in the runs.** "
+          "The canon tau was")
+        w("calibrated on the 300-epoch `e2r_vits_mixup_baseline_s1`, and "
+          "these models are 100-epoch")
+        w("models with a different norm scale: arm A's own last-block patch "
+          "norms have a median of")
+        w("37.28 against that tau of 20.85, and its own per-image MAD "
+          "threshold (the quantity the")
+        w("canon definition is built from) is 52.95 — read from "
+          "`diag_final_last_normstats.json`,")
+        w("fields `p50` and `mean_threshold_mad_k5`. A tau calibrated on "
+          "this cell would sit near")
+        w("the latter, i.e. roughly 2.5x the one applied here.")
+        w()
+        w("**Nothing was recalibrated.** TASK-12's acceptance list requires "
+          "the canon tau be taken")
+        w("from the ViT-S/mixup cell and never recalibrated, so it was not, "
+          "and the saturation is")
+        w("reported instead of worked around. The consequence has to be "
+          "stated plainly: **this")
+        w("ablation cannot answer the sink question on its primary metric.** "
+          "Answering it would need")
+        w("a threshold calibrated on THIS cell's own arm-A baseline, "
+          "declared under its own key")
+        w("with its own provenance — a decision for the human, not a "
+          "substitution to be made here.")
+        w()
+        w("What remains is the secondary MAD metric, and it is confounded "
+          "against precisely the")
+        w("comparison at issue: PROJECT.md §3.2 records that per-image "
+          "median+5·MAD falls with the")
+        w("norm bulk, and a uniform 0.5 gate compresses exactly that bulk. "
+          "So arm B scoring well on")
+        w("MAD is the predicted behaviour of the metric, not evidence about "
+          "the mechanism. Both")
+        w("numbers are below; neither settles anything.")
+        w()
     else:
         w("Primary-metric (canon tau) sink counts are **PENDING** (see §0), "
           "and they are what")
@@ -307,6 +375,21 @@ def build(table, address, pooled, today):
           f"{f(r['eff_rank' + suffix], 2)} | "
           f"{f(r['sink_mad_k5' + suffix], 4)} |")
     w()
+    if canonical_diag and saturated:
+        b = num(by_arm["B"]["sink_mad_k5"])
+        e = num(by_arm["E"]["sink_mad_k5"])
+        a = num(by_arm["A"]["sink_mad_k5"])
+        if None not in (a, b, e):
+            w(f"On MAD, the frozen arm B ({b:.4f}) and the learned spatial "
+              f"arm E ({e:.4f}) both sit far")
+            w(f"below the baseline ({a:.4f}). As above, that is what this "
+              f"metric does when the norm")
+            w("bulk is compressed, so it is not evidence that the two "
+              "interventions are equivalent —")
+            w("and it is not evidence that they differ either. The question "
+              "is open and this cell,")
+            w("as calibrated, cannot close it.")
+            w()
     if not canonical_diag:
         b = num(by_arm["B"]["sink_mad_k5_intrain"])
         e = num(by_arm["E"]["sink_mad_k5_intrain"])
@@ -347,6 +430,20 @@ def build(table, address, pooled, today):
       "an argmax over 12,")
     w("so its p is Bonferroni-corrected.")
     w()
+    degenerate_bases = sorted({r["map_basis"] for r in address
+                               if "ADDRESS MAP is constant" in r["note"]})
+    if degenerate_bases:
+        w(f"**The `{'`, `'.join(degenerate_bases)}` basis carries no address "
+          f"map in this cell.** The same")
+        w("saturation as §5: every position is a sink in every image, so "
+          "freq is exactly 1.0 at all")
+        w("196 positions and the map has no spatial structure to correlate "
+          "against. Those rows")
+        w("carry no rho, deliberately. Only the MAD basis remains, so unlike "
+          "TASK-07 — which")
+        w("required a result to hold in BOTH bases — nothing here can be "
+          "cross-checked between them.")
+        w()
     if has_addr:
         w("| arm | basis | extremal layer | rho | p (exact) | p (Bonferroni) "
           "| null sd |")
@@ -357,11 +454,48 @@ def build(table, address, pooled, today):
                   f"{f(r['rho'], 4)} | {f(r['p_spatial'], 5)} | "
                   f"{f(r['p_bonferroni'], 5)} | {f(r['null_sd'], 4)} |")
         w()
+        sig = [r for r in address
+               if str(r["layer"]).startswith("layer_absmax")
+               and num(r["p_bonferroni"]) is not None
+               and num(r["p_bonferroni"]) < 0.05]
+        if sig:
+            w("TASK-07 found this gate-vs-address relationship on the "
+              "300-epoch ViT-S/mixup runs at")
+            w("**layers 7-8, negative, rho −0.518…−0.594, Bonferroni-"
+              "significant in 4/4 repeats**")
+            w("(`results/notes/sink_address.md`). Here:")
+            w()
+            for r in sig:
+                w(f"- arm {r['arm']} reaches rho **{f(r['rho'], 4)}** at "
+                  f"{r['layer'].replace('layer_absmax=', 'layer ')}, "
+                  f"Bonferroni p {f(r['p_bonferroni'], 4)} — same sign, same "
+                  f"depth.")
+            w()
+            w("That is an independent replication of the mechanism finding "
+              "on a different schedule,")
+            w("and it is the strongest result in this ablation. Its limits "
+              "are equally concrete: one")
+            w("seed, one basis only (the canon map is degenerate here, so "
+              "the two-basis agreement")
+            w("TASK-07 required cannot be checked), and a correlation is an "
+              "alignment — not a")
+            w("demonstration that the alignment is what produces the "
+              "accuracy.")
+            w()
     else:
         w("**PENDING** — needs the address maps (see §0).")
         w()
+    # Arms whose GATE cannot vary across positions, taken from gate_mode
+    # rather than from note text. Two other things also produce a blank rho
+    # and must not be confused with this one: a degenerate ADDRESS map
+    # (covered just above), and a single layer of a spatial arm that happens
+    # to be constant — the final layer usually is, since it stays at its
+    # init. Calling those "arms with no structure" would be false.
     undefined = sorted({r["arm"] for r in address
-                        if "undefined, not zero" in r["note"]})
+                        if r["gate_mode"] in ("const", "headscalar")})
+    flat_layers = sorted({(r["arm"], r["layer"]) for r in address
+                          if r["gate_mode"] == "spatial"
+                          and "layer is spatially constant" in r["note"]})
     if undefined:
         w(f"Arms {', '.join(undefined)} appear in the table with **no "
           f"correlation value, deliberately**: their")
@@ -372,6 +506,18 @@ def build(table, address, pooled, today):
         w("ignores the address\", which would be a statement about "
           "arithmetic rather than about the")
         w("model.")
+        if flat_layers:
+            per_arm = {}
+            for arm, layer in flat_layers:
+                per_arm.setdefault(arm, []).append(str(layer))
+            w()
+            w("Individual layers of the SPATIAL arms are blank for the same "
+              "reason and no other: "
+              + "; ".join(f"arm {a} at layer(s) {', '.join(sorted(set(ls)))}"
+                          for a, ls in sorted(per_arm.items()))
+              + ". A layer that never moved from its init is spatially "
+                "constant, so its rho is undefined too — that is one layer, "
+                "not the arm.")
     else:
         w("(Arms B and C hold a gate that is constant across positions, so "
           "their correlation is")
@@ -409,6 +555,14 @@ def build(table, address, pooled, today):
     w("5. **Arm F's initialisation does not survive its own schedule** "
       "(§3), so it under-tests the")
     w("   init question rather than answering it.")
+    if saturated:
+        w("6. **The primary sink metric saturates here** (§5), so the "
+          "mechanism half of this")
+        w("   ablation is unanswered rather than answered either way. The "
+          "accuracy half (§2-4) and")
+        w("   the gate-vs-address correlation (§6) are unaffected — they do "
+          "not depend on that")
+        w("   threshold.")
     w()
     w("## 8. Provenance")
     w()
