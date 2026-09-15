@@ -61,16 +61,20 @@ official test split evaluated once with the val-selected checkpoint.
 | variant | ft-seed | test top-1 | test top-5 | val top-1 @ best | best epoch |
 |---|---|---|---|---|---|
 | baseline | f0 | 80.549 | 95.685 | 84.333 | 14 |
+| baseline | f1 | 79.582 | 93.631 | 83.500 | 39 |
+| baseline | f2 | 80.877 | 96.065 | 83.667 | 8 |
 | saga | f0 | 81.878 | 95.841 | 83.167 | 11 |
+| saga | f1 | 81.343 | 95.875 | 82.500 | 8 |
+| saga | f2 | 80.929 | 94.546 | 82.833 | 23 |
 
-- **baseline mean test top-1 = 80.549** (n = 1, std = MISSING)
-- **saga mean test top-1 = 81.878** (n = 1, std = MISSING)
+- **baseline mean test top-1 = 80.336** (n = 3, std = 0.6733)
+- **saga mean test top-1 = 81.383** (n = 3, std = 0.4758)
 
-- **SAGA paired Δ (by ft-seed) = +1.329** (n = 1 pair; per-seed: f0 +1.329)
-  - SE = MISSING; significant at 2×SE: **MISSING**
-  - single ft-seed by design ⇒ no std, no SE, **no
-    significance claim is possible for this cell**; the
-    delta is one paired observation.
+- **SAGA paired Δ (by ft-seed) = +1.047** (n = 3 pairs; per-seed: f0 +1.329, f1 +1.761, f2 +0.052)
+  - SE = 0.5131; significant at 2×SE: **YES**
+  - direction: **SAGA above baseline**; |Δ| − 2×SE = +0.0212 (the 2×SE threshold is 1.0261)
+  - the verdict clears the threshold by a thin margin on n = 3 seeds; read it as a direction, not a precise effect size
+  - unpaired robustness: Welch t = 2.2004, p = 0.1002
 
 ### FGVC-Aircraft — ViT-S (test n = 3333)
 
@@ -97,35 +101,41 @@ official test split evaluated once with the val-selected checkpoint.
 | variant | ft-seed | test top-1 | test top-5 | val top-1 @ best | best epoch |
 |---|---|---|---|---|---|
 | baseline | f0 | 72.427 | 93.129 | 72.143 | 19 |
+| baseline | f1 | 72.637 | 91.809 | 73.714 | 84 |
+| baseline | f2 | 72.517 | 91.899 | 72.857 | 62 |
 | saga | f0 | 74.227 | 92.769 | 74.143 | 63 |
+| saga | f1 | 72.997 | 93.039 | 75.000 | 69 |
+| saga | f2 | 73.627 | 92.289 | 75.286 | 58 |
 
-- **baseline mean test top-1 = 72.427** (n = 1, std = MISSING)
-- **saga mean test top-1 = 74.227** (n = 1, std = MISSING)
+- **baseline mean test top-1 = 72.527** (n = 3, std = 0.1054)
+- **saga mean test top-1 = 73.617** (n = 3, std = 0.6151)
 
-- **SAGA paired Δ (by ft-seed) = +1.800** (n = 1 pair; per-seed: f0 +1.800)
-  - SE = MISSING; significant at 2×SE: **MISSING**
-  - single ft-seed by design ⇒ no std, no SE, **no
-    significance claim is possible for this cell**; the
-    delta is one paired observation.
+- **SAGA paired Δ (by ft-seed) = +1.090** (n = 3 pairs; per-seed: f0 +1.800, f1 +0.360, f2 +1.110)
+  - SE = 0.4158; significant at 2×SE: **YES**
+  - direction: **SAGA above baseline**; |Δ| − 2×SE = +0.2584 (the 2×SE threshold is 0.8316)
+  - unpaired robustness: Welch t = 3.0254, p = 0.0877
 
 ## 3. Sanity checks
 
-**Val curve peaked before the final epoch?** 16 of 16 runs peaked strictly before their final epoch; 0 peaked at (or one before) the last epoch.
+**Val curve peaked before the final epoch?** 24 of 24 runs peaked strictly before their final epoch; 0 peaked at (or one before) the last epoch.
 
-Best epochs range 11..86 out of 100 trained. Selecting on the held-out val split therefore changed which weights were evaluated for these runs — the final-epoch weights were not the val-best weights.
+Best epochs range 8..86 out of 100 trained. Selecting on the held-out val split therefore changed which weights were evaluated for these runs — the final-epoch weights were not the val-best weights.
 
-**Val vs test disagreement > 2 pts:** 6 of 16 runs flagged.
+**Val vs test disagreement > 2 pts:** 9 of 24 runs flagged.
 
 | run | val top-1 @ best | test top-1 | val − test |
 |---|---|---|---|
+| cub ViT-B baseline f1 | 83.500 | 79.582 | +3.918 |
 | cub ViT-B baseline f0 | 84.333 | 80.549 | +3.784 |
 | cub ViT-S saga f1 | 83.500 | 80.532 | +2.968 |
+| cub ViT-B baseline f2 | 83.667 | 80.877 | +2.790 |
 | cub ViT-S saga f2 | 82.833 | 80.152 | +2.681 |
 | cub ViT-S baseline f1 | 83.167 | 80.739 | +2.428 |
 | aircraft ViT-S saga f0 | 76.000 | 73.687 | +2.313 |
 | cub ViT-S saga f0 | 83.167 | 80.860 | +2.307 |
+| aircraft ViT-B saga f1 | 75.000 | 72.997 | +2.003 |
 
-All 16 gaps have the same sign convention (val − test); range -0.407 .. +3.784, mean +1.553. 13 of 16 are positive (val optimistic relative to test).
+All 24 gaps have the same sign convention (val − test); range -0.407 .. +3.918, mean +1.654. 21 of 24 are positive (val optimistic relative to test).
 
 Scale for reading those gaps: the val splits are small, so their
 own sampling noise is of the same order as the flag threshold.
@@ -148,7 +158,11 @@ protocol fault. It is reported here, not corrected for.
 | ft_cub_vits_saga_bs1_f1 | e2r_vits_mixup_saga_s1 | `5afe5394ddb2` | `f2be093f67d2` | 5794 | `30d72f606dfd` |
 | ft_cub_vits_saga_bs1_f2 | e2r_vits_mixup_saga_s1 | `5afe5394ddb2` | `f2be093f67d2` | 5794 | `30d72f606dfd` |
 | ft_cub_vitb_baseline_bs1_f0 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `f2be093f67d2` | 5794 | `30d72f606dfd` |
+| ft_cub_vitb_baseline_bs1_f1 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `f2be093f67d2` | 5794 | `22701b217823` |
+| ft_cub_vitb_baseline_bs1_f2 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `f2be093f67d2` | 5794 | `22701b217823` |
 | ft_cub_vitb_saga_bs1_f0 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `f2be093f67d2` | 5794 | `30d72f606dfd` |
+| ft_cub_vitb_saga_bs1_f1 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `f2be093f67d2` | 5794 | `22701b217823` |
+| ft_cub_vitb_saga_bs1_f2 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `f2be093f67d2` | 5794 | `22701b217823` |
 | ft_aircraft_vits_baseline_bs1_f0 | e2r_vits_mixup_baseline_s1 | `3aa41a7225b6` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
 | ft_aircraft_vits_baseline_bs1_f1 | e2r_vits_mixup_baseline_s1 | `3aa41a7225b6` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
 | ft_aircraft_vits_baseline_bs1_f2 | e2r_vits_mixup_baseline_s1 | `3aa41a7225b6` | `56bbad6c743e` | 3333 | `d43a182ca939` |
@@ -156,7 +170,11 @@ protocol fault. It is reported here, not corrected for.
 | ft_aircraft_vits_saga_bs1_f1 | e2r_vits_mixup_saga_s1 | `5afe5394ddb2` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
 | ft_aircraft_vits_saga_bs1_f2 | e2r_vits_mixup_saga_s1 | `5afe5394ddb2` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
 | ft_aircraft_vitb_baseline_bs1_f0 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
+| ft_aircraft_vitb_baseline_bs1_f1 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `56bbad6c743e` | 3333 | `22701b217823` |
+| ft_aircraft_vitb_baseline_bs1_f2 | e2r_vitb_mixup_baseline_s1 | `316211c719c4` | `56bbad6c743e` | 3333 | `22701b217823` |
 | ft_aircraft_vitb_saga_bs1_f0 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `56bbad6c743e` | 3333 | `30d72f606dfd` |
+| ft_aircraft_vitb_saga_bs1_f1 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `56bbad6c743e` | 3333 | `22701b217823` |
+| ft_aircraft_vitb_saga_bs1_f2 | e2r_vitb_mixup_saga_s1 | `a4e0e0ccd3b4` | `56bbad6c743e` | 3333 | `22701b217823` |
 
 Split files: CUB-200-2011 5994 official train → 5394 train + 600 val (seed 0), FGVC-Aircraft 6667 official train → 5967 train + 700 val (seed 0).
 

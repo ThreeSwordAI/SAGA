@@ -647,7 +647,8 @@ def test_committed_T3_matches_the_run_jsons():
         assert int(r["n_test_images"]) == d["n_images"]
         assert not d.get("smoke", False), f"{run_id} is a smoke artifact"
         n_checked += 1
-    assert n_checked == 16, f"expected 16 repeat rows, found {n_checked}"
+    # 16 TASK-08 runs + TASK-13's 8-run ViT-B seed fill
+    assert n_checked == 24, f"expected 24 repeat rows, found {n_checked}"
 
 
 def test_finegrained_note_states_legacy_void():
