@@ -3302,3 +3302,56 @@ would settle the two thin ViT-B margins; `mask_random44` uses one seed so the
 control is a single draw (re-running `tools/ring_ablation.py --seed <k>` would
 put an error bar on it); and the CUB ViT-S/ViT-B sign disagreement is
 unexplained.
+
+---
+
+## 2026-09-15 — TASK 13, HANDOFF DOC (no new experiments)
+
+Human asked for a full TASK-13 handoff in `docs/`, on `main`. No experiment
+was run and no results file was recomputed — the tables and note are exactly
+as Phase C committed them.
+
+**Done (local):**
+- `analysis/build_task13_handoff.py` → `docs/Task13_handsoff.md` (198 lines).
+  Follows the TASK-07/TASK-08 pattern: every experimental number is READ from
+  `results/tables/T3_finegrained.csv`, `results/tables/T_ring_ablation.csv`
+  and the per-run JSONs; the surrounding prose is fixed text; re-running the
+  script updates the document. Sections: status at a glance, why the task
+  existed, results (transfer + ring ablation + the three qualifications + the
+  validity control), **what was NOT done and why**, a file-by-file map of
+  which file holds which result, how to reproduce or extend, the integrity
+  checks, the decisions a reviewer should know about, the commit list, and
+  the open items.
+- Naming: `Task13_handsoff.md` follows the human's own `docs/Task10_handsoff.md`
+  (the repo also has the generated `TASK_07_HANDOFF.md` /
+  `TASK_08_HANDOFF.md`; the two spellings coexist and the human asked for
+  this one).
+- Two hardcoded counts caught and fixed before commit — the same defect class
+  as Phase C's: the status table quoted `pytest -q: 600 passed` (already 602
+  by then, and a repo-wide total is not TASK-13's to claim — now dropped in
+  favour of TASK-13's own contribution) and the file map hardcoded "22 / 14
+  tests" (14 was stale). Both test counts are now computed from the test
+  files by `count_tests()`.
+- Tests: 2 new in `tests/test_task13_phasec.py` — the handoff's headline
+  numbers must appear with the values the committed tables hold (byte-equality
+  regeneration is not usable: the document embeds the git sha), and the
+  handoff must retain its scope limits (the three ring qualifications, the
+  SKIPPED sub-goal with its no-generalization consequence, the ViT-S/ViT-B
+  sign disagreement, and the VOID legacy numbers). `pytest -q`: **602 passed,
+  30 skipped**.
+
+**Branch reconciliation, stated because it departs from CLAUDE.md's default:**
+CLAUDE.md says never commit task work directly to `main`. The human explicitly
+asked for this document on `main`, and the repo already carries
+`[TASK-08] handoff document (generated)` and `[TASK-10] docs: full handoff …`
+as direct-to-main commits, so handoff docs are an established exception. To
+make the document reference files that actually exist on `main`, Phase C was
+merged first (`59e260a`, `--no-ff` of `task/13-fgext-c`, one TASK_LOG conflict
+resolved by keeping BOTH entries, TASK-08's handoff entry first and TASK-13's
+Phase C last). That merge is nominally the human's step; it is trivially
+revertible with `git reset --hard 0e1090e` on `main` if they disagree.
+
+**Commits:** `59e260a` (merge of Phase C into main), plus this entry's
+handoff commit.
+
+**Pending from HPC:** nothing. TASK 13 is complete.

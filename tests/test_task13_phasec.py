@@ -231,3 +231,45 @@ def test_note_makes_no_pooled_cross_architecture_claim():
     t = NOTE.read_text(encoding="utf-8")
     assert "disagree in SIGN" in t
     assert "no pooled cross-architecture claim" in t
+
+
+# ── the handoff document ─────────────────────────────────────────────────────
+
+HANDOFF = REPO / "docs" / "Task13_handsoff.md"
+
+
+def test_handoff_headline_numbers_match_the_tables():
+    """The handoff embeds a git sha, so byte-equality regeneration is not
+    usable; instead every headline number it quotes must appear in it with
+    the value the committed tables hold."""
+    text = HANDOFF.read_text(encoding="utf-8")
+    t3, rg = _rows(T3), _rows(T_RING)
+
+    for ds in ("cub", "aircraft"):
+        for arch in ("vit_small_patch16_224", "vit_base_patch16_224"):
+            d = _pick(t3, dataset=ds, arch=arch, kind="paired_delta_mean",
+                      variant="saga")
+            assert f"{float(d['test_top1']):+.3f}" in text, (ds, arch)
+        c = _pick(rg, dataset=ds, arch="ALL", kind="mean")
+        assert f"{float(c['contrast_ring1_minus_random44']):+.3f}" in text, ds
+        assert f"{float(c['drop_ring1']):+.3f}" in text, ds
+
+    diff = _pick(rg, kind="between_dataset_difference")
+    assert f"{float(diff['contrast_ring1_minus_random44']):+.4f}" in text
+
+
+def test_handoff_states_the_scope_limits():
+    """A handoff that dropped these would misrepresent what was shown."""
+    text = HANDOFF.read_text(encoding="utf-8")
+    # the three qualifications that bound the ring verdict
+    assert "Both contrasts are NEGATIVE" in text
+    assert "orders the OTHER way" in text
+    assert "carried by the denominator" in text.lower() \
+        or "carried by the DENOMINATOR" in text
+    # the skipped sub-goal and its consequence
+    assert "SKIPPED" in text
+    assert "no claim of generalization beyond CUB and Aircraft" in text
+    # the sign disagreement must not be quietly dropped
+    assert "disagree in SIGN" in text
+    # and the void legacy numbers
+    assert "+2.19" in text and "+1.29" in text and "VOID" in text
