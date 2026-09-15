@@ -3059,6 +3059,20 @@ and `probe_attention.sbatch` passes that check rather than skipping).
 **Commit:** `[TASK-11] localization table + teaser note + F1 draft (phase C)`
 
 **Pending from HPC:** nothing. TASK 11 is complete once merged.
+**Addendum (2026-09-15, handoff):**  ->
+ (204 lines), matching TASK-07's generated-handoff
+precedent: status and commits per phase, how to read the numbers before
+quoting any, the full result table, the two readings the nulls make visible,
+the failure-case summary, an explicit WHAT WAS NOT DONE table (TTR column,
+seed-level error bars, the absent vit_base/registers cell, why curated images
+are never scored, the class-prior basis of the criteria, and the framing
+decision left to the human), a file-by-file map of which artifact holds which
+result, regenerate commands for both the local and HPC halves, and six
+provenance warnings. Every experimental number is read from the committed
+artifacts; a traceability check confirms all 5 significant deltas, all 3
+group shas/counts, all 5 ckpt shas and the 3300-row count appear in the
+document sourced from their files. pytest -q: 586 passed, 30 skipped.
+
 Open for the human: (a) how to frame a teaser whose number favours registers;
 (b) whether to fill the TTR column; (c) whether to add seeds so these deltas
 can carry seed-level rather than image-level error bars.
