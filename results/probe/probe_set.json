@@ -1,0 +1,2124 @@
+{
+  "groups": {
+    "boxes20": {
+      "box_format": "xywh, ORIGINAL image pixel coordinates, iscrowd excluded",
+      "dataset": "coco",
+      "items": [
+        {
+          "boxes_xywh": [
+            [
+              153.26,
+              0.72,
+              266.99,
+              307.48
+            ],
+            [
+              186.69,
+              262.44,
+              180.95,
+              109.14
+            ]
+          ],
+          "coco_image_id": 3553,
+          "height": 427,
+          "image_id": "000000003553",
+          "n_boxes": 2,
+          "path": "val2017/000000003553.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              125.69,
+              26.39,
+              292.63,
+              394.33
+            ],
+            [
+              401.19,
+              77.47,
+              231.8,
+              348.53
+            ],
+            [
+              338.13,
+              0.91,
+              166.19,
+              92.65
+            ],
+            [
+              120.88,
+              219.0,
+              82.74,
+              126.95
+            ],
+            [
+              567.63,
+              49.79,
+              69.71,
+              323.1
+            ]
+          ],
+          "coco_image_id": 7108,
+          "height": 426,
+          "image_id": "000000007108",
+          "n_boxes": 5,
+          "path": "val2017/000000007108.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              325.16,
+              71.23,
+              314.84,
+              322.06
+            ],
+            [
+              77.64,
+              106.41,
+              59.08,
+              145.51
+            ],
+            [
+              0.73,
+              205.76,
+              73.46,
+              54.21
+            ],
+            [
+              2.16,
+              122.64,
+              637.84,
+              351.64
+            ]
+          ],
+          "coco_image_id": 47121,
+          "height": 480,
+          "image_id": "000000047121",
+          "n_boxes": 4,
+          "path": "val2017/000000047121.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              262.81,
+              461.74,
+              87.97,
+              90.2
+            ]
+          ],
+          "coco_image_id": 106563,
+          "height": 612,
+          "image_id": "000000106563",
+          "n_boxes": 1,
+          "path": "val2017/000000106563.jpg",
+          "width": 612
+        },
+        {
+          "boxes_xywh": [
+            [
+              290.14,
+              352.37,
+              21.48,
+              18.54
+            ],
+            [
+              547.83,
+              360.53,
+              24.94,
+              66.86
+            ]
+          ],
+          "coco_image_id": 118405,
+          "height": 480,
+          "image_id": "000000118405",
+          "n_boxes": 2,
+          "path": "val2017/000000118405.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              478.49,
+              183.89,
+              78.29,
+              49.23
+            ],
+            [
+              502.27,
+              220.28,
+              4.01,
+              4.06
+            ],
+            [
+              528.26,
+              199.68,
+              5.38,
+              10.77
+            ]
+          ],
+          "coco_image_id": 144932,
+          "height": 425,
+          "image_id": "000000144932",
+          "n_boxes": 3,
+          "path": "val2017/000000144932.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              357.51,
+              233.52,
+              13.47,
+              36.74
+            ],
+            [
+              345.94,
+              235.71,
+              13.76,
+              35.54
+            ],
+            [
+              194.48,
+              254.56,
+              75.56,
+              136.5
+            ],
+            [
+              415.83,
+              281.85,
+              89.83,
+              20.67
+            ],
+            [
+              384.14,
+              243.4,
+              10.91,
+              26.91
+            ]
+          ],
+          "coco_image_id": 210855,
+          "height": 427,
+          "image_id": "000000210855",
+          "n_boxes": 5,
+          "path": "val2017/000000210855.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              52.22,
+              113.6,
+              269.34,
+              163.99
+            ],
+            [
+              255.19,
+              107.41,
+              293.6,
+              245.0
+            ],
+            [
+              360.9,
+              82.33,
+              98.61,
+              36.38
+            ]
+          ],
+          "coco_image_id": 235857,
+          "height": 426,
+          "image_id": "000000235857",
+          "n_boxes": 3,
+          "path": "val2017/000000235857.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              325.09,
+              165.89,
+              49.95,
+              24.69
+            ],
+            [
+              291.31,
+              133.61,
+              142.46,
+              241.39
+            ],
+            [
+              361.2,
+              161.03,
+              132.51,
+              213.97
+            ],
+            [
+              3.37,
+              124.72,
+              143.26,
+              244.38
+            ],
+            [
+              199.06,
+              211.66,
+              34.09,
+              163.03
+            ],
+            [
+              257.82,
+              223.3,
+              31.29,
+              40.75
+            ],
+            [
+              134.39,
+              246.47,
+              16.3,
+              46.72
+            ],
+            [
+              214.29,
+              207.48,
+              144.55,
+              163.27
+            ],
+            [
+              239.7,
+              245.71,
+              18.43,
+              41.25
+            ],
+            [
+              103.03,
+              247.81,
+              19.71,
+              46.21
+            ],
+            [
+              402.42,
+              252.3,
+              14.57,
+              15.81
+            ],
+            [
+              392.82,
+              283.95,
+              62.76,
+              65.08
+            ],
+            [
+              79.31,
+              227.14,
+              33.55,
+              121.37
+            ],
+            [
+              150.7,
+              252.19,
+              8.26,
+              24.94
+            ],
+            [
+              229.76,
+              245.46,
+              12.03,
+              51.18
+            ],
+            [
+              90.04,
+              136.27,
+              12.43,
+              12.2
+            ]
+          ],
+          "coco_image_id": 281687,
+          "height": 375,
+          "image_id": "000000281687",
+          "n_boxes": 16,
+          "path": "val2017/000000281687.jpg",
+          "width": 500
+        },
+        {
+          "boxes_xywh": [
+            [
+              2.86,
+              67.77,
+              577.47,
+              350.67
+            ],
+            [
+              0.96,
+              0.0,
+              382.02,
+              176.69
+            ],
+            [
+              0.0,
+              138.17,
+              34.3,
+              141.03
+            ],
+            [
+              328.91,
+              75.24,
+              75.68,
+              51.39
+            ],
+            [
+              44.89,
+              131.51,
+              530.05,
+              276.96
+            ]
+          ],
+          "coco_image_id": 307172,
+          "height": 425,
+          "image_id": "000000307172",
+          "n_boxes": 5,
+          "path": "val2017/000000307172.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              168.36,
+              283.87,
+              61.36,
+              65.46
+            ],
+            [
+              0.0,
+              158.13,
+              290.52,
+              210.05
+            ],
+            [
+              0.0,
+              362.29,
+              150.03,
+              277.71
+            ],
+            [
+              54.41,
+              0.14,
+              302.1,
+              75.88
+            ],
+            [
+              169.65,
+              103.0,
+              40.32,
+              34.91
+            ],
+            [
+              28.11,
+              82.07,
+              46.66,
+              42.05
+            ],
+            [
+              0.0,
+              134.63,
+              65.73,
+              48.92
+            ],
+            [
+              146.69,
+              138.33,
+              91.9,
+              52.1
+            ],
+            [
+              215.52,
+              143.62,
+              40.94,
+              37.62
+            ],
+            [
+              71.16,
+              324.92,
+              391.05,
+              305.55
+            ]
+          ],
+          "coco_image_id": 359833,
+          "height": 640,
+          "image_id": "000000359833",
+          "n_boxes": 10,
+          "path": "val2017/000000359833.jpg",
+          "width": 480
+        },
+        {
+          "boxes_xywh": [
+            [
+              2.89,
+              90.62,
+              636.27,
+              322.96
+            ],
+            [
+              412.3,
+              173.13,
+              26.67,
+              41.83
+            ],
+            [
+              60.32,
+              188.31,
+              27.03,
+              40.42
+            ],
+            [
+              507.38,
+              184.23,
+              15.09,
+              26.91
+            ],
+            [
+              607.36,
+              128.65,
+              16.33,
+              12.6
+            ],
+            [
+              277.04,
+              176.2,
+              21.73,
+              32.06
+            ],
+            [
+              325.44,
+              166.6,
+              21.82,
+              57.49
+            ],
+            [
+              444.88,
+              175.41,
+              10.7,
+              37.5
+            ]
+          ],
+          "coco_image_id": 369675,
+          "height": 429,
+          "image_id": "000000369675",
+          "n_boxes": 8,
+          "path": "val2017/000000369675.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              0.0,
+              69.56,
+              92.84,
+              165.55
+            ],
+            [
+              18.61,
+              10.29,
+              96.63,
+              137.08
+            ],
+            [
+              165.54,
+              326.01,
+              61.94,
+              168.92
+            ],
+            [
+              254.88,
+              243.9,
+              120.12,
+              45.15
+            ],
+            [
+              92.4,
+              357.27,
+              39.65,
+              17.26
+            ],
+            [
+              95.38,
+              308.1,
+              84.94,
+              71.62
+            ],
+            [
+              315.48,
+              0.28,
+              59.41,
+              87.31
+            ],
+            [
+              185.43,
+              315.62,
+              20.14,
+              16.22
+            ],
+            [
+              0.0,
+              5.19,
+              375.0,
+              488.32
+            ],
+            [
+              189.94,
+              0.0,
+              100.66,
+              24.04
+            ],
+            [
+              244.82,
+              41.39,
+              91.97,
+              93.26
+            ],
+            [
+              0.0,
+              0.0,
+              24.0,
+              78.5
+            ]
+          ],
+          "coco_image_id": 419312,
+          "height": 500,
+          "image_id": "000000419312",
+          "n_boxes": 12,
+          "path": "val2017/000000419312.jpg",
+          "width": 375
+        },
+        {
+          "boxes_xywh": [
+            [
+              104.99,
+              227.24,
+              253.12,
+              235.86
+            ]
+          ],
+          "coco_image_id": 466567,
+          "height": 640,
+          "image_id": "000000466567",
+          "n_boxes": 1,
+          "path": "val2017/000000466567.jpg",
+          "width": 480
+        },
+        {
+          "boxes_xywh": [
+            [
+              364.37,
+              294.57,
+              70.42,
+              18.58
+            ],
+            [
+              373.62,
+              290.54,
+              7.16,
+              7.22
+            ],
+            [
+              411.94,
+              293.14,
+              9.35,
+              10.99
+            ]
+          ],
+          "coco_image_id": 496597,
+          "height": 480,
+          "image_id": "000000496597",
+          "n_boxes": 3,
+          "path": "val2017/000000496597.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              119.73,
+              129.44,
+              309.57,
+              339.77
+            ],
+            [
+              251.64,
+              196.98,
+              131.95,
+              125.28
+            ]
+          ],
+          "coco_image_id": 509656,
+          "height": 480,
+          "image_id": "000000509656",
+          "n_boxes": 2,
+          "path": "val2017/000000509656.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              367.88,
+              116.09,
+              272.12,
+              239.53
+            ]
+          ],
+          "coco_image_id": 533855,
+          "height": 428,
+          "image_id": "000000533855",
+          "n_boxes": 1,
+          "path": "val2017/000000533855.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              407.83,
+              277.99,
+              39.79,
+              10.79
+            ],
+            [
+              364.49,
+              208.98,
+              88.5,
+              70.23
+            ]
+          ],
+          "coco_image_id": 535858,
+          "height": 426,
+          "image_id": "000000535858",
+          "n_boxes": 2,
+          "path": "val2017/000000535858.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              77.08,
+              22.02,
+              215.81,
+              487.78
+            ],
+            [
+              396.31,
+              240.22,
+              196.91,
+              173.12
+            ],
+            [
+              350.19,
+              244.73,
+              87.01,
+              115.54
+            ],
+            [
+              262.29,
+              283.3,
+              128.95,
+              109.99
+            ],
+            [
+              530.41,
+              179.49,
+              108.15,
+              323.31
+            ],
+            [
+              0.6,
+              159.64,
+              35.2,
+              68.7
+            ],
+            [
+              6.9,
+              116.21,
+              211.71,
+              319.85
+            ],
+            [
+              300.07,
+              275.07,
+              34.43,
+              48.45
+            ],
+            [
+              255.49,
+              218.13,
+              52.41,
+              112.82
+            ]
+          ],
+          "coco_image_id": 545594,
+          "height": 512,
+          "image_id": "000000545594",
+          "n_boxes": 9,
+          "path": "val2017/000000545594.jpg",
+          "width": 640
+        },
+        {
+          "boxes_xywh": [
+            [
+              243.69,
+              236.6,
+              76.15,
+              14.29
+            ]
+          ],
+          "coco_image_id": 552883,
+          "height": 426,
+          "image_id": "000000552883",
+          "n_boxes": 1,
+          "path": "val2017/000000552883.jpg",
+          "width": 640
+        }
+      ],
+      "n": 20,
+      "seed": 0,
+      "selector": "Random(f'{seed}:boxes20'); sample(sorted(annotated_image_ids), 20)",
+      "sha256": "9097dd577866dbd40b9a2f5b7a4db339e572e2b2254c7640421122a2927d39cc",
+      "split": "val2017",
+      "status": "frozen"
+    },
+    "curated": {
+      "criteria": {
+        "single_dominant_centered": "ILSVRC classes whose val images are typically ONE large, roughly centred object against a plain or shallow field.",
+        "small_or_offcentre": "Small-animal/insect classes: the labelled object usually occupies a small, often off-centre part of the frame.",
+        "textured_cluttered_background": "Scene/landscape classes: no single figure-ground object, high-frequency texture over most of the frame."
+      },
+      "dataset": "imagenet-1k",
+      "items": [
+        {
+          "criterion": "single_dominant_centered",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "ILSVRC classes whose val images are typically ONE large, roughly centred object against a plain or shallow field.",
+          "image_id": "n02110063/ILSVRC2012_val_00031001_n02110063",
+          "label": 249,
+          "path": "val/n02110063/ILSVRC2012_val_00031001_n02110063.JPEG",
+          "synset": "n02110063"
+        },
+        {
+          "criterion": "single_dominant_centered",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "ILSVRC classes whose val images are typically ONE large, roughly centred object against a plain or shallow field.",
+          "image_id": "n02123045/ILSVRC2012_val_00013494_n02123045",
+          "label": 281,
+          "path": "val/n02123045/ILSVRC2012_val_00013494_n02123045.JPEG",
+          "synset": "n02123045"
+        },
+        {
+          "criterion": "single_dominant_centered",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "ILSVRC classes whose val images are typically ONE large, roughly centred object against a plain or shallow field.",
+          "image_id": "n02504458/ILSVRC2012_val_00038578_n02504458",
+          "label": 386,
+          "path": "val/n02504458/ILSVRC2012_val_00038578_n02504458.JPEG",
+          "synset": "n02504458"
+        },
+        {
+          "criterion": "single_dominant_centered",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "ILSVRC classes whose val images are typically ONE large, roughly centred object against a plain or shallow field.",
+          "image_id": "n03272010/ILSVRC2012_val_00006373_n03272010",
+          "label": 546,
+          "path": "val/n03272010/ILSVRC2012_val_00006373_n03272010.JPEG",
+          "synset": "n03272010"
+        },
+        {
+          "criterion": "small_or_offcentre",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Small-animal/insect classes: the labelled object usually occupies a small, often off-centre part of the frame.",
+          "image_id": "n01530575/ILSVRC2012_val_00037116_n01530575",
+          "label": 10,
+          "path": "val/n01530575/ILSVRC2012_val_00037116_n01530575.JPEG",
+          "synset": "n01530575"
+        },
+        {
+          "criterion": "small_or_offcentre",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Small-animal/insect classes: the labelled object usually occupies a small, often off-centre part of the frame.",
+          "image_id": "n01770081/ILSVRC2012_val_00045376_n01770081",
+          "label": 70,
+          "path": "val/n01770081/ILSVRC2012_val_00045376_n01770081.JPEG",
+          "synset": "n01770081"
+        },
+        {
+          "criterion": "small_or_offcentre",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Small-animal/insect classes: the labelled object usually occupies a small, often off-centre part of the frame.",
+          "image_id": "n02233338/ILSVRC2012_val_00016160_n02233338",
+          "label": 314,
+          "path": "val/n02233338/ILSVRC2012_val_00016160_n02233338.JPEG",
+          "synset": "n02233338"
+        },
+        {
+          "criterion": "small_or_offcentre",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Small-animal/insect classes: the labelled object usually occupies a small, often off-centre part of the frame.",
+          "image_id": "n02268443/ILSVRC2012_val_00045703_n02268443",
+          "label": 319,
+          "path": "val/n02268443/ILSVRC2012_val_00045703_n02268443.JPEG",
+          "synset": "n02268443"
+        },
+        {
+          "criterion": "textured_cluttered_background",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Scene/landscape classes: no single figure-ground object, high-frequency texture over most of the frame.",
+          "image_id": "n03160309/ILSVRC2012_val_00008312_n03160309",
+          "label": 525,
+          "path": "val/n03160309/ILSVRC2012_val_00008312_n03160309.JPEG",
+          "synset": "n03160309"
+        },
+        {
+          "criterion": "textured_cluttered_background",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Scene/landscape classes: no single figure-ground object, high-frequency texture over most of the frame.",
+          "image_id": "n03649909/ILSVRC2012_val_00012061_n03649909",
+          "label": 621,
+          "path": "val/n03649909/ILSVRC2012_val_00012061_n03649909.JPEG",
+          "synset": "n03649909"
+        },
+        {
+          "criterion": "textured_cluttered_background",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Scene/landscape classes: no single figure-ground object, high-frequency texture over most of the frame.",
+          "image_id": "n04604644/ILSVRC2012_val_00010250_n04604644",
+          "label": 912,
+          "path": "val/n04604644/ILSVRC2012_val_00010250_n04604644.JPEG",
+          "synset": "n04604644"
+        },
+        {
+          "criterion": "textured_cluttered_background",
+          "criterion_basis": "class_prior",
+          "criterion_rationale": "Scene/landscape classes: no single figure-ground object, high-frequency texture over most of the frame.",
+          "image_id": "n09399592/ILSVRC2012_val_00008034_n09399592",
+          "label": 976,
+          "path": "val/n09399592/ILSVRC2012_val_00008034_n09399592.JPEG",
+          "synset": "n09399592"
+        }
+      ],
+      "n": 12,
+      "seed": 0,
+      "selector": "per-criterion Random(f'{seed}:curated:{criterion}'); sample(sorted(pool_synsets), 4) then choice(sorted(files))",
+      "sha256": "460598123a23c4aa236296caee8f34fa3b0c89452f2d4aa85b827e0efbce74dd",
+      "split": "val",
+      "status": "frozen"
+    },
+    "random200": {
+      "dataset": "imagenet-1k",
+      "items": [
+        {
+          "image_id": "n01440764/ILSVRC2012_val_00039905_n01440764",
+          "label": 0,
+          "path": "val/n01440764/ILSVRC2012_val_00039905_n01440764.JPEG",
+          "synset": "n01440764"
+        },
+        {
+          "image_id": "n01443537/ILSVRC2012_val_00012880_n01443537",
+          "label": 1,
+          "path": "val/n01443537/ILSVRC2012_val_00012880_n01443537.JPEG",
+          "synset": "n01443537"
+        },
+        {
+          "image_id": "n01484850/ILSVRC2012_val_00016168_n01484850",
+          "label": 2,
+          "path": "val/n01484850/ILSVRC2012_val_00016168_n01484850.JPEG",
+          "synset": "n01484850"
+        },
+        {
+          "image_id": "n01496331/ILSVRC2012_val_00005432_n01496331",
+          "label": 5,
+          "path": "val/n01496331/ILSVRC2012_val_00005432_n01496331.JPEG",
+          "synset": "n01496331"
+        },
+        {
+          "image_id": "n01514859/ILSVRC2012_val_00042568_n01514859",
+          "label": 8,
+          "path": "val/n01514859/ILSVRC2012_val_00042568_n01514859.JPEG",
+          "synset": "n01514859"
+        },
+        {
+          "image_id": "n01530575/ILSVRC2012_val_00004006_n01530575",
+          "label": 10,
+          "path": "val/n01530575/ILSVRC2012_val_00004006_n01530575.JPEG",
+          "synset": "n01530575"
+        },
+        {
+          "image_id": "n01616318/ILSVRC2012_val_00045589_n01616318",
+          "label": 23,
+          "path": "val/n01616318/ILSVRC2012_val_00045589_n01616318.JPEG",
+          "synset": "n01616318"
+        },
+        {
+          "image_id": "n01622779/ILSVRC2012_val_00032875_n01622779",
+          "label": 24,
+          "path": "val/n01622779/ILSVRC2012_val_00032875_n01622779.JPEG",
+          "synset": "n01622779"
+        },
+        {
+          "image_id": "n01629819/ILSVRC2012_val_00048463_n01629819",
+          "label": 25,
+          "path": "val/n01629819/ILSVRC2012_val_00048463_n01629819.JPEG",
+          "synset": "n01629819"
+        },
+        {
+          "image_id": "n01641577/ILSVRC2012_val_00030342_n01641577",
+          "label": 30,
+          "path": "val/n01641577/ILSVRC2012_val_00030342_n01641577.JPEG",
+          "synset": "n01641577"
+        },
+        {
+          "image_id": "n01665541/ILSVRC2012_val_00000938_n01665541",
+          "label": 34,
+          "path": "val/n01665541/ILSVRC2012_val_00000938_n01665541.JPEG",
+          "synset": "n01665541"
+        },
+        {
+          "image_id": "n01667778/ILSVRC2012_val_00031774_n01667778",
+          "label": 36,
+          "path": "val/n01667778/ILSVRC2012_val_00031774_n01667778.JPEG",
+          "synset": "n01667778"
+        },
+        {
+          "image_id": "n01675722/ILSVRC2012_val_00005647_n01675722",
+          "label": 38,
+          "path": "val/n01675722/ILSVRC2012_val_00005647_n01675722.JPEG",
+          "synset": "n01675722"
+        },
+        {
+          "image_id": "n01687978/ILSVRC2012_val_00038998_n01687978",
+          "label": 42,
+          "path": "val/n01687978/ILSVRC2012_val_00038998_n01687978.JPEG",
+          "synset": "n01687978"
+        },
+        {
+          "image_id": "n01773549/ILSVRC2012_val_00012895_n01773549",
+          "label": 73,
+          "path": "val/n01773549/ILSVRC2012_val_00012895_n01773549.JPEG",
+          "synset": "n01773549"
+        },
+        {
+          "image_id": "n01774384/ILSVRC2012_val_00006437_n01774384",
+          "label": 75,
+          "path": "val/n01774384/ILSVRC2012_val_00006437_n01774384.JPEG",
+          "synset": "n01774384"
+        },
+        {
+          "image_id": "n01784675/ILSVRC2012_val_00019211_n01784675",
+          "label": 79,
+          "path": "val/n01784675/ILSVRC2012_val_00019211_n01784675.JPEG",
+          "synset": "n01784675"
+        },
+        {
+          "image_id": "n01806143/ILSVRC2012_val_00011943_n01806143",
+          "label": 84,
+          "path": "val/n01806143/ILSVRC2012_val_00011943_n01806143.JPEG",
+          "synset": "n01806143"
+        },
+        {
+          "image_id": "n01807496/ILSVRC2012_val_00009226_n01807496",
+          "label": 86,
+          "path": "val/n01807496/ILSVRC2012_val_00009226_n01807496.JPEG",
+          "synset": "n01807496"
+        },
+        {
+          "image_id": "n01828970/ILSVRC2012_val_00035127_n01828970",
+          "label": 92,
+          "path": "val/n01828970/ILSVRC2012_val_00035127_n01828970.JPEG",
+          "synset": "n01828970"
+        },
+        {
+          "image_id": "n01843065/ILSVRC2012_val_00044268_n01843065",
+          "label": 95,
+          "path": "val/n01843065/ILSVRC2012_val_00044268_n01843065.JPEG",
+          "synset": "n01843065"
+        },
+        {
+          "image_id": "n01843383/ILSVRC2012_val_00049093_n01843383",
+          "label": 96,
+          "path": "val/n01843383/ILSVRC2012_val_00049093_n01843383.JPEG",
+          "synset": "n01843383"
+        },
+        {
+          "image_id": "n01873310/ILSVRC2012_val_00022384_n01873310",
+          "label": 103,
+          "path": "val/n01873310/ILSVRC2012_val_00022384_n01873310.JPEG",
+          "synset": "n01873310"
+        },
+        {
+          "image_id": "n01914609/ILSVRC2012_val_00037668_n01914609",
+          "label": 108,
+          "path": "val/n01914609/ILSVRC2012_val_00037668_n01914609.JPEG",
+          "synset": "n01914609"
+        },
+        {
+          "image_id": "n01943899/ILSVRC2012_val_00038299_n01943899",
+          "label": 112,
+          "path": "val/n01943899/ILSVRC2012_val_00038299_n01943899.JPEG",
+          "synset": "n01943899"
+        },
+        {
+          "image_id": "n01945685/ILSVRC2012_val_00047674_n01945685",
+          "label": 114,
+          "path": "val/n01945685/ILSVRC2012_val_00047674_n01945685.JPEG",
+          "synset": "n01945685"
+        },
+        {
+          "image_id": "n01978455/ILSVRC2012_val_00047476_n01978455",
+          "label": 119,
+          "path": "val/n01978455/ILSVRC2012_val_00047476_n01978455.JPEG",
+          "synset": "n01978455"
+        },
+        {
+          "image_id": "n01983481/ILSVRC2012_val_00039303_n01983481",
+          "label": 122,
+          "path": "val/n01983481/ILSVRC2012_val_00039303_n01983481.JPEG",
+          "synset": "n01983481"
+        },
+        {
+          "image_id": "n01984695/ILSVRC2012_val_00008156_n01984695",
+          "label": 123,
+          "path": "val/n01984695/ILSVRC2012_val_00008156_n01984695.JPEG",
+          "synset": "n01984695"
+        },
+        {
+          "image_id": "n02002556/ILSVRC2012_val_00026760_n02002556",
+          "label": 127,
+          "path": "val/n02002556/ILSVRC2012_val_00026760_n02002556.JPEG",
+          "synset": "n02002556"
+        },
+        {
+          "image_id": "n02002724/ILSVRC2012_val_00017388_n02002724",
+          "label": 128,
+          "path": "val/n02002724/ILSVRC2012_val_00017388_n02002724.JPEG",
+          "synset": "n02002724"
+        },
+        {
+          "image_id": "n02006656/ILSVRC2012_val_00022418_n02006656",
+          "label": 129,
+          "path": "val/n02006656/ILSVRC2012_val_00022418_n02006656.JPEG",
+          "synset": "n02006656"
+        },
+        {
+          "image_id": "n02007558/ILSVRC2012_val_00037990_n02007558",
+          "label": 130,
+          "path": "val/n02007558/ILSVRC2012_val_00037990_n02007558.JPEG",
+          "synset": "n02007558"
+        },
+        {
+          "image_id": "n02012849/ILSVRC2012_val_00036873_n02012849",
+          "label": 134,
+          "path": "val/n02012849/ILSVRC2012_val_00036873_n02012849.JPEG",
+          "synset": "n02012849"
+        },
+        {
+          "image_id": "n02025239/ILSVRC2012_val_00043769_n02025239",
+          "label": 139,
+          "path": "val/n02025239/ILSVRC2012_val_00043769_n02025239.JPEG",
+          "synset": "n02025239"
+        },
+        {
+          "image_id": "n02028035/ILSVRC2012_val_00047784_n02028035",
+          "label": 141,
+          "path": "val/n02028035/ILSVRC2012_val_00047784_n02028035.JPEG",
+          "synset": "n02028035"
+        },
+        {
+          "image_id": "n02058221/ILSVRC2012_val_00026949_n02058221",
+          "label": 146,
+          "path": "val/n02058221/ILSVRC2012_val_00026949_n02058221.JPEG",
+          "synset": "n02058221"
+        },
+        {
+          "image_id": "n02085620/ILSVRC2012_val_00018882_n02085620",
+          "label": 151,
+          "path": "val/n02085620/ILSVRC2012_val_00018882_n02085620.JPEG",
+          "synset": "n02085620"
+        },
+        {
+          "image_id": "n02088364/ILSVRC2012_val_00032527_n02088364",
+          "label": 162,
+          "path": "val/n02088364/ILSVRC2012_val_00032527_n02088364.JPEG",
+          "synset": "n02088364"
+        },
+        {
+          "image_id": "n02088466/ILSVRC2012_val_00036523_n02088466",
+          "label": 163,
+          "path": "val/n02088466/ILSVRC2012_val_00036523_n02088466.JPEG",
+          "synset": "n02088466"
+        },
+        {
+          "image_id": "n02089973/ILSVRC2012_val_00043580_n02089973",
+          "label": 167,
+          "path": "val/n02089973/ILSVRC2012_val_00043580_n02089973.JPEG",
+          "synset": "n02089973"
+        },
+        {
+          "image_id": "n02090379/ILSVRC2012_val_00039022_n02090379",
+          "label": 168,
+          "path": "val/n02090379/ILSVRC2012_val_00039022_n02090379.JPEG",
+          "synset": "n02090379"
+        },
+        {
+          "image_id": "n02090622/ILSVRC2012_val_00003164_n02090622",
+          "label": 169,
+          "path": "val/n02090622/ILSVRC2012_val_00003164_n02090622.JPEG",
+          "synset": "n02090622"
+        },
+        {
+          "image_id": "n02091467/ILSVRC2012_val_00027213_n02091467",
+          "label": 174,
+          "path": "val/n02091467/ILSVRC2012_val_00027213_n02091467.JPEG",
+          "synset": "n02091467"
+        },
+        {
+          "image_id": "n02093647/ILSVRC2012_val_00003269_n02093647",
+          "label": 181,
+          "path": "val/n02093647/ILSVRC2012_val_00003269_n02093647.JPEG",
+          "synset": "n02093647"
+        },
+        {
+          "image_id": "n02094258/ILSVRC2012_val_00009009_n02094258",
+          "label": 186,
+          "path": "val/n02094258/ILSVRC2012_val_00009009_n02094258.JPEG",
+          "synset": "n02094258"
+        },
+        {
+          "image_id": "n02096437/ILSVRC2012_val_00001028_n02096437",
+          "label": 194,
+          "path": "val/n02096437/ILSVRC2012_val_00001028_n02096437.JPEG",
+          "synset": "n02096437"
+        },
+        {
+          "image_id": "n02099712/ILSVRC2012_val_00008346_n02099712",
+          "label": 208,
+          "path": "val/n02099712/ILSVRC2012_val_00008346_n02099712.JPEG",
+          "synset": "n02099712"
+        },
+        {
+          "image_id": "n02100583/ILSVRC2012_val_00040937_n02100583",
+          "label": 211,
+          "path": "val/n02100583/ILSVRC2012_val_00040937_n02100583.JPEG",
+          "synset": "n02100583"
+        },
+        {
+          "image_id": "n02100735/ILSVRC2012_val_00011024_n02100735",
+          "label": 212,
+          "path": "val/n02100735/ILSVRC2012_val_00011024_n02100735.JPEG",
+          "synset": "n02100735"
+        },
+        {
+          "image_id": "n02105056/ILSVRC2012_val_00007903_n02105056",
+          "label": 224,
+          "path": "val/n02105056/ILSVRC2012_val_00007903_n02105056.JPEG",
+          "synset": "n02105056"
+        },
+        {
+          "image_id": "n02106662/ILSVRC2012_val_00018107_n02106662",
+          "label": 235,
+          "path": "val/n02106662/ILSVRC2012_val_00018107_n02106662.JPEG",
+          "synset": "n02106662"
+        },
+        {
+          "image_id": "n02107908/ILSVRC2012_val_00045618_n02107908",
+          "label": 240,
+          "path": "val/n02107908/ILSVRC2012_val_00045618_n02107908.JPEG",
+          "synset": "n02107908"
+        },
+        {
+          "image_id": "n02111889/ILSVRC2012_val_00028695_n02111889",
+          "label": 258,
+          "path": "val/n02111889/ILSVRC2012_val_00028695_n02111889.JPEG",
+          "synset": "n02111889"
+        },
+        {
+          "image_id": "n02112350/ILSVRC2012_val_00013160_n02112350",
+          "label": 261,
+          "path": "val/n02112350/ILSVRC2012_val_00013160_n02112350.JPEG",
+          "synset": "n02112350"
+        },
+        {
+          "image_id": "n02113799/ILSVRC2012_val_00000800_n02113799",
+          "label": 267,
+          "path": "val/n02113799/ILSVRC2012_val_00000800_n02113799.JPEG",
+          "synset": "n02113799"
+        },
+        {
+          "image_id": "n02114367/ILSVRC2012_val_00017311_n02114367",
+          "label": 269,
+          "path": "val/n02114367/ILSVRC2012_val_00017311_n02114367.JPEG",
+          "synset": "n02114367"
+        },
+        {
+          "image_id": "n02117135/ILSVRC2012_val_00000983_n02117135",
+          "label": 276,
+          "path": "val/n02117135/ILSVRC2012_val_00000983_n02117135.JPEG",
+          "synset": "n02117135"
+        },
+        {
+          "image_id": "n02125311/ILSVRC2012_val_00039595_n02125311",
+          "label": 286,
+          "path": "val/n02125311/ILSVRC2012_val_00039595_n02125311.JPEG",
+          "synset": "n02125311"
+        },
+        {
+          "image_id": "n02133161/ILSVRC2012_val_00046668_n02133161",
+          "label": 295,
+          "path": "val/n02133161/ILSVRC2012_val_00046668_n02133161.JPEG",
+          "synset": "n02133161"
+        },
+        {
+          "image_id": "n02137549/ILSVRC2012_val_00047555_n02137549",
+          "label": 298,
+          "path": "val/n02137549/ILSVRC2012_val_00047555_n02137549.JPEG",
+          "synset": "n02137549"
+        },
+        {
+          "image_id": "n02167151/ILSVRC2012_val_00005169_n02167151",
+          "label": 302,
+          "path": "val/n02167151/ILSVRC2012_val_00005169_n02167151.JPEG",
+          "synset": "n02167151"
+        },
+        {
+          "image_id": "n02172182/ILSVRC2012_val_00002042_n02172182",
+          "label": 305,
+          "path": "val/n02172182/ILSVRC2012_val_00002042_n02172182.JPEG",
+          "synset": "n02172182"
+        },
+        {
+          "image_id": "n02174001/ILSVRC2012_val_00034738_n02174001",
+          "label": 306,
+          "path": "val/n02174001/ILSVRC2012_val_00034738_n02174001.JPEG",
+          "synset": "n02174001"
+        },
+        {
+          "image_id": "n02177972/ILSVRC2012_val_00044760_n02177972",
+          "label": 307,
+          "path": "val/n02177972/ILSVRC2012_val_00044760_n02177972.JPEG",
+          "synset": "n02177972"
+        },
+        {
+          "image_id": "n02219486/ILSVRC2012_val_00031820_n02219486",
+          "label": 310,
+          "path": "val/n02219486/ILSVRC2012_val_00031820_n02219486.JPEG",
+          "synset": "n02219486"
+        },
+        {
+          "image_id": "n02226429/ILSVRC2012_val_00032265_n02226429",
+          "label": 311,
+          "path": "val/n02226429/ILSVRC2012_val_00032265_n02226429.JPEG",
+          "synset": "n02226429"
+        },
+        {
+          "image_id": "n02281787/ILSVRC2012_val_00043381_n02281787",
+          "label": 326,
+          "path": "val/n02281787/ILSVRC2012_val_00043381_n02281787.JPEG",
+          "synset": "n02281787"
+        },
+        {
+          "image_id": "n02326432/ILSVRC2012_val_00049948_n02326432",
+          "label": 331,
+          "path": "val/n02326432/ILSVRC2012_val_00049948_n02326432.JPEG",
+          "synset": "n02326432"
+        },
+        {
+          "image_id": "n02342885/ILSVRC2012_val_00016348_n02342885",
+          "label": 333,
+          "path": "val/n02342885/ILSVRC2012_val_00016348_n02342885.JPEG",
+          "synset": "n02342885"
+        },
+        {
+          "image_id": "n02363005/ILSVRC2012_val_00025114_n02363005",
+          "label": 337,
+          "path": "val/n02363005/ILSVRC2012_val_00025114_n02363005.JPEG",
+          "synset": "n02363005"
+        },
+        {
+          "image_id": "n02389026/ILSVRC2012_val_00018928_n02389026",
+          "label": 339,
+          "path": "val/n02389026/ILSVRC2012_val_00018928_n02389026.JPEG",
+          "synset": "n02389026"
+        },
+        {
+          "image_id": "n02403003/ILSVRC2012_val_00039271_n02403003",
+          "label": 345,
+          "path": "val/n02403003/ILSVRC2012_val_00039271_n02403003.JPEG",
+          "synset": "n02403003"
+        },
+        {
+          "image_id": "n02412080/ILSVRC2012_val_00030484_n02412080",
+          "label": 348,
+          "path": "val/n02412080/ILSVRC2012_val_00030484_n02412080.JPEG",
+          "synset": "n02412080"
+        },
+        {
+          "image_id": "n02415577/ILSVRC2012_val_00040551_n02415577",
+          "label": 349,
+          "path": "val/n02415577/ILSVRC2012_val_00040551_n02415577.JPEG",
+          "synset": "n02415577"
+        },
+        {
+          "image_id": "n02442845/ILSVRC2012_val_00028458_n02442845",
+          "label": 357,
+          "path": "val/n02442845/ILSVRC2012_val_00028458_n02442845.JPEG",
+          "synset": "n02442845"
+        },
+        {
+          "image_id": "n02444819/ILSVRC2012_val_00032606_n02444819",
+          "label": 360,
+          "path": "val/n02444819/ILSVRC2012_val_00032606_n02444819.JPEG",
+          "synset": "n02444819"
+        },
+        {
+          "image_id": "n02457408/ILSVRC2012_val_00042044_n02457408",
+          "label": 364,
+          "path": "val/n02457408/ILSVRC2012_val_00042044_n02457408.JPEG",
+          "synset": "n02457408"
+        },
+        {
+          "image_id": "n02483708/ILSVRC2012_val_00000087_n02483708",
+          "label": 369,
+          "path": "val/n02483708/ILSVRC2012_val_00000087_n02483708.JPEG",
+          "synset": "n02483708"
+        },
+        {
+          "image_id": "n02484975/ILSVRC2012_val_00006410_n02484975",
+          "label": 370,
+          "path": "val/n02484975/ILSVRC2012_val_00006410_n02484975.JPEG",
+          "synset": "n02484975"
+        },
+        {
+          "image_id": "n02490219/ILSVRC2012_val_00009701_n02490219",
+          "label": 377,
+          "path": "val/n02490219/ILSVRC2012_val_00009701_n02490219.JPEG",
+          "synset": "n02490219"
+        },
+        {
+          "image_id": "n02493509/ILSVRC2012_val_00022082_n02493509",
+          "label": 380,
+          "path": "val/n02493509/ILSVRC2012_val_00022082_n02493509.JPEG",
+          "synset": "n02493509"
+        },
+        {
+          "image_id": "n02509815/ILSVRC2012_val_00016071_n02509815",
+          "label": 387,
+          "path": "val/n02509815/ILSVRC2012_val_00016071_n02509815.JPEG",
+          "synset": "n02509815"
+        },
+        {
+          "image_id": "n02607072/ILSVRC2012_val_00021505_n02607072",
+          "label": 393,
+          "path": "val/n02607072/ILSVRC2012_val_00021505_n02607072.JPEG",
+          "synset": "n02607072"
+        },
+        {
+          "image_id": "n02640242/ILSVRC2012_val_00001436_n02640242",
+          "label": 394,
+          "path": "val/n02640242/ILSVRC2012_val_00001436_n02640242.JPEG",
+          "synset": "n02640242"
+        },
+        {
+          "image_id": "n02655020/ILSVRC2012_val_00008730_n02655020",
+          "label": 397,
+          "path": "val/n02655020/ILSVRC2012_val_00008730_n02655020.JPEG",
+          "synset": "n02655020"
+        },
+        {
+          "image_id": "n02687172/ILSVRC2012_val_00032680_n02687172",
+          "label": 403,
+          "path": "val/n02687172/ILSVRC2012_val_00032680_n02687172.JPEG",
+          "synset": "n02687172"
+        },
+        {
+          "image_id": "n02783161/ILSVRC2012_val_00044024_n02783161",
+          "label": 418,
+          "path": "val/n02783161/ILSVRC2012_val_00044024_n02783161.JPEG",
+          "synset": "n02783161"
+        },
+        {
+          "image_id": "n02786058/ILSVRC2012_val_00000706_n02786058",
+          "label": 419,
+          "path": "val/n02786058/ILSVRC2012_val_00000706_n02786058.JPEG",
+          "synset": "n02786058"
+        },
+        {
+          "image_id": "n02787622/ILSVRC2012_val_00019653_n02787622",
+          "label": 420,
+          "path": "val/n02787622/ILSVRC2012_val_00019653_n02787622.JPEG",
+          "synset": "n02787622"
+        },
+        {
+          "image_id": "n02788148/ILSVRC2012_val_00014558_n02788148",
+          "label": 421,
+          "path": "val/n02788148/ILSVRC2012_val_00014558_n02788148.JPEG",
+          "synset": "n02788148"
+        },
+        {
+          "image_id": "n02790996/ILSVRC2012_val_00035930_n02790996",
+          "label": 422,
+          "path": "val/n02790996/ILSVRC2012_val_00035930_n02790996.JPEG",
+          "synset": "n02790996"
+        },
+        {
+          "image_id": "n02794156/ILSVRC2012_val_00036595_n02794156",
+          "label": 426,
+          "path": "val/n02794156/ILSVRC2012_val_00036595_n02794156.JPEG",
+          "synset": "n02794156"
+        },
+        {
+          "image_id": "n02804414/ILSVRC2012_val_00010744_n02804414",
+          "label": 431,
+          "path": "val/n02804414/ILSVRC2012_val_00010744_n02804414.JPEG",
+          "synset": "n02804414"
+        },
+        {
+          "image_id": "n02807133/ILSVRC2012_val_00043987_n02807133",
+          "label": 433,
+          "path": "val/n02807133/ILSVRC2012_val_00043987_n02807133.JPEG",
+          "synset": "n02807133"
+        },
+        {
+          "image_id": "n02817516/ILSVRC2012_val_00007414_n02817516",
+          "label": 439,
+          "path": "val/n02817516/ILSVRC2012_val_00007414_n02817516.JPEG",
+          "synset": "n02817516"
+        },
+        {
+          "image_id": "n02834397/ILSVRC2012_val_00049192_n02834397",
+          "label": 443,
+          "path": "val/n02834397/ILSVRC2012_val_00049192_n02834397.JPEG",
+          "synset": "n02834397"
+        },
+        {
+          "image_id": "n02865351/ILSVRC2012_val_00018752_n02865351",
+          "label": 451,
+          "path": "val/n02865351/ILSVRC2012_val_00018752_n02865351.JPEG",
+          "synset": "n02865351"
+        },
+        {
+          "image_id": "n02877765/ILSVRC2012_val_00045915_n02877765",
+          "label": 455,
+          "path": "val/n02877765/ILSVRC2012_val_00045915_n02877765.JPEG",
+          "synset": "n02877765"
+        },
+        {
+          "image_id": "n02895154/ILSVRC2012_val_00032037_n02895154",
+          "label": 461,
+          "path": "val/n02895154/ILSVRC2012_val_00032037_n02895154.JPEG",
+          "synset": "n02895154"
+        },
+        {
+          "image_id": "n02971356/ILSVRC2012_val_00022451_n02971356",
+          "label": 478,
+          "path": "val/n02971356/ILSVRC2012_val_00022451_n02971356.JPEG",
+          "synset": "n02971356"
+        },
+        {
+          "image_id": "n02978881/ILSVRC2012_val_00017217_n02978881",
+          "label": 481,
+          "path": "val/n02978881/ILSVRC2012_val_00017217_n02978881.JPEG",
+          "synset": "n02978881"
+        },
+        {
+          "image_id": "n03041632/ILSVRC2012_val_00008526_n03041632",
+          "label": 499,
+          "path": "val/n03041632/ILSVRC2012_val_00008526_n03041632.JPEG",
+          "synset": "n03041632"
+        },
+        {
+          "image_id": "n03042490/ILSVRC2012_val_00027258_n03042490",
+          "label": 500,
+          "path": "val/n03042490/ILSVRC2012_val_00027258_n03042490.JPEG",
+          "synset": "n03042490"
+        },
+        {
+          "image_id": "n03085013/ILSVRC2012_val_00002499_n03085013",
+          "label": 508,
+          "path": "val/n03085013/ILSVRC2012_val_00002499_n03085013.JPEG",
+          "synset": "n03085013"
+        },
+        {
+          "image_id": "n03095699/ILSVRC2012_val_00001339_n03095699",
+          "label": 510,
+          "path": "val/n03095699/ILSVRC2012_val_00001339_n03095699.JPEG",
+          "synset": "n03095699"
+        },
+        {
+          "image_id": "n03124170/ILSVRC2012_val_00032152_n03124170",
+          "label": 515,
+          "path": "val/n03124170/ILSVRC2012_val_00032152_n03124170.JPEG",
+          "synset": "n03124170"
+        },
+        {
+          "image_id": "n03125729/ILSVRC2012_val_00032315_n03125729",
+          "label": 516,
+          "path": "val/n03125729/ILSVRC2012_val_00032315_n03125729.JPEG",
+          "synset": "n03125729"
+        },
+        {
+          "image_id": "n03134739/ILSVRC2012_val_00023436_n03134739",
+          "label": 522,
+          "path": "val/n03134739/ILSVRC2012_val_00023436_n03134739.JPEG",
+          "synset": "n03134739"
+        },
+        {
+          "image_id": "n03196217/ILSVRC2012_val_00049458_n03196217",
+          "label": 530,
+          "path": "val/n03196217/ILSVRC2012_val_00049458_n03196217.JPEG",
+          "synset": "n03196217"
+        },
+        {
+          "image_id": "n03220513/ILSVRC2012_val_00007952_n03220513",
+          "label": 538,
+          "path": "val/n03220513/ILSVRC2012_val_00007952_n03220513.JPEG",
+          "synset": "n03220513"
+        },
+        {
+          "image_id": "n03250847/ILSVRC2012_val_00020232_n03250847",
+          "label": 542,
+          "path": "val/n03250847/ILSVRC2012_val_00020232_n03250847.JPEG",
+          "synset": "n03250847"
+        },
+        {
+          "image_id": "n03290653/ILSVRC2012_val_00046068_n03290653",
+          "label": 548,
+          "path": "val/n03290653/ILSVRC2012_val_00046068_n03290653.JPEG",
+          "synset": "n03290653"
+        },
+        {
+          "image_id": "n03297495/ILSVRC2012_val_00023386_n03297495",
+          "label": 550,
+          "path": "val/n03297495/ILSVRC2012_val_00023386_n03297495.JPEG",
+          "synset": "n03297495"
+        },
+        {
+          "image_id": "n03337140/ILSVRC2012_val_00021909_n03337140",
+          "label": 553,
+          "path": "val/n03337140/ILSVRC2012_val_00021909_n03337140.JPEG",
+          "synset": "n03337140"
+        },
+        {
+          "image_id": "n03372029/ILSVRC2012_val_00009395_n03372029",
+          "label": 558,
+          "path": "val/n03372029/ILSVRC2012_val_00009395_n03372029.JPEG",
+          "synset": "n03372029"
+        },
+        {
+          "image_id": "n03388043/ILSVRC2012_val_00029752_n03388043",
+          "label": 562,
+          "path": "val/n03388043/ILSVRC2012_val_00029752_n03388043.JPEG",
+          "synset": "n03388043"
+        },
+        {
+          "image_id": "n03425413/ILSVRC2012_val_00044370_n03425413",
+          "label": 571,
+          "path": "val/n03425413/ILSVRC2012_val_00044370_n03425413.JPEG",
+          "synset": "n03425413"
+        },
+        {
+          "image_id": "n03444034/ILSVRC2012_val_00047858_n03444034",
+          "label": 573,
+          "path": "val/n03444034/ILSVRC2012_val_00047858_n03444034.JPEG",
+          "synset": "n03444034"
+        },
+        {
+          "image_id": "n03445777/ILSVRC2012_val_00031897_n03445777",
+          "label": 574,
+          "path": "val/n03445777/ILSVRC2012_val_00031897_n03445777.JPEG",
+          "synset": "n03445777"
+        },
+        {
+          "image_id": "n03447447/ILSVRC2012_val_00016814_n03447447",
+          "label": 576,
+          "path": "val/n03447447/ILSVRC2012_val_00016814_n03447447.JPEG",
+          "synset": "n03447447"
+        },
+        {
+          "image_id": "n03492542/ILSVRC2012_val_00011209_n03492542",
+          "label": 592,
+          "path": "val/n03492542/ILSVRC2012_val_00011209_n03492542.JPEG",
+          "synset": "n03492542"
+        },
+        {
+          "image_id": "n03496892/ILSVRC2012_val_00010776_n03496892",
+          "label": 595,
+          "path": "val/n03496892/ILSVRC2012_val_00010776_n03496892.JPEG",
+          "synset": "n03496892"
+        },
+        {
+          "image_id": "n03532672/ILSVRC2012_val_00042387_n03532672",
+          "label": 600,
+          "path": "val/n03532672/ILSVRC2012_val_00042387_n03532672.JPEG",
+          "synset": "n03532672"
+        },
+        {
+          "image_id": "n03538406/ILSVRC2012_val_00014022_n03538406",
+          "label": 603,
+          "path": "val/n03538406/ILSVRC2012_val_00014022_n03538406.JPEG",
+          "synset": "n03538406"
+        },
+        {
+          "image_id": "n03544143/ILSVRC2012_val_00036746_n03544143",
+          "label": 604,
+          "path": "val/n03544143/ILSVRC2012_val_00036746_n03544143.JPEG",
+          "synset": "n03544143"
+        },
+        {
+          "image_id": "n03584829/ILSVRC2012_val_00009834_n03584829",
+          "label": 606,
+          "path": "val/n03584829/ILSVRC2012_val_00009834_n03584829.JPEG",
+          "synset": "n03584829"
+        },
+        {
+          "image_id": "n03590841/ILSVRC2012_val_00009971_n03590841",
+          "label": 607,
+          "path": "val/n03590841/ILSVRC2012_val_00009971_n03590841.JPEG",
+          "synset": "n03590841"
+        },
+        {
+          "image_id": "n03594734/ILSVRC2012_val_00045877_n03594734",
+          "label": 608,
+          "path": "val/n03594734/ILSVRC2012_val_00045877_n03594734.JPEG",
+          "synset": "n03594734"
+        },
+        {
+          "image_id": "n03623198/ILSVRC2012_val_00024197_n03623198",
+          "label": 615,
+          "path": "val/n03623198/ILSVRC2012_val_00024197_n03623198.JPEG",
+          "synset": "n03623198"
+        },
+        {
+          "image_id": "n03633091/ILSVRC2012_val_00025920_n03633091",
+          "label": 618,
+          "path": "val/n03633091/ILSVRC2012_val_00025920_n03633091.JPEG",
+          "synset": "n03633091"
+        },
+        {
+          "image_id": "n03661043/ILSVRC2012_val_00044809_n03661043",
+          "label": 624,
+          "path": "val/n03661043/ILSVRC2012_val_00044809_n03661043.JPEG",
+          "synset": "n03661043"
+        },
+        {
+          "image_id": "n03670208/ILSVRC2012_val_00049113_n03670208",
+          "label": 627,
+          "path": "val/n03670208/ILSVRC2012_val_00049113_n03670208.JPEG",
+          "synset": "n03670208"
+        },
+        {
+          "image_id": "n03676483/ILSVRC2012_val_00019870_n03676483",
+          "label": 629,
+          "path": "val/n03676483/ILSVRC2012_val_00019870_n03676483.JPEG",
+          "synset": "n03676483"
+        },
+        {
+          "image_id": "n03690938/ILSVRC2012_val_00003829_n03690938",
+          "label": 631,
+          "path": "val/n03690938/ILSVRC2012_val_00003829_n03690938.JPEG",
+          "synset": "n03690938"
+        },
+        {
+          "image_id": "n03733281/ILSVRC2012_val_00028102_n03733281",
+          "label": 646,
+          "path": "val/n03733281/ILSVRC2012_val_00028102_n03733281.JPEG",
+          "synset": "n03733281"
+        },
+        {
+          "image_id": "n03742115/ILSVRC2012_val_00040196_n03742115",
+          "label": 648,
+          "path": "val/n03742115/ILSVRC2012_val_00040196_n03742115.JPEG",
+          "synset": "n03742115"
+        },
+        {
+          "image_id": "n03743016/ILSVRC2012_val_00020408_n03743016",
+          "label": 649,
+          "path": "val/n03743016/ILSVRC2012_val_00020408_n03743016.JPEG",
+          "synset": "n03743016"
+        },
+        {
+          "image_id": "n03763968/ILSVRC2012_val_00022356_n03763968",
+          "label": 652,
+          "path": "val/n03763968/ILSVRC2012_val_00022356_n03763968.JPEG",
+          "synset": "n03763968"
+        },
+        {
+          "image_id": "n03770439/ILSVRC2012_val_00041915_n03770439",
+          "label": 655,
+          "path": "val/n03770439/ILSVRC2012_val_00041915_n03770439.JPEG",
+          "synset": "n03770439"
+        },
+        {
+          "image_id": "n03777568/ILSVRC2012_val_00029873_n03777568",
+          "label": 661,
+          "path": "val/n03777568/ILSVRC2012_val_00029873_n03777568.JPEG",
+          "synset": "n03777568"
+        },
+        {
+          "image_id": "n03785016/ILSVRC2012_val_00024487_n03785016",
+          "label": 665,
+          "path": "val/n03785016/ILSVRC2012_val_00024487_n03785016.JPEG",
+          "synset": "n03785016"
+        },
+        {
+          "image_id": "n03791053/ILSVRC2012_val_00037320_n03791053",
+          "label": 670,
+          "path": "val/n03791053/ILSVRC2012_val_00037320_n03791053.JPEG",
+          "synset": "n03791053"
+        },
+        {
+          "image_id": "n03840681/ILSVRC2012_val_00007739_n03840681",
+          "label": 684,
+          "path": "val/n03840681/ILSVRC2012_val_00007739_n03840681.JPEG",
+          "synset": "n03840681"
+        },
+        {
+          "image_id": "n03857828/ILSVRC2012_val_00015087_n03857828",
+          "label": 688,
+          "path": "val/n03857828/ILSVRC2012_val_00015087_n03857828.JPEG",
+          "synset": "n03857828"
+        },
+        {
+          "image_id": "n03868242/ILSVRC2012_val_00006162_n03868242",
+          "label": 690,
+          "path": "val/n03868242/ILSVRC2012_val_00006162_n03868242.JPEG",
+          "synset": "n03868242"
+        },
+        {
+          "image_id": "n03888605/ILSVRC2012_val_00031613_n03888605",
+          "label": 702,
+          "path": "val/n03888605/ILSVRC2012_val_00031613_n03888605.JPEG",
+          "synset": "n03888605"
+        },
+        {
+          "image_id": "n03902125/ILSVRC2012_val_00035336_n03902125",
+          "label": 707,
+          "path": "val/n03902125/ILSVRC2012_val_00035336_n03902125.JPEG",
+          "synset": "n03902125"
+        },
+        {
+          "image_id": "n03929660/ILSVRC2012_val_00036513_n03929660",
+          "label": 714,
+          "path": "val/n03929660/ILSVRC2012_val_00036513_n03929660.JPEG",
+          "synset": "n03929660"
+        },
+        {
+          "image_id": "n03933933/ILSVRC2012_val_00000702_n03933933",
+          "label": 718,
+          "path": "val/n03933933/ILSVRC2012_val_00000702_n03933933.JPEG",
+          "synset": "n03933933"
+        },
+        {
+          "image_id": "n03956157/ILSVRC2012_val_00032007_n03956157",
+          "label": 727,
+          "path": "val/n03956157/ILSVRC2012_val_00032007_n03956157.JPEG",
+          "synset": "n03956157"
+        },
+        {
+          "image_id": "n03961711/ILSVRC2012_val_00037251_n03961711",
+          "label": 729,
+          "path": "val/n03961711/ILSVRC2012_val_00037251_n03961711.JPEG",
+          "synset": "n03961711"
+        },
+        {
+          "image_id": "n03977966/ILSVRC2012_val_00027383_n03977966",
+          "label": 734,
+          "path": "val/n03977966/ILSVRC2012_val_00027383_n03977966.JPEG",
+          "synset": "n03977966"
+        },
+        {
+          "image_id": "n03982430/ILSVRC2012_val_00006974_n03982430",
+          "label": 736,
+          "path": "val/n03982430/ILSVRC2012_val_00006974_n03982430.JPEG",
+          "synset": "n03982430"
+        },
+        {
+          "image_id": "n03995372/ILSVRC2012_val_00048981_n03995372",
+          "label": 740,
+          "path": "val/n03995372/ILSVRC2012_val_00048981_n03995372.JPEG",
+          "synset": "n03995372"
+        },
+        {
+          "image_id": "n04005630/ILSVRC2012_val_00018325_n04005630",
+          "label": 743,
+          "path": "val/n04005630/ILSVRC2012_val_00018325_n04005630.JPEG",
+          "synset": "n04005630"
+        },
+        {
+          "image_id": "n04009552/ILSVRC2012_val_00033020_n04009552",
+          "label": 745,
+          "path": "val/n04009552/ILSVRC2012_val_00033020_n04009552.JPEG",
+          "synset": "n04009552"
+        },
+        {
+          "image_id": "n04023962/ILSVRC2012_val_00005537_n04023962",
+          "label": 747,
+          "path": "val/n04023962/ILSVRC2012_val_00005537_n04023962.JPEG",
+          "synset": "n04023962"
+        },
+        {
+          "image_id": "n04049303/ILSVRC2012_val_00046223_n04049303",
+          "label": 756,
+          "path": "val/n04049303/ILSVRC2012_val_00046223_n04049303.JPEG",
+          "synset": "n04049303"
+        },
+        {
+          "image_id": "n04067472/ILSVRC2012_val_00047971_n04067472",
+          "label": 758,
+          "path": "val/n04067472/ILSVRC2012_val_00047971_n04067472.JPEG",
+          "synset": "n04067472"
+        },
+        {
+          "image_id": "n04074963/ILSVRC2012_val_00028651_n04074963",
+          "label": 761,
+          "path": "val/n04074963/ILSVRC2012_val_00028651_n04074963.JPEG",
+          "synset": "n04074963"
+        },
+        {
+          "image_id": "n04081281/ILSVRC2012_val_00027988_n04081281",
+          "label": 762,
+          "path": "val/n04081281/ILSVRC2012_val_00027988_n04081281.JPEG",
+          "synset": "n04081281"
+        },
+        {
+          "image_id": "n04086273/ILSVRC2012_val_00011273_n04086273",
+          "label": 763,
+          "path": "val/n04086273/ILSVRC2012_val_00011273_n04086273.JPEG",
+          "synset": "n04086273"
+        },
+        {
+          "image_id": "n04099969/ILSVRC2012_val_00017447_n04099969",
+          "label": 765,
+          "path": "val/n04099969/ILSVRC2012_val_00017447_n04099969.JPEG",
+          "synset": "n04099969"
+        },
+        {
+          "image_id": "n04127249/ILSVRC2012_val_00029521_n04127249",
+          "label": 772,
+          "path": "val/n04127249/ILSVRC2012_val_00029521_n04127249.JPEG",
+          "synset": "n04127249"
+        },
+        {
+          "image_id": "n04152593/ILSVRC2012_val_00043526_n04152593",
+          "label": 782,
+          "path": "val/n04152593/ILSVRC2012_val_00043526_n04152593.JPEG",
+          "synset": "n04152593"
+        },
+        {
+          "image_id": "n04204347/ILSVRC2012_val_00049135_n04204347",
+          "label": 791,
+          "path": "val/n04204347/ILSVRC2012_val_00049135_n04204347.JPEG",
+          "synset": "n04204347"
+        },
+        {
+          "image_id": "n04238763/ILSVRC2012_val_00000266_n04238763",
+          "label": 798,
+          "path": "val/n04238763/ILSVRC2012_val_00000266_n04238763.JPEG",
+          "synset": "n04238763"
+        },
+        {
+          "image_id": "n04251144/ILSVRC2012_val_00003710_n04251144",
+          "label": 801,
+          "path": "val/n04251144/ILSVRC2012_val_00003710_n04251144.JPEG",
+          "synset": "n04251144"
+        },
+        {
+          "image_id": "n04252225/ILSVRC2012_val_00002510_n04252225",
+          "label": 803,
+          "path": "val/n04252225/ILSVRC2012_val_00002510_n04252225.JPEG",
+          "synset": "n04252225"
+        },
+        {
+          "image_id": "n04258138/ILSVRC2012_val_00016247_n04258138",
+          "label": 807,
+          "path": "val/n04258138/ILSVRC2012_val_00016247_n04258138.JPEG",
+          "synset": "n04258138"
+        },
+        {
+          "image_id": "n04265275/ILSVRC2012_val_00015782_n04265275",
+          "label": 811,
+          "path": "val/n04265275/ILSVRC2012_val_00015782_n04265275.JPEG",
+          "synset": "n04265275"
+        },
+        {
+          "image_id": "n04330267/ILSVRC2012_val_00001312_n04330267",
+          "label": 827,
+          "path": "val/n04330267/ILSVRC2012_val_00001312_n04330267.JPEG",
+          "synset": "n04330267"
+        },
+        {
+          "image_id": "n04344873/ILSVRC2012_val_00041398_n04344873",
+          "label": 831,
+          "path": "val/n04344873/ILSVRC2012_val_00041398_n04344873.JPEG",
+          "synset": "n04344873"
+        },
+        {
+          "image_id": "n04356056/ILSVRC2012_val_00016088_n04356056",
+          "label": 837,
+          "path": "val/n04356056/ILSVRC2012_val_00016088_n04356056.JPEG",
+          "synset": "n04356056"
+        },
+        {
+          "image_id": "n04357314/ILSVRC2012_val_00023241_n04357314",
+          "label": 838,
+          "path": "val/n04357314/ILSVRC2012_val_00023241_n04357314.JPEG",
+          "synset": "n04357314"
+        },
+        {
+          "image_id": "n04367480/ILSVRC2012_val_00002251_n04367480",
+          "label": 840,
+          "path": "val/n04367480/ILSVRC2012_val_00002251_n04367480.JPEG",
+          "synset": "n04367480"
+        },
+        {
+          "image_id": "n04370456/ILSVRC2012_val_00039686_n04370456",
+          "label": 841,
+          "path": "val/n04370456/ILSVRC2012_val_00039686_n04370456.JPEG",
+          "synset": "n04370456"
+        },
+        {
+          "image_id": "n04423845/ILSVRC2012_val_00036633_n04423845",
+          "label": 855,
+          "path": "val/n04423845/ILSVRC2012_val_00036633_n04423845.JPEG",
+          "synset": "n04423845"
+        },
+        {
+          "image_id": "n04447861/ILSVRC2012_val_00036382_n04447861",
+          "label": 861,
+          "path": "val/n04447861/ILSVRC2012_val_00036382_n04447861.JPEG",
+          "synset": "n04447861"
+        },
+        {
+          "image_id": "n04456115/ILSVRC2012_val_00048645_n04456115",
+          "label": 862,
+          "path": "val/n04456115/ILSVRC2012_val_00048645_n04456115.JPEG",
+          "synset": "n04456115"
+        },
+        {
+          "image_id": "n04458633/ILSVRC2012_val_00048297_n04458633",
+          "label": 863,
+          "path": "val/n04458633/ILSVRC2012_val_00048297_n04458633.JPEG",
+          "synset": "n04458633"
+        },
+        {
+          "image_id": "n04542943/ILSVRC2012_val_00015462_n04542943",
+          "label": 891,
+          "path": "val/n04542943/ILSVRC2012_val_00015462_n04542943.JPEG",
+          "synset": "n04542943"
+        },
+        {
+          "image_id": "n04548280/ILSVRC2012_val_00033732_n04548280",
+          "label": 892,
+          "path": "val/n04548280/ILSVRC2012_val_00033732_n04548280.JPEG",
+          "synset": "n04548280"
+        },
+        {
+          "image_id": "n04548362/ILSVRC2012_val_00003108_n04548362",
+          "label": 893,
+          "path": "val/n04548362/ILSVRC2012_val_00003108_n04548362.JPEG",
+          "synset": "n04548362"
+        },
+        {
+          "image_id": "n04562935/ILSVRC2012_val_00032306_n04562935",
+          "label": 900,
+          "path": "val/n04562935/ILSVRC2012_val_00032306_n04562935.JPEG",
+          "synset": "n04562935"
+        },
+        {
+          "image_id": "n04597913/ILSVRC2012_val_00014544_n04597913",
+          "label": 910,
+          "path": "val/n04597913/ILSVRC2012_val_00014544_n04597913.JPEG",
+          "synset": "n04597913"
+        },
+        {
+          "image_id": "n06596364/ILSVRC2012_val_00034905_n06596364",
+          "label": 917,
+          "path": "val/n06596364/ILSVRC2012_val_00034905_n06596364.JPEG",
+          "synset": "n06596364"
+        },
+        {
+          "image_id": "n07565083/ILSVRC2012_val_00010527_n07565083",
+          "label": 922,
+          "path": "val/n07565083/ILSVRC2012_val_00010527_n07565083.JPEG",
+          "synset": "n07565083"
+        },
+        {
+          "image_id": "n07613480/ILSVRC2012_val_00019604_n07613480",
+          "label": 927,
+          "path": "val/n07613480/ILSVRC2012_val_00019604_n07613480.JPEG",
+          "synset": "n07613480"
+        },
+        {
+          "image_id": "n07614500/ILSVRC2012_val_00014137_n07614500",
+          "label": 928,
+          "path": "val/n07614500/ILSVRC2012_val_00014137_n07614500.JPEG",
+          "synset": "n07614500"
+        },
+        {
+          "image_id": "n07711569/ILSVRC2012_val_00013084_n07711569",
+          "label": 935,
+          "path": "val/n07711569/ILSVRC2012_val_00013084_n07711569.JPEG",
+          "synset": "n07711569"
+        },
+        {
+          "image_id": "n07714990/ILSVRC2012_val_00023008_n07714990",
+          "label": 937,
+          "path": "val/n07714990/ILSVRC2012_val_00023008_n07714990.JPEG",
+          "synset": "n07714990"
+        },
+        {
+          "image_id": "n07745940/ILSVRC2012_val_00033919_n07745940",
+          "label": 949,
+          "path": "val/n07745940/ILSVRC2012_val_00033919_n07745940.JPEG",
+          "synset": "n07745940"
+        },
+        {
+          "image_id": "n07802026/ILSVRC2012_val_00005499_n07802026",
+          "label": 958,
+          "path": "val/n07802026/ILSVRC2012_val_00005499_n07802026.JPEG",
+          "synset": "n07802026"
+        },
+        {
+          "image_id": "n09229709/ILSVRC2012_val_00010094_n09229709",
+          "label": 971,
+          "path": "val/n09229709/ILSVRC2012_val_00010094_n09229709.JPEG",
+          "synset": "n09229709"
+        },
+        {
+          "image_id": "n09246464/ILSVRC2012_val_00001444_n09246464",
+          "label": 972,
+          "path": "val/n09246464/ILSVRC2012_val_00001444_n09246464.JPEG",
+          "synset": "n09246464"
+        },
+        {
+          "image_id": "n09428293/ILSVRC2012_val_00028242_n09428293",
+          "label": 978,
+          "path": "val/n09428293/ILSVRC2012_val_00028242_n09428293.JPEG",
+          "synset": "n09428293"
+        },
+        {
+          "image_id": "n12620546/ILSVRC2012_val_00023930_n12620546",
+          "label": 989,
+          "path": "val/n12620546/ILSVRC2012_val_00023930_n12620546.JPEG",
+          "synset": "n12620546"
+        },
+        {
+          "image_id": "n13044778/ILSVRC2012_val_00019186_n13044778",
+          "label": 995,
+          "path": "val/n13044778/ILSVRC2012_val_00019186_n13044778.JPEG",
+          "synset": "n13044778"
+        }
+      ],
+      "n": 200,
+      "n_classes": 200,
+      "seed": 0,
+      "selector": "Random(f'{seed}:random200'); sample(sorted(classes), 200) then choice(sorted(files)) \u2014 one image per class",
+      "sha256": "5f15c8457b2656681548888cd52ba2bd8d420740d04609de402855c3eb5b261f",
+      "split": "val",
+      "status": "frozen"
+    }
+  },
+  "schema_version": 1,
+  "seed": 0
+}

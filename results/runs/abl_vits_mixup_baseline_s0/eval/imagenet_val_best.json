@@ -1,0 +1,17 @@
+{
+  "top1": 76.532,
+  "top5": 93.21,
+  "loss": 1.0512312940150546,
+  "n_images": 50000,
+  "ckpt": "/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt/abl_vits_mixup_baseline_s0/ckpt/best.pth",
+  "ckpt_sha256": "9c8ebf27b107f05abcdf8a4c26ce4cf41bdc3b75684b52d0e378094c6f9393f5",
+  "git_sha": "0c20053597d54cb8c773e50618be317ccd5c76ca",
+  "arch": "vit_small",
+  "variant": "baseline",
+  "gate_mode": "none",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-15T11:20:26.503496+00:00"
+}

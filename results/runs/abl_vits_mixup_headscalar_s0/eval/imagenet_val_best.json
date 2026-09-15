@@ -1,0 +1,17 @@
+{
+  "top1": 76.206,
+  "top5": 92.86,
+  "loss": 1.067071561093321,
+  "n_images": 50000,
+  "ckpt": "/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt/abl_vits_mixup_headscalar_s0/ckpt/best.pth",
+  "ckpt_sha256": "69bd580362b5651b01aefc469ad56ec36e892b0ac91ac44c9d3f85ffe8b95805",
+  "git_sha": "0c20053597d54cb8c773e50618be317ccd5c76ca",
+  "arch": "vit_small",
+  "variant": "saga",
+  "gate_mode": "headscalar",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-15T11:32:00.806581+00:00"
+}
