@@ -269,7 +269,8 @@ def test_real_matrix_contract():
     with open(REPO / "configs" / "ft_matrix.yaml") as f:
         matrix = yaml.safe_load(f)
     runs = matrix["runs"]
-    assert len(runs) == 16
+    # 16 TASK-08 runs + TASK-13's 8-run ViT-B seed fill
+    assert len(runs) == 24
 
     # the frozen carve is pinned matrix-side
     assert matrix["defaults"]["split_seed"] == 0
@@ -295,7 +296,8 @@ def test_real_matrix_contract():
     for dataset in ("cub", "aircraft"):
         for variant in ("baseline", "saga"):
             assert cells[(dataset, "vits", variant)] == {0, 1, 2}
-            assert cells[(dataset, "vitb", variant)] == {0}
+            # TASK-13 A1 filled ViT-B from {0} to {0, 1, 2}
+            assert cells[(dataset, "vitb", variant)] == {0, 1, 2}
 
     # backbone shas must equal the committed e2r eval JSONs (numbers are
     # sacred: the matrix cannot drift from the provenance files)

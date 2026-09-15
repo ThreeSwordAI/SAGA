@@ -560,6 +560,28 @@ def q1_concentration(rows: Rows, members, excess):
                          "mean over repeats")
 
 
+def border_distance_map(side: int):
+    """Chebyshev distance from the grid border for every position of a
+    side x side grid: 0 = the outermost row/col, 1 = one patch inside, ...
+
+    THE ring definition. TASK-07's Q1b geometry and TASK-13's ring ablation
+    both read their rings from this one function — a second derivation
+    elsewhere could drift from the geometry the sink-address answers were
+    written against.
+    """
+    idx = np.arange(side)
+    return np.minimum(
+        np.minimum(idx[:, None], side - 1 - idx[:, None]),
+        np.minimum(idx[None, :], side - 1 - idx[None, :]))
+
+
+def ring_indices(side: int, k: int):
+    """Row-major flat indices of ring k of a side x side grid (ring 0 = the
+    outermost row/col). On the 14x14 patch grid ring 1 has 44 members — the
+    ring TASK-07 found the sinks and SAGA's gate suppression sitting on."""
+    return np.flatnonzero(border_distance_map(side).reshape(-1) == k)
+
+
 def border_rings(freq) -> list:
     """Mean frequency per ring of constant Chebyshev distance from the grid
     border: ring 0 = the outermost row/col, ring 1 = one patch inside, ...
@@ -567,10 +589,7 @@ def border_rings(freq) -> list:
     f = np.asarray(freq, dtype=np.float64)
     side = int(round(f.size ** 0.5))
     g = f.reshape(side, side)
-    idx = np.arange(side)
-    dist = np.minimum(
-        np.minimum(idx[:, None], side - 1 - idx[:, None]),
-        np.minimum(idx[None, :], side - 1 - idx[None, :]))
+    dist = border_distance_map(side)
     return [float(g[dist == k].mean()) for k in range(side // 2)]
 
 
