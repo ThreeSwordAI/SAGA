@@ -137,10 +137,16 @@ def main():
         chosen = chosen[:3]
     by_id = {im["image_id"]: im for im in index["images"]}
 
+    # rows: the images, then a caption-only band, then the bottom strip.
+    # The caption band is its own grid row rather than text nudged below the
+    # last image row — otherwise the population captions land on top of the
+    # strip's titles.
     n_rows, n_cols = len(chosen), 1 + len(COLUMN_ORDER)
-    fig = plt.figure(figsize=(2.1 * n_cols, 2.35 * n_rows + 2.9))
-    gs = fig.add_gridspec(n_rows + 1, n_cols, height_ratios=[1] * n_rows + [1.05],
-                          hspace=0.28, wspace=0.06)
+    cap_row, strip_row = n_rows, n_rows + 1
+    fig = plt.figure(figsize=(2.3 * n_cols, 2.35 * n_rows + 3.4))
+    gs = fig.add_gridspec(n_rows + 2, n_cols,
+                          height_ratios=[1] * n_rows + [0.30, 1.15],
+                          hspace=0.30, wspace=0.08)
 
     for r, image_id in enumerate(chosen):
         thumb = z[f"thumb/{image_id}"]
@@ -158,13 +164,18 @@ def main():
                 continue
             overlay(ax, thumb, z[key], label if r == 0 else None)
 
+    # ── caption band: POPULATION means, never the displayed images ──────────
     for c, label in enumerate(COLUMN_ORDER, start=1):
-        run_id = cols.get(label)
-        fig.text(gs[n_rows - 1, c].get_position(fig).x0
-                 + gs[n_rows - 1, c].get_position(fig).width / 2,
-                 gs[n_rows - 1, c].get_position(fig).y0 - 0.018,
-                 population_caption(vals, run_id),
-                 ha="center", va="top", fontsize=6.2)
+        ax = fig.add_subplot(gs[cap_row, c])
+        ax.axis("off")
+        ax.text(0.5, 0.95, population_caption(vals, cols.get(label)),
+                ha="center", va="top", fontsize=6.4, linespacing=1.45,
+                transform=ax.transAxes)
+    ax = fig.add_subplot(gs[cap_row, 0])
+    ax.axis("off")
+    ax.text(0.5, 0.95, "population means\n(not the rows above)", ha="center",
+            va="top", fontsize=6.4, style="italic", color="0.35",
+            transform=ax.transAxes)
 
     # ── bottom strip: the address, the ring, the gate ────────────────────────
     baseline_run, saga_run = cols.get("Baseline"), cols.get("SAGA")
@@ -176,15 +187,15 @@ def main():
          f"SAGA gate layer {args.gate_layer}\n({saga_run})", "viridis"),
     ]
     for i, (key, title, cmap) in enumerate(strip):
-        ax = fig.add_subplot(gs[n_rows, i + 1])
+        ax = fig.add_subplot(gs[strip_row, i + 1])
         if key is None or key not in z:
             pending_panel(ax, title)
             continue
         arr = np.asarray(z[key], dtype=np.float64)
         im = ax.imshow(arr, cmap=cmap, interpolation="nearest")
-        ax.set_title(title, fontsize=7)
+        ax.set_title(title, fontsize=7, pad=4)
         ax.set_xticks([]); ax.set_yticks([])
-        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03).ax.tick_params(
+        fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04).ax.tick_params(
             labelsize=5)
 
     absent = index.get("absent", [])
