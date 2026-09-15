@@ -901,6 +901,39 @@ def test_ckpt_root_default_is_unchanged(tmp_path):
     assert meta["ckpt_dir"] == (run_dir / "ckpt").as_posix()
 
 
+def test_derive_runs_follows_ckpt_dir_off_the_repo_filesystem(tmp_path):
+    """--ckpt_root moved the ablation checkpoints to woody, and derive_runs
+    hard-coded <run_dir>/ckpt — it would have reported MISSING-CKPT for all
+    six and derived nothing. It reads the run's own meta.json now."""
+    from tools.derive_runs import ckpt_dir_for, plan_steps
+
+    run_dir = tmp_path / "abl_vits_mixup_spatial_i0_s0"
+    (run_dir / "eval").mkdir(parents=True)
+    elsewhere = tmp_path / "woody" / run_dir.name / "ckpt"
+    elsewhere.mkdir(parents=True)
+    for tag in ("best", "last"):
+        (elsewhere / f"{tag}.pth").write_bytes(b"x")
+    (run_dir / "meta.json").write_text(json.dumps(
+        {"run_id": run_dir.name, "ckpt_dir": elsewhere.as_posix()}))
+    (run_dir / "config.resolved.yaml").write_text(yaml.safe_dump(
+        {"model": {"arch": "vit_small_patch16_224", "gate_mode": "spatial"},
+         "variant": "saga", "train": {"epochs": 100}}))
+
+    assert ckpt_dir_for(run_dir) == Path(elsewhere.as_posix())
+    steps = plan_steps(run_dir, "/data", "split.json")
+    assert steps and not any("MISSING-CKPT" in s[0] for s in steps)
+    for name, _out, ckpt, argv in steps:
+        assert Path(ckpt).parent == Path(elsewhere.as_posix()), name
+        assert "--gate-mode" in argv and "spatial" in argv
+
+    # a run with no ckpt_dir recorded (every pre-TASK-12 run) is unchanged
+    (run_dir / "meta.json").write_text(json.dumps({"run_id": run_dir.name}))
+    assert ckpt_dir_for(run_dir) == run_dir / "ckpt"
+    # ... and so is a run whose meta.json is torn
+    (run_dir / "meta.json").write_text("{not json")
+    assert ckpt_dir_for(run_dir) == run_dir / "ckpt"
+
+
 def test_posix_ckpt_root_is_not_rebased_under_the_repo():
     """TASK-09's lesson: '/home/woody/...' is not is_absolute() on Windows,
     so a naive Path() would silently put HPC checkpoints inside the repo."""

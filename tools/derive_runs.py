@@ -77,6 +77,26 @@ def run_meta(run_dir: Path):
     return arch, cfg["variant"], cfg["model"].get("gate_mode")
 
 
+def ckpt_dir_for(run_dir: Path) -> Path:
+    """Where this run's checkpoints ACTUALLY are.
+
+    `--ckpt_root` (TASK-12) can put ckpt/ on another filesystem — the
+    ablation runs keep theirs on woody — and the run records the resolved
+    location in its own meta.json. Every run written before that field
+    existed falls back to the in-run location, so the e2r/ft runs resolve
+    exactly as they always did."""
+    import json
+    meta = run_dir / "meta.json"
+    if meta.exists():
+        try:
+            recorded = json.loads(meta.read_text()).get("ckpt_dir")
+        except (ValueError, OSError):
+            recorded = None
+        if recorded:
+            return Path(recorded)
+    return run_dir / "ckpt"
+
+
 def plan_steps(run_dir: Path, data_root: str, split_file: str,
                python=sys.executable):
     """[(step_name, output_json, ckpt_path, argv)] for one run dir.
@@ -85,9 +105,10 @@ def plan_steps(run_dir: Path, data_root: str, split_file: str,
     # only passed on when the run recorded one — pre-TASK-12 command lines
     # stay byte-identical
     gm = ["--gate-mode", gate_mode] if gate_mode else []
+    ckpt_dir = ckpt_dir_for(run_dir)
     steps = []
     for tag in ("best", "last"):
-        ckpt = run_dir / "ckpt" / f"{tag}.pth"
+        ckpt = ckpt_dir / f"{tag}.pth"
         if not ckpt.exists():
             steps.append((f"{run_dir.name}:{tag}:MISSING-CKPT", None, ckpt,
                           None))

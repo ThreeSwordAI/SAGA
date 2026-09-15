@@ -2664,3 +2664,95 @@ merged and pushed**: the job files now pass `--ckpt_root`, and submitting the
 old ones would put the checkpoints back on hpc — after which a resubmission
 against the new files would look for `last.pth` in the new location, not find
 it, and start from epoch 0.
+
+**Addendum (2026-09-15, PHASE B COMPLETE — all six runs back and verified):**
+the human pushed the results (`1fc54bc`) and pulled them local. A read-only
+completeness gate over the six run dirs: **160 checks passed, 0 failed**.
+Nothing under `results/` was written or edited.
+
+**What was verified, per arm, from the run's own committed files:** meta
+`end_time` set, seed 0, `world_size` 4, `ckpt_dir` on
+`/home/woody/.../abl_ckpt/<run_id>/ckpt` (the redirect took); resolved
+`gate_mode` equal to the matrix, 100-epoch schedule, ViT-S/16 + mixup,
+`gate_init_logit` as designed; `log.csv` schema exact with epochs 0..99
+contiguous, no duplicates, no empty fields, **zero resumes on any arm**, and
+the cosine reaching `min_lr` 1.00e-06 (so no arm silently rebuilt its
+schedule); diag at epochs 9,19,…,99 on the frozen 10k split carrying
+`sink_mad_k5` / `oversmooth_pairwise` / `oversmooth_pairwise_nosink` /
+`eff_rank`; phi dumped at all 100 epochs with shape `[12,6,196]` (const,
+spatial) or `[12,6,1]` (headscalar) and none for baseline/layerscale;
+grad-phi on exactly the two spatial arms, epochs 0..30, all 12 layers.
+**Arm B's phi is EXACTLY 0 at all 100 epochs and bit-identical start to
+end** — the frozen-gate claim now holds over a full production run, not just
+a smoke. Cross-arm: the six resolved configs differ only in the allowed keys,
+and every arm saw the same dataset size per epoch (1,280,999..1,281,070
+images, the rounding of `img_per_sec`). Wall time 6.45-6.63 h per arm, against
+the ~6 h projection.
+
+**FIRST-LOOK NUMBERS — NOT CANONICAL.** These are the trainer's own per-epoch
+bf16 full-val from `log.csv` and the in-training diag at epoch 99. The
+canonical fp32 top-1 and the primary-metric (canon tau) sink counts do not
+exist yet; they need the Phase-C derivation. TASK-06B measured a bf16-vs-fp32
+gap of comparable size to the deltas below on at least one run (s1's +0.52 log
+value vs +0.456 fp32), so **no ordering below that is decided by <0.1 point is
+settled.** One seed per arm.
+
+| arm | gate_mode | top1_last | delta vs A | sink_mad_k5 | oversmooth | eff_rank |
+|---|---|---|---|---|---|---|
+| A baseline | none | 76.546 | — | 11.7130 | 0.2680 | 115.53 |
+| B const 0.5 | const | 76.228 | −0.318 | 4.4334 | 0.2921 | 125.18 |
+| C head scalar | headscalar | 76.172 | −0.374 | 6.6557 | 0.2745 | 122.39 |
+| D LayerScale | layerscale | 76.004 | −0.542 | 17.4579 | 0.3461 | 100.60 |
+| E SAGA (init 0) | spatial | 76.444 | −0.102 | 4.6851 | 0.2767 | 124.67 |
+| F SAGA (init +4) | spatial | 76.708 | **+0.162** | 10.0260 | 0.3043 | 118.23 |
+
+**Four readings, none of them settled by n=1:**
+1. **The comparison the task exists for goes SAGA's way.** E beats every
+   non-spatial control: +0.272 vs C (head scalar), +0.442 vs D (LayerScale),
+   +0.186 vs B (the frozen floor). F beats them by more. But all three
+   margins are SMALLER than the arm-to-arm spread (0.71 from D to F), which
+   is precisely TASK-12 Phase D's trigger condition.
+2. **E sits 0.102 BELOW the no-gate baseline here, against +0.456 at 300
+   epochs** (`results/tables/e2_pooled.csv`, n=4). Flagged as the task
+   requires — and calibrated: those four 300-epoch repeats span
+   −0.126/+0.570/+0.490/+0.890, SE 0.212, i.e. **one of them was itself
+   negative**. A single 100-epoch draw at −0.102 is inside that spread. It is
+   not evidence of an inversion and not evidence of replication; it is one
+   seed.
+3. **Arm F's "identity init" did not survive the schedule.** Its mean phi ran
+   3.9926 (epoch 0) -> 0.4808 (epoch 99), gate 0.982 -> 0.616 — close to the
+   0.31 that weight decay ALONE predicted before launch (prod(1−lr·wd) =
+   0.0784, recorded in the previous addendum), and its median ‖∂L/∂phi‖ is
+   9.96e-05 against E's 6.59e-04, a 6.6x smaller gradient consistent with
+   sigmoid saturation at phi=4. So F is not a clean "does init matter" arm:
+   it is a weaker-gradient arm that decays toward E's regime. Phase C must
+   say so rather than reading F as an init preference.
+4. **The finding that most threatens the paper's mechanism claim, and it must
+   NOT be read yet:** arm B — zero trainable gate parameters, frozen at 0.5 —
+   reaches `sink_mad_k5` 4.43 against E's 4.69 and the baseline's 11.71. On
+   this metric the init-scale alone accounts for the entire sink reduction.
+   But MAD is NOT the primary metric, and PROJECT.md §3.2's own finding is
+   that per-image median+5·MAD falls with the norm bulk — which a uniform 0.5
+   scaling compresses by construction. **The canon-tau derivation decides
+   this, and nothing should be said about it until that runs.**
+
+**Context Phase C will need:** the 100-epoch cell is a much less pathological
+regime than the 300-epoch one. Its baseline already sits at oversmoothing
+0.2680 and eff_rank 115.53, against the 300-epoch baseline's 0.43144 and
+89.75 (same file, n=4) — so all three pathologies deepen with schedule
+length, and there is far less headroom for the gate to recover here. That is
+a fact about the cell, not a defence of any arm.
+
+**A loose end from `--ckpt_root`, found and fixed here rather than left for
+Phase C:** `tools/derive_runs.py` hard-coded `<run_dir>/ckpt`, so with the
+ablation checkpoints on woody it would have reported MISSING-CKPT for all six
+and derived nothing. New `ckpt_dir_for()` reads the run's own
+`meta.json["ckpt_dir"]`, falling back to the in-run location for every run
+written before that field existed (so e2r and ft resolve exactly as before);
+a torn meta.json falls back too. Pinned by a test covering all three cases.
+
+**Pending from HPC (Phase C's first step):** the derivation, on a GPU where
+the checkpoints are — `tools/derive_runs.py --pattern 'abl_*'`, then
+`apply_fixed_thr --version canon`, then `tools/sink_address.py`. Until those
+land, T2_ablation has no canon sinks, no fp32 top-1 and no gate-vs-address
+correlation — and reading 4 above is exactly what the canon tau decides.
