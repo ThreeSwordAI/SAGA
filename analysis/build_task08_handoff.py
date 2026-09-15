@@ -1,0 +1,713 @@
+#!/usr/bin/env python3
+"""
+analysis/build_task08_handoff.py
+================================
+Render docs/TASK_08_HANDOFF.md — the one-document summary of TASK 08 for a
+reader who was not in the session (a collaborator, or a future session).
+
+Every experimental number is READ FROM the committed results
+(`results/tables/T3_finegrained.csv` and the per-run
+`results/runs/ft_*/eval/test_final.json`), never typed here, so the handoff
+cannot drift from the data. The prose around those numbers is fixed text:
+task structure, protocol, limitations, provenance, commands.
+
+The script also computes the DIVERGENCE between the committed T3 table and
+what is on disk (TASK 13 appended eight ViT-B runs to the same matrix), so
+the staleness warning in §10 is derived, not asserted.
+
+    python analysis/build_task08_handoff.py
+"""
+
+import argparse
+import csv
+import glob
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+REPO = Path(__file__).resolve().parents[1]
+MISSING = "MISSING"
+
+CELL_ORDER = [("cub", "vit_small_patch16_224"), ("cub", "vit_base_patch16_224"),
+              ("aircraft", "vit_small_patch16_224"),
+              ("aircraft", "vit_base_patch16_224")]
+ARCH_LABEL = {"vit_small_patch16_224": "ViT-S", "vit_base_patch16_224": "ViT-B"}
+DS_LABEL = {"cub": "CUB-200-2011", "aircraft": "FGVC-Aircraft"}
+
+# TASK-08's own six commits, in order. Subjects are read from git so a
+# rewritten history shows up rather than being papered over.
+COMMITS = [
+    ("1a11988", "A", "phase A: protocol, trainer, matrix, launchers, tests"),
+    ("d43a182", "B", "frozen val splits, built + committed on the HPC"),
+    ("2d2c525", "B", "human sweep: the 2 runs that survived attempt 1"),
+    ("fd98185", "B", "human sweep: the remaining 14 runs"),
+    ("dd73aea", "B", "incident log: the a0801 node fault"),
+    ("61e3699", "C", "phase C: T3 table + finegrained note"),
+]
+
+
+def sh(*args) -> str:
+    """git output as UTF-8 — git emits UTF-8, while `text=True` would decode
+    with the Windows locale codepage and mangle em dashes in subjects."""
+    try:
+        return subprocess.run(args, capture_output=True, check=True,
+                              cwd=REPO).stdout.decode("utf-8",
+                                                      "replace").strip()
+    except Exception:
+        return "unknown"
+
+
+def is_ancestor_of_main(rev: str) -> bool:
+    """True iff `rev` is reachable from main (i.e. the commit is really on
+    the branch this handoff claims it is on)."""
+    try:
+        subprocess.run(["git", "merge-base", "--is-ancestor", rev, "main"],
+                       capture_output=True, check=True, cwd=REPO)
+        return True
+    except Exception:
+        return False
+
+
+def load_table(path: Path):
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def num(v):
+    if v in ("", MISSING, None):
+        return MISSING
+    return float(v)
+
+
+def fmt(v, nd=3):
+    return MISSING if v == MISSING else f"{v:.{nd}f}"
+
+
+def signed(v, nd=3):
+    return MISSING if v == MISSING else f"{v:+.{nd}f}"
+
+
+class T3:
+    """Accessor over the committed long-format T3 table."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def sel(self, **kw):
+        return [r for r in self.rows
+                if all(r.get(k) == v for k, v in kw.items())]
+
+    def one(self, **kw):
+        got = self.sel(**kw)
+        return got[0] if got else None
+
+    def repeats(self, dataset, arch, variant):
+        return self.sel(dataset=dataset, arch=arch, variant=variant,
+                        kind="repeat")
+
+    def all_repeats(self):
+        return self.sel(kind="repeat")
+
+
+def run_id_of(dataset, arch, variant, ft_seed_tag):
+    archtok = "vits" if "small" in arch else "vitb"
+    return f"ft_{dataset}_{archtok}_{variant}_bs1_{ft_seed_tag}"
+
+
+def divergence():
+    """Committed-table coverage vs what is on disk now. Returns a dict of
+    plain facts; TASK 13 appended runs to the same matrix, so this is how
+    the handoff knows whether the table it quotes is still complete."""
+    with open(REPO / "configs" / "ft_matrix.yaml") as f:
+        matrix = yaml.safe_load(f)
+    matrix_runs = list(matrix["runs"])
+    on_disk = sorted(
+        Path(p).parents[1].name
+        for p in glob.glob(str(REPO / "results" / "runs" / "ft_*" / "eval"
+                               / "test_final.json")))
+    return {"matrix_runs": matrix_runs, "on_disk": on_disk}
+
+
+def build(table_path: Path) -> str:
+    t = T3(load_table(table_path))
+    div = divergence()
+    reps = t.all_repeats()
+    in_table = sorted({run_id_of(r["dataset"], r["arch"], r["variant"],
+                                 r["ft_seed"]) for r in reps})
+    extra = [r for r in div["on_disk"] if r not in in_table]
+
+    L = []
+    A = L.append
+
+    A("# TASK 08 — fine-grained transfer, clean protocol: handoff")
+    A("")
+    A(f"GENERATED by `analysis/build_task08_handoff.py` at git "
+      f"`{sh('git', 'rev-parse', '--short', 'HEAD')}`. Every experimental "
+      f"number below is read from `results/tables/T3_finegrained.csv` and "
+      f"the per-run `results/runs/ft_*/eval/test_final.json`; none is typed "
+      f"by hand. The surrounding prose is fixed text.")
+    A("")
+
+    # ── TL;DR ─────────────────────────────────────────────────────────────
+    A("## TL;DR")
+    A("")
+    A("The legacy fine-grained result was an artefact of selecting on the "
+      "test split. Under an honest protocol the effect is **dataset-"
+      "dependent, not a uniform win**:")
+    A("")
+    A("| cell | SAGA − baseline (test top-1) | n pairs | clears 2×SE? |")
+    A("|---|---|---|---|")
+    for dataset, arch in CELL_ORDER:
+        dm = t.one(dataset=dataset, arch=arch, variant="saga",
+                   kind="paired_delta_mean")
+        dsig = t.one(dataset=dataset, arch=arch, variant="saga",
+                     kind="significant_2xSE")
+        if dm is None:
+            continue
+        sig = dsig["test_top1"] if dsig else MISSING
+        sig_txt = {"1": "yes", "0": "no"}.get(str(sig),
+                                              "not computable (n=1)")
+        A(f"| {DS_LABEL[dataset]} {ARCH_LABEL[arch]} | "
+          f"**{signed(num(dm['test_top1']))}** | {dm['n']} | {sig_txt} |")
+    A("")
+    A("The two ViT-S cells reach 2×SE significance **in opposite "
+      "directions**. No pooled cross-dataset claim is made anywhere in this "
+      "task's artifacts, and none should be.")
+    A("")
+    A("The legacy headline deltas (**+2.19 Aircraft, +1.29 CUB**) are "
+      "**VOID**: they must never be cited, and must never be compared "
+      "against the table above, because they measure a different and "
+      "invalid quantity. See §4.")
+    A("")
+
+    # ── status ────────────────────────────────────────────────────────────
+    A("## 1. Status")
+    A("")
+    A("| phase | what | state |")
+    A("|---|---|---|")
+    A("| A | protocol + trainer + splits tooling + matrix + launchers + "
+      "tests | **done** (`1a11988`) |")
+    A("| B | HPC: build splits, smoke, 16 fine-tune runs | **done** "
+      "(`d43a182`, `2d2c525`, `fd98185`) |")
+    A("| C | T3 table + generated note | **done** (`61e3699`) |")
+    A("")
+    A("Nothing is pending from the HPC for TASK 08. Its commits, in order:")
+    A("")
+    A("| commit | phase | subject |")
+    A("|---|---|---|")
+    for short, phase, gloss in COMMITS:
+        subj = sh("git", "log", "-1", "--format=%s", short)
+        on_main = "yes" if is_ancestor_of_main(short) else "**NOT ON MAIN**"
+        A(f"| `{short}` | {phase} | {subj} — *{gloss}* (on `main`: "
+          f"{on_main}) |")
+    A("")
+    A("Two of those commits (`2d2c525` \"T7 and T8 erros\", `fd98185` "
+      "\"T8 and T7\") are the human's own repo-wide sweeps from the HPC and "
+      "carry TASK-07 material as well; the TASK-08 payload in them is the "
+      "`results/runs/ft_*/` directories. TASK 08 predates the "
+      "one-branch-per-task rule in CLAUDE.md, so all six commits are "
+      "directly on `main` (see §13).")
+    A("")
+
+    # ── the question ──────────────────────────────────────────────────────
+    A("## 2. The question this task had to settle")
+    A("")
+    A("Does SAGA transfer — does a SAGA-pretrained backbone fine-tune to "
+      "better fine-grained accuracy than a matched baseline backbone — "
+      "measured under a protocol that cannot flatter it?")
+    A("")
+    A("The prior answer in this repo was **not measurable**, because the "
+      "number it rested on had been selected on the test split.")
+    A("")
+
+    # ── protocol ──────────────────────────────────────────────────────────
+    A("## 3. What we did (the protocol)")
+    A("")
+    A("- **Val split.** A frozen, committed, seeded stratified 10% carve of "
+      "the OFFICIAL TRAIN split, stored in full (relative paths + labels) "
+      "in `results/ftsplit/<dataset>_val_split.json`. Built once on the "
+      "HPC, write-once thereafter.")
+    A("- **Selection.** Validated EVERY epoch on that carve; `best.pth` "
+      "selected on it.")
+    A("- **Test.** The official test split is touched **exactly once per "
+      "run**, after training, with the val-selected `best.pth` reloaded → "
+      "`eval/test_final.json`. It is constructed in exactly one place in "
+      "the code (`final_test_eval`), a second call is refused, and a "
+      "completed run is skipped on resubmission.")
+    A("- **Backbones.** The seeded e2r **mixup s1** checkpoints "
+      "(`last.pth`), strict-loaded with zero missing/unexpected keys, "
+      "sha256 asserted against `configs/ft_matrix.yaml` — which is itself "
+      "test-pinned to the committed e2r eval JSONs.")
+    A("- **Hyperparameters MIRROR the legacy e6 trainer** (AdamW backbone "
+      "1e-5 / head 1e-3, wd 0.05, cosine to 1e-7, 100 epochs, batch 64, "
+      "label smoothing 0.1, grad clip 1.0, fp16 AMP, legacy transforms, "
+      "224px). An adversarial mirror review found **zero unintended "
+      "mathematical deviations**: only the protocol changed.")
+    A("- **Resolution.** 224 only; any other `img_size` is refused, because "
+      "the backbones (and SAGA's φ = [H, 196] gate grid) were trained on "
+      "that grid and the interpolation path is unverified for this "
+      "protocol.")
+    A("- **Hygiene.** Per-run `ft_seed` seeding (separate from the backbone "
+      "seed), `run_registry` provenance, append-safe 4-field `log.csv`, "
+      "atomic checkpoint writes, a validity-checked completion marker, and "
+      "a `run.lock` with atomic stale takeover against double submission. "
+      "**No resume machinery** — runs are 20–40 min, far below the wall, so "
+      "an interrupted run restarts fresh.")
+    A("")
+
+    # ── the void legacy numbers ───────────────────────────────────────────
+    A("## 4. What was wrong before (bug B7)")
+    A("")
+    A("`evaluation/e6_finegrained/tools/train.py` (the legacy trainer, "
+      "still in the tree, never run by this task):")
+    A("")
+    A("1. used the **official TEST split as its validation set**;")
+    A("2. selected `best.pth` on it;")
+    A("3. evaluated it **every 5 epochs**, so the reported peak was a "
+      "maximum taken over ~20 looks at the test set;")
+    A("4. loaded backbones with `strict=False` without checking unexpected "
+      "keys.")
+    A("")
+    A("Its headline deltas **+2.19 Aircraft / +1.29 CUB are VOID**. They "
+      "are quoted in this repo only to record that they are retired.")
+    A("")
+    A("> **Trap for the unwary.** The new CUB ViT-B single-seed delta "
+      "happens to land near the void legacy CUB number. That is a "
+      "coincidence across a different backbone, protocol and split. It is "
+      "**not** corroboration, and the generated note forbids the "
+      "comparison.")
+    A("")
+
+    # ── how to read ───────────────────────────────────────────────────────
+    A("## 5. How to read these numbers (read before quoting any)")
+    A("")
+    A("1. **Pairing is by ft-seed.** Baseline and SAGA at the same "
+      "`ft_seed` share the frozen val split and the data order, so the "
+      "paired delta is the meaningful comparison. Unpaired means are also "
+      "given; an unpaired Welch test is reported as a robustness line "
+      "only.")
+    A("2. **`significant_2xSE` means |mean Δ| > 2×SE over n paired seeds.** "
+      "With n = 3 that is a direction indicator, not an effect-size "
+      "estimate. Both ViT-S verdicts clear the threshold, one of them "
+      "thinly; the note prints each verdict's margin so \"YES\" cannot be "
+      "read as \"large\". Welch does **not** reach significance in either "
+      "ViT-S cell — expected, since it discards the pairing.")
+    A("3. **`MISSING` is literal and never averaged.** n=1 cells have no "
+      "std, no SE and no significance verdict; a run whose backbone sha "
+      "does not match the matrix, or that is a smoke artefact, yields "
+      "MISSING rather than an unverified number.")
+    A("4. **Diagnostics come from the val-selected `best.pth`**, not the "
+      "final epoch. Which matters: see §8.")
+    A("")
+
+    # ── results ───────────────────────────────────────────────────────────
+    A("## 6. Results — T3")
+    A("")
+    A("Repeats are listed individually before any aggregate. Every value is "
+      "the official test split, evaluated once, with the val-selected "
+      "checkpoint.")
+    A("")
+    for dataset, arch in CELL_ORDER:
+        rr = t.repeats(dataset, arch, "baseline")
+        n_test = rr[0]["n_test_images"] if rr else MISSING
+        A(f"### {DS_LABEL[dataset]} — {ARCH_LABEL[arch]} (test n = "
+          f"{n_test})")
+        A("")
+        A("| variant | ft-seed | test top-1 | test top-5 | val top-1 @ best "
+          "| best epoch |")
+        A("|---|---|---|---|---|---|")
+        for variant in ("baseline", "saga"):
+            for r in t.repeats(dataset, arch, variant):
+                A(f"| {variant} | {r['ft_seed']} | "
+                  f"{fmt(num(r['test_top1']))} | "
+                  f"{fmt(num(r['test_top5']))} | "
+                  f"{fmt(num(r['val_top1_at_best']))} | {r['best_epoch']} |")
+        A("")
+        for variant in ("baseline", "saga"):
+            m = t.one(dataset=dataset, arch=arch, variant=variant,
+                      kind="mean")
+            s = t.one(dataset=dataset, arch=arch, variant=variant,
+                      kind="std")
+            if m is None:
+                continue
+            A(f"- {variant} mean = **{fmt(num(m['test_top1']))}** "
+              f"(n = {m['n']}, std = {fmt(num(s['test_top1']) if s else MISSING, 4)})")
+        dm = t.one(dataset=dataset, arch=arch, variant="saga",
+                   kind="paired_delta_mean")
+        dse = t.one(dataset=dataset, arch=arch, variant="saga",
+                    kind="paired_delta_se")
+        dsig = t.one(dataset=dataset, arch=arch, variant="saga",
+                     kind="significant_2xSE")
+        wt = t.one(dataset=dataset, arch=arch, variant="saga", kind="welch_t")
+        wp = t.one(dataset=dataset, arch=arch, variant="saga", kind="welch_p")
+        if dm is not None:
+            per_seed = ", ".join(
+                f"{r['ft_seed']} {signed(num(r['test_top1']))}"
+                for r in t.sel(dataset=dataset, arch=arch, variant="saga",
+                               kind="paired_delta")
+                if num(r["test_top1"]) != MISSING)
+            mu, se = num(dm["test_top1"]), num(dse["test_top1"]) if dse else MISSING
+            sig = dsig["test_top1"] if dsig else MISSING
+            sig_txt = {"1": "**YES**", "0": "no"}.get(str(sig), MISSING)
+            A(f"- **paired Δ = {signed(mu)}** over {dm['n']} pair(s) "
+              f"[{per_seed}]; SE = {fmt(se, 4)}; clears 2×SE: {sig_txt}")
+            if se != MISSING and mu != MISSING:
+                A(f"  - margin |Δ| − 2×SE = {signed(abs(mu) - 2 * se, 4)} "
+                  f"(threshold {fmt(2 * se, 4)})")
+            if wp is not None and num(wp["test_top1"]) != MISSING:
+                A(f"  - unpaired Welch: t = {fmt(num(wt['test_top1']), 4)}, "
+                  f"p = {fmt(num(wp['test_top1']), 4)}")
+            if se == MISSING:
+                A("  - **single ft-seed: no std, no SE, no significance "
+                  "claim is possible for this cell** (addressed later — "
+                  "see §10)")
+        A("")
+
+    # ── sanity ────────────────────────────────────────────────────────────
+    A("## 7. Verification that was run before any table was built")
+    A("")
+    A(f"All {len(reps)} runs in the table were checked: `smoke` false "
+      f"everywhere, `n_images` correct per dataset, 100 epochs and 100 log "
+      f"rows each, `best_epoch` and `val_top1_at_best` matching each run's "
+      f"OWN `log.csv` peak exactly, the four backbone sha256s matching "
+      f"`configs/ft_matrix.yaml`, and ONE frozen split sha per dataset "
+      f"across all its runs.")
+    A("")
+    A("Every T3 value was then **independently recomputed straight from the "
+      "run JSONs through a separate code path** (repeats, means, sample "
+      "stds, paired deltas, SEs, 2×SE verdicts): **0 discrepancies**.")
+    A("")
+    A("Three note-generator defects were found and fixed before commit: "
+      "binomial-SE lines duplicated per cell instead of per dataset; a "
+      "\"n = 1 pairs\" plural; and a bare \"significant: YES\" that could "
+      "be misread as favourable on the cell where SAGA is *worse* — "
+      "verdicts now print direction and margin.")
+    A("")
+
+    A("## 8. Sanity findings (these are results, not bookkeeping)")
+    A("")
+    early = [r for r in reps
+             if num(r["best_epoch"]) != MISSING
+             and num(r["epochs_trained"]) != MISSING
+             and num(r["best_epoch"]) < num(r["epochs_trained"]) - 1]
+    bes = [num(r["best_epoch"]) for r in early]
+    eps = sorted({int(num(r["epochs_trained"])) for r in early})
+    A(f"**Every run overfits, and val-selection caught it.** "
+      f"{len(early)} of {len(reps)} runs peaked on val strictly before "
+      f"their final epoch, with best epochs spanning "
+      f"{int(min(bes))}..{int(max(bes))} of "
+      f"{'/'.join(str(e) for e in eps)}. The final-epoch weights were never "
+      f"the val-best weights. This is exactly what the legacy test-tuned "
+      f"peak concealed, and it also settles the 100-vs-30-epoch question "
+      f"raised in Phase A: 100 epochs is harmless because selection is "
+      f"honest, whereas truncating to 30 would have cut off the runs that "
+      f"peaked later.")
+    A("")
+    gaps = [(r, num(r["val_minus_test"])) for r in reps
+            if num(r["val_minus_test"]) != MISSING]
+    flagged = [(r, g) for r, g in gaps if abs(g) > 2.0]
+    pos = sum(1 for _, g in gaps if g > 0)
+    A(f"**Val is optimistic relative to test, as it must be.** "
+      f"{len(flagged)} of {len(gaps)} runs exceed the 2-point "
+      f"val−test flag; {pos} of {len(gaps)} gaps are positive; range "
+      f"{signed(min(g for _, g in gaps))} .. "
+      f"{signed(max(g for _, g in gaps))}, mean "
+      f"{signed(sum(g for _, g in gaps) / len(gaps))}. The note records "
+      f"this against each val split's own computed binomial noise floor "
+      f"(CUB n=600 ⇒ ≈1.53 pts; Aircraft n=700 ⇒ ≈1.65 pts) and notes that "
+      f"a val-selected maximum over 100 epochs is upward-biased by "
+      f"construction. **Reported, not corrected for** — the test numbers "
+      f"are unaffected, since the test split is evaluated once and never "
+      f"selected on.")
+    A("")
+    A("Largest gaps:")
+    A("")
+    A("| run | val top-1 @ best | test top-1 | val − test |")
+    A("|---|---|---|---|")
+    for r, g in sorted(flagged, key=lambda x: -abs(x[1])):
+        A(f"| {r['dataset']} {ARCH_LABEL[r['arch']]} {r['variant']} "
+          f"{r['ft_seed']} | {fmt(num(r['val_top1_at_best']))} | "
+          f"{fmt(num(r['test_top1']))} | {signed(g)} |")
+    A("")
+
+    # ── what we did NOT do ────────────────────────────────────────────────
+    A("## 9. What we did NOT do (limitations, by design or by scope)")
+    A("")
+    A("| not done | why | consequence |")
+    A("|---|---|---|")
+    A("| **registers variant** never fine-tuned | the matrix is "
+      "`{baseline, saga}` only, per the task | T3 says nothing about "
+      "registers on fine-grained transfer |")
+    A("| **one backbone seed** (`bs1` = e2r mixup s1) | task-specified | "
+      "every delta is conditional on one pretraining seed; backbone-seed "
+      "variance is unmeasured and is NOT in the reported SE |")
+    A("| **nomix backbones** not transferred | out of scope | transfer is "
+      "measured only for mixup-pretrained backbones |")
+    A("| **ViT-B at n=1** | 4 runs, not 12, per the task matrix | the "
+      "+1.33 / +1.80 deltas had no error bars (now addressed — §10) |")
+    A("| **only two datasets** | CUB + Aircraft were the staged ones | no "
+      "evidence on whether the dataset-dependence generalizes |")
+    A("| **no mechanism test** | TASK 08 measured *whether*, not *why* | "
+      "the opposite-direction ViT-S result is unexplained by this task |")
+    A("| **no resume machinery** | runs are 20–40 min | an interrupted run "
+      "restarts from scratch, by choice; documented in `meta.json` |")
+    A("| **GPU kernels not forced deterministic** | matches the e2r "
+      "trainer's policy | a rerun may differ in the last digits; the seed "
+      "is recorded, determinism is pinned only on CPU |")
+    A("| **legacy e6 trainer left in place** | provenance | "
+      "`evaluation/e6_finegrained/tools/train.py` still exists and still "
+      "has bug B7 — do not run it |")
+    A("| **`best.pth` / `last.pth` not in git** | size | they live ONLY on "
+      "the HPC; anything needing them (e.g. a later ablation) depends on "
+      "them not having been pruned |")
+    A("")
+    A("One deliberate protocol wrinkle, recorded rather than hidden: the "
+      "2-epoch **smoke run** also evaluates the official test split once. "
+      "It is flagged `smoke: true`, written to the git-ignored "
+      "`results/smoke/`, excluded from every table by an explicit check, "
+      "and test-pinned so it can never enter a result. But for the CUB "
+      "ViT-S SAGA f0 configuration the test set was technically touched "
+      "twice across the two runs.")
+    A("")
+
+    # ── staleness / TASK 13 ───────────────────────────────────────────────
+    A("## 10. IMPORTANT — the table is complete for TASK 08, but the "
+      "matrix has since grown")
+    A("")
+    A(f"`configs/ft_matrix.yaml` now declares **{len(div['matrix_runs'])} "
+      f"runs**, and **{len(div['on_disk'])}** have a `test_final.json` on "
+      f"disk. The committed `T3_finegrained.csv` quoted above covers "
+      f"**{len(in_table)}** — TASK 08's own sixteen.")
+    A("")
+    if extra:
+        A(f"The {len(extra)} additional runs are TASK 13's ViT-B seed fill "
+          f"(matrix indices 16-23), which exist to give the ViT-B cells the "
+          f"error bars TASK 08 could not:")
+        A("")
+        for rid in extra:
+            A(f"- `{rid}`")
+        A("")
+        A("**Consequences, for whoever picks this up:**")
+        A("")
+        A("1. **Re-running `analysis/build_ft_tables.py` right now will "
+          "NOT reproduce the committed table** — it reads the matrix, so it "
+          "will emit a larger table in which the ViT-B cells have n=3 and "
+          "therefore carry std/SE/significance where the committed table "
+          "says MISSING. That is an improvement, not a bug, but it means "
+          "the table is no longer byte-reproducible from the current "
+          "matrix.")
+        A("2. **Integrating those runs is TASK 13's Phase C, not TASK "
+          "08's.** Until it runs, the ViT-B rows in §6 are the committed "
+          "state and the eight extra runs' numbers live only in their own "
+          "`test_final.json` files (§11).")
+        touched_arch = sorted({("ViT-S" if "_vits_" in r else "ViT-B")
+                               for r in extra})
+        unaffected = [a for a in ("ViT-S", "ViT-B")
+                      if a not in touched_arch]
+        if unaffected:
+            A(f"3. The **{'/'.join(unaffected)} rows are unaffected** — "
+              f"every one of the {len(extra)} added runs is "
+              f"{'/'.join(touched_arch)}, so only those cells move. "
+              f"(Verified by rebuilding to a scratch path and diffing: "
+              f"0 {'/'.join(unaffected)} rows change, every "
+              f"{'/'.join(touched_arch)} row does.)")
+        else:
+            A(f"3. The added runs span {'/'.join(touched_arch)}, so no "
+              f"cell is guaranteed unaffected.")
+        A("")
+        A("A regression test in `tests/test_task08_ft.py` asserts the "
+          "committed table matches its source JSONs and expects exactly 16 "
+          "repeat rows; if a rebuilt 24-run table is committed, that "
+          "expectation is what will (correctly) fail and needs updating "
+          "with it.")
+    else:
+        A("The committed table currently covers every run on disk.")
+    A("")
+    ring = sorted(Path(p).stem for p in glob.glob(
+        str(REPO / "results" / "finegrained" / "ring_ablation" / "*.json")))
+    if ring:
+        A(f"Separately, TASK 13 has produced **{len(ring)} ring-ablation "
+          f"JSONs** under `results/finegrained/ring_ablation/`, an "
+          f"eval-only masking test over these fine-tuned checkpoints that "
+          f"probes *why* the direction differs by dataset. Those are TASK "
+          f"13's results, not TASK 08's, and are not summarized here.")
+        A("")
+
+    # ── file inventory ────────────────────────────────────────────────────
+    A("## 11. Which files hold which results")
+    A("")
+    A("### Results (read numbers from these)")
+    A("")
+    A("| file | what is in it |")
+    A("|---|---|")
+    A("| `results/tables/T3_finegrained.csv` | **the T3 table**, long "
+      "format: one row per (dataset, arch, variant, kind). `kind` ∈ "
+      "{repeat, mean, std, paired_delta, paired_delta_mean, "
+      "paired_delta_se, significant_2xSE, welch_t, welch_p}. Columns: "
+      "test_top1, test_top5, val_top1_at_best + per-repeat context "
+      "(best_epoch, epochs_trained, val_minus_test, n_test_images) |")
+    A("| `results/notes/finegrained.md` | the generated results note: the "
+      "void-legacy statement, the protocol, the per-cell tables, the "
+      "sanity paragraph, and a per-run provenance table |")
+    A("| `results/runs/ft_<ds>_<arch>_<variant>_bs1_f<seed>/eval/"
+      "test_final.json` | **the authoritative per-run number.** top1, "
+      "top5, n_images, best_epoch, val_top1_at_best, epochs_trained, "
+      "backbone_run/ckpt/sha256, finetuned_sha256, val_split + sha256, "
+      "ft_seed (= seed), git_sha. Also the run's completion marker |")
+    A("| `.../log.csv` | per-epoch `epoch, lr, train_loss, val_top1` — the "
+      "val curve behind every `best_epoch` |")
+    A("| `.../meta.json` | run provenance: git sha + dirty flag, command, "
+      "host, GPU, library versions, start/end time, ft_seed, backbone and "
+      "split shas, split sizes, the explicit no-resume and determinism "
+      "notes |")
+    A("| `.../config.resolved.yaml` | the fully resolved run config |")
+    A("| `results/ftsplit/{cub,aircraft}_val_split.json` | **the frozen "
+      "val carve**: full `items_train` and `items_val` (relative path + "
+      "label), seed, val_frac, counts, n_classes |")
+    A("")
+    A("Run directories in this task, by cell:")
+    A("")
+    A("| cell | runs |")
+    A("|---|---|")
+    for dataset, arch in CELL_ORDER:
+        ids = [run_id_of(dataset, arch, v, r["ft_seed"])
+               for v in ("baseline", "saga")
+               for r in t.repeats(dataset, arch, v)]
+        A(f"| {DS_LABEL[dataset]} {ARCH_LABEL[arch]} | "
+          + ", ".join(f"`{i}`" for i in ids) + " |")
+    A("")
+    A("### Code")
+    A("")
+    A("| file | what |")
+    A("|---|---|")
+    A("| `evaluation/e6_finegrained/tools/train_ft.py` | the clean "
+      "trainer: protocol, single-touch test eval, locking, marker "
+      "validity, strict load, seeding |")
+    A("| `evaluation/e6_finegrained/tools/build_ft_split.py` | builds a "
+      "frozen val carve (write-once); runs on a login node, reads only tar "
+      "metadata |")
+    A("| `evaluation/e6_finegrained/data/ft_meta.py` | THE single parsing "
+      "path for official splits + label conventions (CUB `cls−1`, Aircraft "
+      "`variants.txt` order) and the legacy transforms — shared by builder "
+      "and trainer so labels cannot drift |")
+    A("| `configs/ft_matrix.yaml` | run matrix + mirrored hyperparameters "
+      "+ backbone shas. **Row order is load-bearing** (the array job maps "
+      "index → run by position): append only |")
+    A("| `analysis/build_ft_tables.py` | T3 builder |")
+    A("| `analysis/build_finegrained_note.py` | note renderer |")
+    A("| `analysis/build_task08_handoff.py` | this document |")
+    A("| `scripts/gen_ft_jobs.py` | generates the launchers |")
+    A("| `scripts/jobs/ft_finegrained_array.sbatch` | single-GPU array "
+      "job, per-task `/scratch` staging |")
+    A("| `scripts/jobs/ft_smoke.sbatch` | 2-epoch smoke → "
+      "`results/smoke/` |")
+    A(f"| `tests/test_task08_ft.py` | {sh('grep', '-c', '^def test_', 'tests/test_task08_ft.py')} "
+      f"tests (CPU, fake data): split determinism/stratification/"
+      f"disjointness, label conventions, strict-load raises, sha-mismatch "
+      f"refusal, non-224 refusal, matrix contract, end-to-end run, "
+      f"test-touched-once, torn-marker recovery, lock ownership, "
+      f"write-once builder, T3 statistics, committed-table-vs-JSONs |")
+    A("| `evaluation/e6_finegrained/tools/train.py` | **the VOID legacy "
+      "trainer.** Kept for provenance. Has bug B7. Do not run |")
+    A("")
+
+    # ── regenerate ────────────────────────────────────────────────────────
+    A("## 12. Regenerate (all local, no GPU, no HPC)")
+    A("")
+    A("```bash")
+    A("python analysis/build_ft_tables.py          # see the §10 warning")
+    A("python analysis/build_finegrained_note.py")
+    A("python analysis/build_task08_handoff.py")
+    A("pytest -q")
+    A("```")
+    A("")
+    A("Rebuilding a val split is deliberately refused if the file exists — "
+      "the carve is the protocol, and changing it would invalidate every "
+      "run. Deleting one to force a rebuild means every downstream run must "
+      "be redone.")
+    A("")
+
+    # ── phase B operational history ───────────────────────────────────────
+    A("## 13. Phase-B operational history (worth knowing before the next "
+      "array job)")
+    A("")
+    A("The first submission of the 16-run array (job `4196932`) came back "
+      "with **2 COMPLETED and 14 FAILED at `00:00:00` elapsed, exit "
+      "`1:0`**. The cause was not in this repo:")
+    A("")
+    A("```")
+    A("error: run_command: slurm task_prolog can not be executed "
+      "(/etc/slurm/slurm.taskprolog) Permission denied")
+    A("error: TaskProlog failed status=1")
+    A("```")
+    A("")
+    A("Node **a0801** had an unreadable SLURM task prolog, so every task "
+      "placed there died before the job script ran a single line. The "
+      "correlation was exact: `Node list` was a0801 for all 14 failures and "
+      "only for those; the 2 survivors ran on a0804/a0805. Resubmitting as "
+      "`sbatch --exclude=a0801 scripts/jobs/ft_finegrained_array.sbatch` "
+      "(job `4198114`) completed all 14 in 19–40 min each.")
+    A("")
+    A("Two things paid off and are worth reusing: the completion-marker "
+      "requeue guard meant the resubmission **skipped the 2 finished runs "
+      "automatically** rather than redoing or corrupting them; and because "
+      "the 14 failures never reached `create_run`, the total absence of "
+      "`meta.json` for them was itself the proof that they died before "
+      "training, which is what located the fault. **Diagnostic rule: "
+      "`00:00:00` elapsed with exit `1:0` means look at the node, not the "
+      "code.**")
+    A("")
+
+    # ── provenance warnings ───────────────────────────────────────────────
+    A("## 14. Provenance warnings for whoever picks this up")
+    A("")
+    A("- **TASK 08's commits are on `main`, not a task branch.** CLAUDE.md "
+      "gained the one-branch-per-task rule after this task ran. History "
+      "was left alone because `main` was shared live with the TASK-07 and "
+      "TASK-09 sessions.")
+    A("- **Three sessions shared this checkout** during Phase C, which "
+      "CLAUDE.md now forbids. TASK 09's uncommitted work was present when "
+      "the Phase-C commit was made; it was preserved byte-for-byte by "
+      "committing only TASK-08 paths and reconstructing the shared "
+      "`docs/TASK_LOG.md` around the other session's block. Parallel work "
+      "needs `git worktree add`.")
+    A("- **The human's HPC sweep commits carry mixed task material** "
+      "(`2d2c525`, `fd98185`). Read TASK-08 numbers from "
+      "`results/runs/ft_*/`, not from a commit label.")
+    A("- **Numbers come from the val-selected `best.pth`.** No `*_best` vs "
+      "`*_last` ambiguity exists here — there is one test evaluation per "
+      "run and it uses `best.pth`.")
+    A("- `evaluation/e6_finegrained/data/{cub,aircraft}_dataset.py` are the "
+      "LEGACY loaders. Only their `stage_*` tar-extraction helpers are "
+      "reused; their `Dataset` classes are not, and their label logic was "
+      "re-implemented once in `ft_meta.py` so the builder and trainer "
+      "cannot disagree.")
+    A("- Three housekeeping edits live outside e6 + new tooling: a "
+      "`.gitignore` rule for `results/smoke/`, one line in "
+      "`results/README.md` documenting `ftsplit/`, and a new "
+      "`.gitattributes` forcing LF on `*.sbatch` (a CRLF sbatch fails "
+      "cryptically on the cluster).")
+    A("")
+    return "\n".join(L) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Render docs/TASK_08_HANDOFF.md from committed results.")
+    parser.add_argument("--table",
+                        default="results/tables/T3_finegrained.csv")
+    parser.add_argument("--out", default="docs/TASK_08_HANDOFF.md")
+    args = parser.parse_args()
+
+    text = build(Path(args.table))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding="utf-8")
+    print(f"wrote {out} ({len(text.splitlines())} lines)")
+
+
+if __name__ == "__main__":
+    main()

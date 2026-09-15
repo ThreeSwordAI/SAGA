@@ -3145,3 +3145,49 @@ E and F if the init disagreement is also to be resolved) at ~6 h each.
 `T2_ablation_address.csv`, `results/notes/ablation.md` (210 lines, generated
 — a test re-renders it from the committed tables and requires byte-identity),
 `results/figures/F_ablation_draft.pdf`. **Nothing is pending from the HPC.**
+
+---
+
+## 2026-09-15 — TASK 08, HANDOFF DOC (no new experiments)
+
+Requested by the human: a full handoff of TASK 08's results in `docs/`.
+No runs, no re-derivation, no results file touched.
+
+**Done (local):**
+- `analysis/build_task08_handoff.py` → `docs/TASK_08_HANDOFF.md` (278
+  lines), following the `build_task07_handoff.py` convention: every
+  experimental number is READ from `results/tables/T3_finegrained.csv` and
+  the per-run `eval/test_final.json`, none typed, so the document cannot
+  drift from the data. Fixed prose covers protocol, limitations,
+  provenance and commands.
+- Sections: TL;DR (the four deltas), status + all six TASK-08 commits with
+  a live on-`main` check, the question, the protocol, bug B7, how to read
+  the numbers, T3 per cell, the verification that preceded the table, the
+  sanity findings, **what we did NOT do** (10 rows), the staleness
+  warning, the per-file result inventory, regeneration commands, the
+  Phase-B a0801 incident, and provenance warnings.
+- **Staleness is DERIVED, not asserted** (§10): the script reads the
+  matrix and the runs on disk and reports that the matrix now declares 24
+  runs with 24 `test_final.json` present while the committed T3 covers
+  TASK-08's 16. Verified empirically by rebuilding to a scratch path and
+  diffing: 60 → 72 rows, 16 → 24 repeats, **0 ViT-S rows change, all 24
+  ViT-B rows change** (TASK 13's seed fill gives the ViT-B cells n=3).
+  Integrating them is TASK 13's Phase C, not TASK 08's; `T3_finegrained.csv`
+  and `finegrained.md` are deliberately left untouched here.
+- Two generator defects fixed before commit: git subjects were decoded
+  with the Windows locale codepage and mangled em dashes (now explicit
+  UTF-8), and the on-`main` check relied on an empty-string sentinel (now
+  an explicit `merge-base --is-ancestor` predicate that prints
+  **NOT ON MAIN** if it ever fails).
+
+**Git note (shared-worktree hazard, per CLAUDE.md):** the main checkout
+`SAGA_Code/SAGA` had been switched to `task/11-handoff` by another live
+session and carried that session's uncommitted `TASK_11_HANDOFF` files, so
+committing there was not safe and `main` was not checked out. This commit
+was made from a dedicated worktree `SAGA_Code/SAGA-08` on `main` (the
+mechanism CLAUDE.md prescribes); the TASK-11 session's branch and files
+were never touched. The worktree is removed afterwards.
+
+**Commit:** `[TASK-08] handoff document (generated)`
+
+**Pending from HPC:** nothing.
