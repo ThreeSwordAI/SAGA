@@ -1,0 +1,17 @@
+{
+  "top1": 76.736,
+  "top5": 93.104,
+  "loss": 1.0478782885860722,
+  "n_images": 50000,
+  "ckpt": "/home/woody/iwi5/iwi5359h/SAGA/abl_ckpt/abl_vits_mixup_spatial_i4_s0/ckpt/best.pth",
+  "ckpt_sha256": "acc12de5761226f8fdf91ef8981ce40da149e82bc02ba5d9682819f6e5a323e0",
+  "git_sha": "22701b2178239aa9e36ce1d4e437c432a345c244",
+  "arch": "vit_small",
+  "variant": "saga",
+  "gate_mode": "spatial",
+  "seed": 0,
+  "batch_size": 256,
+  "world_size": 1,
+  "amp": "off",
+  "timestamp": "2026-09-15T11:49:12.004767+00:00"
+}

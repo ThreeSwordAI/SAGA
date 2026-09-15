@@ -14,7 +14,7 @@
   "python": "3.12.13",
   "cuda": "12.8",
   "start_time": "2026-09-15T11:37:46.716566+00:00",
-  "end_time": null,
+  "end_time": "2026-09-15T12:37:48.199039+00:00",
   "ft_seed": 2,
   "backbone_run": "e2r_vitb_mixup_saga_s1",
   "backbone_ckpt": "results/runs/e2r_vitb_mixup_saga_s1/ckpt/last.pth",
@@ -34,5 +34,7 @@
   "n_test": 3333,
   "n_classes": 100,
   "resume": "none (runs are 1-3 h; interrupted runs restart fresh)",
-  "determinism": "seeded (ft_seed); GPU kernels not forced deterministic \u2014 same policy as the e2r trainer"
+  "determinism": "seeded (ft_seed); GPU kernels not forced deterministic \u2014 same policy as the e2r trainer",
+  "best_epoch": 58,
+  "val_top1_at_best": 75.286
 }
