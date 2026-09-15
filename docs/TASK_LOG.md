@@ -3062,3 +3062,112 @@ and `probe_attention.sbatch` passes that check rather than skipping).
 Open for the human: (a) how to frame a teaser whose number favours registers;
 (b) whether to fill the TTR column; (c) whether to add seeds so these deltas
 can carry seed-level rather than image-level error bars.
+
+---
+
+## 2026-09-15 — TASK 13, PHASE C (T3 rebuild, ring-ablation table, extension note)
+
+Branch `task/13-fgext-c` off updated `main` (`2a78f52`, the HPC's ring-ablation
+push), in the `SAGA_Code/SAGA-13` worktree so TASK-12's session was never
+touched. Phase B came back complete and was verified before any table was
+built: 8 seed-fill `test_final.json` (each cross-checked against its OWN
+log.csv — 100 rows, `best_epoch`/`val_top1_at_best` equal to that run's logged
+peak, backbone sha equal to the matrix, smoke false, all 8 peaking on val
+strictly before the final epoch) and 24 ring-ablation JSONs.
+
+**Done (local):**
+- C1 `analysis/build_ft_tables.py` re-run (generator UNCHANGED — the matrix
+  grew, the code did not) → `results/tables/T3_finegrained.csv`, 72 rows,
+  24 repeats, 0 MISSING metric cells. All four cells now n=3.
+- C2 `analysis/build_ring_tables.py` (NEW) →
+  `results/tables/T_ring_ablation.csv` (65 rows, 24 runs, 0 flagged).
+  **The quantity it centres on is the within-run CONTRAST**
+  `drop_ring1 − drop_random44`, which collapses to `random44 − ring1`: both
+  terms come from the same run, checkpoint and test images, and the masks are
+  area-matched at 44, so dataset difficulty, class count, backbone quality and
+  "how much any masking costs" all cancel. A raw drop has none of that, which
+  is why the hypothesis is never read off one. Repeats before means, MISSING
+  never averaged, std/SE MISSING (never 0.0) at n<2, and a run whose `full`
+  condition failed to reproduce contributes MISSING + a flag rather than a
+  drop measured against an unverified baseline.
+- C3 `analysis/build_finegrained_ext_note.py` (NEW) →
+  `results/notes/finegrained_ext.md`, fully generated; a test regenerates it
+  and asserts byte-equality with the committed file, so a typed-in number
+  cannot survive.
+
+**ANSWERS:**
+1. **The ViT-B deltas now carry an SE, and both clear 2×SE — narrowly.**
+   CUB ViT-B **+1.047 ± 0.5131** (|d|−2SE = **+0.021**, the thinnest margin in
+   the table); Aircraft ViT-B **+1.090 ± 0.4158** (|d|−2SE = +0.258). TASK-08's
+   n=1 headlines (+1.329, +1.800) were in both cases the LARGEST of the three
+   seeds — CUB's other seeds are +1.761 and **+0.052**.
+2. **The two CUB architectures now disagree in SIGN**, both clearing 2×SE:
+   ViT-S −0.362, ViT-B +1.047. No pooled cross-architecture claim is made.
+3. **The ring ablation's predicted ORDERING HOLDS and is significant.**
+   CUB contrast **−2.179 ± 0.137** vs Aircraft **−7.221 ± 0.368**; difference
+   **+5.042** (SE 0.393, |diff|−2SE = +4.256). Per-cell the two sets are
+   DISJOINT with a gap of 2.988 — all 4 CUB cells above all 4 Aircraft cells,
+   so it is not a pooling artefact.
+4. **But three qualifications bound what that ordering can claim, and they are
+   in the note, not buried:** (a) BOTH contrasts are NEGATIVE — masking ring 1
+   costs less than masking 44 random patches on both datasets, so ring 1 is
+   less informative than an average area-matched region everywhere, INCLUDING
+   CUB; the hypothesis's ordinal prediction survives, its mechanism story
+   ("CUB's border carries class evidence") does NOT in absolute terms. (b) The
+   RAW ring-1 drop orders the other way (Aircraft +1.920 > CUB +1.124) — the
+   contrast flips it only because Aircraft's random44 control is 2.77× CUB's,
+   so the result is carried by the denominator, not by ring 1. (c) `center44`
+   costs +23.112 / +26.742 for the same 44 patches — an order of magnitude
+   more than ring 1; both datasets are object-centred and no border story
+   competes with that.
+5. **`full` reproduction: 24/24 PASS, largest |delta| across all 24 runs =
+   0.000.** Every run reproduces its committed `test_final.json` top-1
+   EXACTLY, so the ablation's baseline is the committed number itself. One
+   ring-1 index set across all 24 files; seed 0; grid 14; fill = each
+   dataset's own per-channel TRAIN-split mean.
+6. **Sub-goal 3 (third dataset) SKIPPED** at the human's decision
+   (2026-09-15): neither Stanford Cars nor Oxford Flowers-102 is staged, and
+   nothing was downloaded. Recorded consequence: no generalization claim
+   beyond CUB and Aircraft is available, and none is made.
+
+**Two defects found in my OWN note generator and fixed before commit** — both
+the class this repo has been burned by three times (TASK-02C's hardcoded prose,
+TASK-07's hand-typed 1.79× that should have been 1.71×):
+- a hardcoded claim that the ring contrast is "nearly identical for the two CUB
+  architectures". **It is not** — computed, they differ by 0.863 (−2.434 vs
+  −1.571). Now computed and printed, and the open item rewritten around the
+  real number.
+- a per-cell range printed as high..low for one dataset and low..high for the
+  other. Both are now low..high and the inter-set gap is computed.
+Also fixed: the ring table wrote `ft_seed` as `0/1/2` while T3 writes `f0/f1/f2`,
+so the two sibling tables could not be joined without munging — now both use
+`f<seed>`; and the note generator crashed when `--out` pointed outside the repo.
+
+**Consequence of A1 handled, not left stale:** `results/notes/finegrained.md`
+(TASK-08's note) is GENERATED from T3, and T3 grew from 16 to 24 repeats — so
+it was left asserting ViT-B "n = 1 ⇒ no significance claim is possible" while
+its own source table said n=3. Regenerated with its generator UNCHANGED; only
+the ViT-B rows and statistics moved, the ViT-S numbers and both VOID statements
+are untouched. Verified afterwards that no `n = 1` / "single ft-seed" prose
+survives anywhere in it.
+
+**Tests:** `tests/test_task13_phasec.py`, 14 new — the contrast identity
+recomputed per run from the JSONs, the committed table recomputed through an
+independent path (means and SEs), the between-dataset row = CUB − AIRCRAFT and
+labelled UNPAIRED, area matching in every JSON, all 24 reproducing with sha and
+committed-top1 cross-checks, a flagged run yielding MISSING and NOT being
+averaged in, std/SE MISSING (not 0.0) at n<2, T3 at 24 repeats with ViT-B
+carrying an SE, T3 repeats equal to the run JSONs, the note regenerating
+byte-identically, and the note retaining the VOID statement, the A3 skip, the
+reproduction count, both bounding qualifications and the no-pooled-claim
+sentence. One TASK-08 assertion updated (T3 repeat rows 16 → 24).
+`pytest -q`: **600 passed, 30 skipped**.
+
+**Commit:** `[TASK-13] T3 rebuild + ring-ablation table + extension note (phase C)`
+
+**Pending from HPC:** nothing. TASK 13 is complete (Phases A/B/C).
+Open for the human, all recorded as open items in the note: a 4th/5th ft-seed
+would settle the two thin ViT-B margins; `mask_random44` uses one seed so the
+control is a single draw (re-running `tools/ring_ablation.py --seed <k>` would
+put an error bar on it); and the CUB ViT-S/ViT-B sign disagreement is
+unexplained.
