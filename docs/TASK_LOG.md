@@ -3062,3 +3062,86 @@ and `probe_attention.sbatch` passes that check rather than skipping).
 Open for the human: (a) how to frame a teaser whose number favours registers;
 (b) whether to fill the TTR column; (c) whether to add seeds so these deltas
 can carry seed-level rather than image-level error bars.
+
+**Addendum (2026-09-15, the derivation landed — PHASE C CONTENT-COMPLETE):**
+branch `task/12-ablation-c-fill`. The human ran `abl_derive.sbatch` on a100
+(command-line override, no file copy) and pushed; **48/48 integrity checks**
+before anything was rebuilt: `n_images` 50000, eval/diag/addr agreeing on one
+checkpoint sha per arm, the committed canon tau applied unchanged
+(20.8515625), diag on the frozen 10k split, and each address map's mass
+matching its own diag's `sink_fixed_canon` exactly.
+
+**HEADLINE (fp32, full 50k, `last`; ViT-S/16 mixup, seed 0, 100 epochs):**
+
+| arm | gate_mode | trainable | top-1 | Δ vs A |
+|---|---|---|---|---|
+| A | none | 0 | 76.526 | — |
+| B | const 0.5 | 0 | 76.238 | −0.288 |
+| C | headscalar | 72 | 76.178 | −0.348 |
+| D | layerscale | 4,608 | 75.982 | −0.544 |
+| E | spatial (init 0) | 14,112 | 76.462 | −0.064 |
+| F | spatial (init +4) | 14,112 | **76.702** | **+0.176** |
+
+- **Q1: E beats every non-spatial control** — +0.224 vs B, +0.284 vs C,
+  +0.480 vs D. The ordering the task was built to test comes out in SAGA's
+  favour, and the LayerScale control is the WORST arm.
+- **Q2: F − E = +0.240**, but arm F is not a clean init test: its mean phi
+  ran 3.9926 → 0.4808 (gate 0.982 → 0.616), close to the 0.31 weight decay
+  alone predicted before launch.
+- **Q3: E sits 0.064 BELOW the no-gate baseline, against +0.456 at 300
+  epochs** (`e2_pooled.csv`, n=4). Flagged as a sign inversion and
+  immediately calibrated: one of those four repeats was itself −0.126, so a
+  single 100-epoch draw of this size settles nothing either way.
+
+**THE PRIMARY SINK METRIC SATURATES AND ORDERS NOTHING.** Under the committed
+`vit_small|mixup` canon tau (20.8516) every arm counts ~196 of 196 patch
+tokens as sinks (A 196.0000 … D 195.9999), far above TASK-02B's own ≥95%
+saturation flag. **The cause is a schedule mismatch, not a fault in the
+runs:** the tau was calibrated on the 300-epoch `e2r_vits_mixup_baseline_s1`,
+while these 100-epoch models have a median last-block patch norm of 37.28 and
+a per-image MAD threshold of 52.95 (arm A's own `*_normstats.json`) — about
+2.5x the tau applied. **Nothing was recalibrated**, per the acceptance list;
+the saturation is reported, a `sink_canon_saturated` flag column carries it,
+and the mechanism half of the ablation is recorded as UNANSWERED rather than
+answered either way. The MAD fallback cannot stand in: PROJECT.md §3.2 says
+median+5·MAD falls with the norm bulk, and a uniform 0.5 gate compresses
+exactly that bulk — it is confounded against precisely the B-vs-E comparison
+at issue. **Answering the sink question in this cell would need a tau
+calibrated on its own arm-A baseline, under its own key with its own
+provenance — the human's call, not a substitution to be made here.**
+
+**THE GATE-ADDRESS FINDING REPLICATES, and it is the strongest result here.**
+On the mad basis (the canon address map is flat for the same saturation
+reason — freq exactly 1.0 at all 196 positions), **arm E reaches rho −0.7461
+at LAYER 7, exact permutation p 0.00128, Bonferroni p 0.0140** over the 12
+layers it was chosen from. TASK-07 found −0.518…−0.594 at layers 7-8 on the
+300-epoch runs, Bonferroni-significant in 4/4 repeats: **same sign, same
+depth, independent schedule.** Arm F reaches −0.5901 at layer 8 but does not
+survive correction (0.0772). Limits stated in the note: one seed, one basis
+(TASK-07 required agreement across both), and an alignment is not a
+demonstration that the alignment produces the accuracy.
+
+**Three defects the real data exposed, all fixed:**
+1. `ablation_address.py` blamed the GATE when the ADDRESS map was constant.
+   Opposite implications; the degenerate map is now attributed to the map,
+   and a test asserts the spatial arms appear among those rows.
+2. The note lumped a spatial arm's constant FINAL layer (layer 11, never
+   moved from its init) in with the arms that are constant by construction —
+   rendering as "arms B, C, E, F have no structure". The set is now taken
+   from `gate_mode`, and the layer case gets its own sentence.
+3. The note's PENDING paragraph fired on saturation (a measured result, not a
+   missing one), and the Phase-D margin used max(B, C, D) where TASK-12 names
+   {C, D}. Both corrected.
+
+**PHASE D'S CONDITION IS MET** and the note says so: E's margin over the
+better of {C, D} is +0.284 against an arm-to-arm spread of 0.720. **No seeds
+were prepared** — the task puts that decision with the human after reading
+the note. Preparing them would be 2 arms x 2 seeds (E and C for that trigger;
+E and F if the init disagreement is also to be resolved) at ~6 h each.
+
+`pytest -q`: **586 passed, 30 skipped**. Commit `7bbf96e`.
+
+**Deliverables:** `results/tables/T2_ablation.csv`,
+`T2_ablation_address.csv`, `results/notes/ablation.md` (210 lines, generated
+— a test re-renders it from the committed tables and requires byte-identity),
+`results/figures/F_ablation_draft.pdf`. **Nothing is pending from the HPC.**
