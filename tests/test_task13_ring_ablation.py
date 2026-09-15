@@ -432,7 +432,22 @@ def test_third_dataset_not_configured_until_a_path_is_confirmed():
 
 def test_ring_ablation_job_file_contract():
     src = (REPO / "scripts" / "jobs" / "ft_ring_ablation.sbatch").read_text()
-    assert "--partition=a40" in src and "--gres=gpu:a40:1" in src
+    # a100 at the human's instruction; the resource values must then match the
+    # ft pipeline's own committed a100 header, not an a40 one
+    hdr = [l for l in src.splitlines() if l.startswith("#SBATCH")]
+    assert "#SBATCH --partition=a100" in hdr
+    assert "#SBATCH --gres=gpu:a100:1" in hdr
+    assert "#SBATCH --cpus-per-task=8" in hdr
+    assert not any("a40" in l for l in hdr), \
+        "no a40 value may survive in the header"
+    # provenance: these three come from the ft pipeline's OWN committed
+    # single-GPU launcher, the one that completed all 16 TASK-08 fine-tunes
+    ft_hdr = (REPO / "scripts" / "jobs" / "ft_finegrained_array.sbatch"
+              ).read_text().splitlines()
+    for key in ("--partition=", "--gres=", "--cpus-per-task=", "--time="):
+        mine = next(l for l in hdr if key in l)
+        theirs = next(l for l in ft_hdr if l.startswith("#SBATCH") and key in l)
+        assert mine == theirs, f"{key} drifted from the committed ft header"
     assert "tools/ring_ablation.py" in src
     assert "--all" in src and "--seed 0" in src
     # the import gate must come BEFORE anything is staged
