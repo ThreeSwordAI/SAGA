@@ -1,0 +1,50 @@
+# configs/frozen/I6_external.yaml — TASK A / I6's conditions, and the only
+# place they are defined
+# =============================================================================
+# ONE condition, and there cannot be a second. I6 reads nine public
+# checkpoints that this project did not train: there is no gate to override,
+# no variant to compare against within a model, and nothing to edit. The
+# whole work package is a single native forward pass per image per model,
+# read at two stages.
+#
+# The MODELS are not here. They are in configs/frozen/I6_models.yaml, with
+# the pre-registered prediction, because that file has to be committed and
+# citable on its own — it is the artifact that says what was claimed before
+# any external weight was fetched.
+
+work_package: I6_external
+
+# The DECLARED reporting stage. `ext_s11_out` is the external analog of D1's
+# `s11_out`: the output of blocks[-2]. It carries its own name because these
+# models differ from our cohort in training data, augmentation, patch size
+# and — for DINOv2 — native resolution, so a shared name would invite a
+# comparison the measurement does not support.
+stage: ext_s11_out
+
+precision: fp32
+
+# Thresholds come from the MODEL registry, not from this file: I6's tau is
+# per MODEL (each public checkpoint is its own reference) rather than per
+# (arch, recipe) cell, and it is calibrated on `calibration` and applied to
+# `evaluation`. See configs/frozen/I6_models.yaml for why, and
+# saga/frozen/external.py::thresholds_doc for the record that keeps both
+# split shas visible.
+models: configs/frozen/I6_models.yaml
+
+# There is no canon threshold for an external model. `tau_canon` is our
+# cohort's historical per-cell value, calibrated at the last block of OUR
+# checkpoints on the discovery split; applied to DeiT or CLIP it would be a
+# number with no definition. `count_fixed_canon` is therefore the literal
+# MISSING for every external model at every stage.
+thresholds_canon: MISSING
+
+calibration_stages: [ext_s11_out, ext_hist]
+
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+conditions:
+  # No `applies_to`: the external models have no variant in the cohort sense.
+  - id: native
+    edit_type: native
+    stages: [ext_s11_out, ext_hist]
