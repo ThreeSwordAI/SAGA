@@ -1,0 +1,2 @@
+work_package,split_name,split_sha256,git_sha,generated_by,table,status,needs,produced_by,note
+I1_spatial,evaluation,7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014,28840a089bd75023c3c1b8cb636cb5eb3019f9a6,analysis/frozen_I1_spatial.py,T_I1b_scale_null,PENDING B,results/frozen/I1_spatial/<split>/<run>/norms_*.npz,"Phase C, after scripts/jobs/frozen_I1.sbatch","the scale-only null rescales a NORM FIELD by a scalar and re-thresholds it; I2 stored per-position counts, which cannot be rescaled"

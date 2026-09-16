@@ -21,13 +21,20 @@ from saga.frozen.diag import (DIAG_KEYS, MAD_K, MapAccumulator,
                               patch_diagnostics)
 from saga.frozen.edits import (frozen_state, gate_edit, receiver_perturbation,
                                state_hash, terminal_gate_override)
-from saga.frozen.stages import (HIST_STAGE, HIST_STAGE_CITATION, STAGES,
-                                capture_stages, forward_with_stages,
-                                stage_block_index)
+from saga.frozen.stages import (ALL_STAGES, BLOCK_INPUT_STAGES, HIST_STAGE,
+                                HIST_STAGE_CITATION, STAGES, capture_stages,
+                                forward_with_stages, stage_block_index)
+
+# `prevalence` and `norms` (TASK A / I1) are NOT imported here: they pull in
+# `analysis.address_analysis` and through it scipy and the pooled-table
+# registry, which every I0/I2 caller of this package would then pay for on
+# import. They are imported by path where they are used:
+#     from saga.frozen import prevalence, norms
 
 __all__ = [
-    "STAGES", "HIST_STAGE", "HIST_STAGE_CITATION", "capture_stages",
-    "forward_with_stages", "stage_block_index",
+    "STAGES", "ALL_STAGES", "HIST_STAGE", "HIST_STAGE_CITATION",
+    "BLOCK_INPUT_STAGES",
+    "capture_stages", "forward_with_stages", "stage_block_index",
     "state_hash", "frozen_state", "terminal_gate_override", "gate_edit",
     "receiver_perturbation",
     "DIAG_KEYS", "MAD_K", "MapAccumulator", "mad_threshold",

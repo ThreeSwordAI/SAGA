@@ -38,7 +38,7 @@ from saga.frozen import records as rec
 from saga.frozen.edits import (TERMINAL_GATE_VALUES, EditError, gate_edit,
                                receiver_perturbation, state_hash,
                                terminal_gate_override)
-from saga.frozen.stages import (HIST_STAGE, STAGES, capture_stages,
+from saga.frozen.stages import (ALL_STAGES, HIST_STAGE, capture_stages,
                                 resolve_stage)
 from saga.metrics import (effective_rank, infer_num_prefix_tokens,
                           oversmoothing_pairwise, oversmoothing_pairwise_nosink,
@@ -266,7 +266,7 @@ def _check_stages(conditions_yaml, c: dict):
     if not isinstance(stages, list) or not stages:
         raise RunnerError(
             f"{conditions_yaml}: condition {c['id']!r} has stages={stages!r}; "
-            f"expected a non-empty list of {list(STAGES)}")
+            f"expected a non-empty list of {list(ALL_STAGES)}")
     if len(set(stages)) != len(stages):
         raise RunnerError(
             f"{conditions_yaml}: condition {c['id']!r} repeats a stage in "

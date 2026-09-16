@@ -4,7 +4,8 @@ saga/frozen/stages.py
 Named feature stages, captured by forward hooks, with the prefix rows
 already removed using the MODEL'S OWN prefix count.
 
-Four names, and no fifth anywhere in the project:
+Four names from TASK I0, and no fifth for the terminal region anywhere in
+the project:
 
     s11_out        output of the second-to-last block
     s12_pre_norm   output of the LAST block, BEFORE the final LayerNorm
@@ -18,6 +19,38 @@ output of block index 11, which is how TASK I0 §6 names them. The indices
 are derived from the depth (L-2, L-1) rather than hard-coded, so a tiny
 fake model in the tests exercises this exact code path; a test pins the
 equality at L = 12.
+
+THE BLOCK-INPUT STAGES (TASK A / I1 §3 — added for D5)
+------------------------------------------------------
+Two more names, ADDITIVE, for the residual stream ENTERING a block:
+
+    in_b07         the residual stream entering blocks[7]
+    in_b08         the residual stream entering blocks[8]
+
+`in_bNN` is read "the input to blocks[NN]", and NN is a 0-BASED absolute
+block index — unlike `s11_out`/`s12_pre_norm`, which are relative to the
+depth. Because a pre-norm ViT block is a residual update, the stream
+entering blocks[NN] IS the output of blocks[NN-1]:
+
+    in_b07 == output of blocks[6]
+    in_b08 == output of blocks[7]
+
+and that is how they are captured (a forward hook on the PRECEDING block),
+which is exactly equivalent and needs no pre-hook.
+
+BOTH NUMBERING CONVENTIONS, because the off-by-one here is the one that
+would silently invalidate I4:
+
+    code, 0-based   | in_b07 enters blocks[7]  | in_b08 enters blocks[8]
+    paper, 1-based  | input to block 8         | input to block 9
+
+`docs/LOCKED_ANALYSIS.md` §2 fixes the pair as "paper blocks 8 and 9 =
+0-based block indices 7 and 8", and §5 asks for the prevalence map "at the
+input to the edited block (or the preceding block's output)". These two
+stages are that input, for those two blocks.
+`tests/test_I1_spatial.py` pins `in_b07 == blocks[6](x)` and
+`in_b08 == blocks[7](x)` on a fake model by comparing TENSORS, so the
+convention cannot drift from this docstring.
 
 THE HISTORICAL STAGE (TASK I0 §2.5 — identified, not assumed)
 -------------------------------------------------------------
@@ -51,8 +84,22 @@ import torch
 
 from saga.metrics import infer_num_prefix_tokens
 
-# The four stage names. `hist` is an alias, resolved by resolve_stage().
+# The four TASK I0 stage names for the TERMINAL region. `hist` is an alias,
+# resolved by resolve_stage(). This tuple is UNCHANGED by TASK A: it is the
+# I0 contract, several tests enumerate it and capture every member on a
+# 4-block fake model, and a block-input stage does not exist on a model that
+# shallow. The new names live in BLOCK_INPUT_STAGES and in ALL_STAGES.
 STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
+
+#: The block-input stages (TASK A / I1), as {name: the 0-based index of the
+#: block whose INPUT this is}. `in_b07` enters blocks[7]; see the module
+#: docstring for both numbering conventions.
+BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8}
+
+#: Every stage name this module accepts. `resolve_stage` validates against
+#: THIS, so a conditions YAML may spell any of the six; `STAGES` keeps its
+#: I0 meaning for everything that enumerates the terminal four.
+ALL_STAGES = STAGES + tuple(BLOCK_INPUT_STAGES)
 
 #: Which real stage the historical diagnostics used. See the module docstring
 #: for the code citation; a test pins it.
@@ -68,6 +115,12 @@ HIST_STAGE_CITATION = (
 #: Stages that are a block output (value = block index counted from the end).
 _BLOCK_STAGES = {"s11_out": -2, "s12_pre_norm": -1}
 
+#: Block-input stages, as {name: the 0-based index of the block whose OUTPUT
+#: carries them}. `in_b07` enters blocks[7], so it is captured on blocks[6].
+#: ABSOLUTE indices — a block-input stage names one specific block, and
+#: rebasing it on the depth would move it on a model of another depth.
+_BLOCK_INPUT_SOURCE = {name: idx - 1 for name, idx in BLOCK_INPUT_STAGES.items()}
+
 
 class StageError(ValueError):
     """An unknown stage, or a model this module cannot hook."""
@@ -77,8 +130,9 @@ def resolve_stage(stage: str) -> str:
     """Map `hist` onto the real stage it aliases; validate every other name."""
     if stage == "hist":
         return HIST_STAGE
-    if stage not in STAGES:
-        raise StageError(f"unknown stage {stage!r}; expected one of {STAGES}")
+    if stage not in ALL_STAGES:
+        raise StageError(
+            f"unknown stage {stage!r}; expected one of {ALL_STAGES}")
     return stage
 
 
@@ -105,15 +159,26 @@ def final_norm(model):
 
 
 def stage_block_index(model, stage: str) -> int:
-    """0-based index of the block whose OUTPUT is `stage`.
+    """0-based index of the block whose OUTPUT carries `stage`.
 
     Raises for `s12_post_norm` (not a block output). On the 12-block
-    production models this returns 10 for s11_out and 11 for s12_pre_norm.
+    production models this returns 10 for s11_out and 11 for s12_pre_norm;
+    6 for in_b07 and 7 for in_b08 on ANY model deep enough, since a
+    block-input stage names one specific block rather than a position
+    relative to the end.
     """
     real = resolve_stage(stage)
+    depth = len(model_blocks(model))
+    if real in _BLOCK_INPUT_SOURCE:
+        idx = _BLOCK_INPUT_SOURCE[real]
+        if idx >= depth:
+            raise StageError(
+                f"stage {real!r} is the input to blocks[{BLOCK_INPUT_STAGES[real]}], "
+                f"i.e. the output of blocks[{idx}], but the model has only "
+                f"{depth} block(s) — this stage does not exist on it")
+        return idx
     if real not in _BLOCK_STAGES:
         raise StageError(f"stage {stage!r} ({real}) is not a block output")
-    depth = len(model_blocks(model))
     idx = depth + _BLOCK_STAGES[real]
     if idx < 0:
         raise StageError(
@@ -185,7 +250,7 @@ def capture_stages(model, stages=("s12_pre_norm",)):
         return hook
 
     try:
-        for name in sorted(real & set(_BLOCK_STAGES)):
+        for name in sorted(real & (set(_BLOCK_STAGES) | set(_BLOCK_INPUT_SOURCE))):
             idx = stage_block_index(model, name)
             handles.append(blocks[idx].register_forward_hook(make_hook(name)))
         if "s12_post_norm" in real:

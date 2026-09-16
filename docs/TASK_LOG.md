@@ -4608,3 +4608,143 @@ The AST no-training check now covers both new generators.
 ### Pending from HPC
 
 **Nothing.** TASK I2 is complete.
+
+---
+
+## 2026-09-16 — TASK A — I1 PHASE A (contract, block-input stages, norms writer, CPU tables on I2's maps)
+
+Worktree `../SAGA-A`, branch `task/A`, tag `[I1]`. Six commits, `d8c5db1`
+through `9be640c`. No push. Nothing ran on the HPC.
+
+### What I2's `maps.npz` actually holds — and the two consequences
+
+Inspected `results/frozen/I2_terminal/evaluation/*/maps.npz` before writing
+anything. It holds **per-position exceedance COUNTS**, `int64 [196]`, keyed
+`"<condition>|<stage>|<basis>"` with a sibling `"n_images__<same>"` scalar and
+one `meta_json` provenance string. Not frequencies: `freq = counts /
+n_images` reconstructs them exactly, and `saga/frozen/diag.py` says why it
+stored the integer.
+
+**There are NO per-image indicators.** A per-position count summed over
+10,000 images cannot be un-summed, so everything image-level is `PENDING B`:
+
+- `T_I1b_scale_null` — entirely. It rescales a NORM FIELD and re-thresholds.
+- `T_I1e_eta2` — the **CI only**. η²_pos = Var_P f(P) / (f̄(1−f̄)) is a
+  function of the frequency map alone, so the point estimate is computed and
+  committed now; the image-level bootstrap CI (D6 = seed 0) is `PENDING B`.
+- the split-half reliability column of `T_I1a`, and every bootstrap CI in
+  `T_I1c`. Point estimates are there; the CI cells say `PENDING B`.
+
+`p_any` — the fraction of images with ≥1 exceedance, which the CONDITIONAL
+map needs — IS recoverable, from the committed
+`figures_data/frozen/I2_evaluation_primary.npz` per-image counts.
+
+And an arithmetic point that belongs in the paper: `p exceeds` implies `the
+image has ≥1`, so **conditional = absolute / p_any** and **share = absolute /
+mass**. All three normalisations are proportional — identical rankings,
+identical Spearman correlations, identical profile shapes. The tables report
+the two scalars rather than three copies of one ranking.
+
+### Discrepancies found, and how each was handled
+
+1. **The optional `side` argument (task file §6) is not needed and was not
+   added.** `analysis/address_analysis.py` already takes `side` positionally
+   in `border_distance_map` / `ring_indices`, and `border_rings` / `perm_for`
+   infer it from the map. I6's 16×16 grids need NO change to that module, so
+   it is **untouched**. A test pins `ring_indices` at side 14 AND 16 against
+   an independent derivation, and asserts `side` still has no default.
+
+2. **`ring_matched_controls` — a real conflict between two documents.**
+   `LOCKED_ANALYSIS.md` §5: "random masks MAY overlap the high-prevalence
+   mask. The overlap is REPORTED; draws are never rejected to amplify
+   contrast." `TASK_A_I1_I6.md` §6: controls are "drawn from positions
+   outside the primary mask". These cannot both hold. **The signed document
+   wins**: `exclude_primary=False` is the default and the overlap is returned
+   with every control; the task file's rule is available as
+   `exclude_primary=True` and nothing calls it. No mask is built in Phase A —
+   **the human decides before D5 closes in Phase C.**
+
+3. **`STAGES` could not be widened.** Four `tests/test_I0_frozen.py` tests
+   enumerate it and capture every member on a 4-block fake model, where a
+   block-input stage does not exist. `STAGES` is left as the I0 four; the new
+   names live in `BLOCK_INPUT_STAGES` and `ALL_STAGES`, which is what
+   `resolve_stage` validates against. Nothing in I0 was weakened or skipped.
+
+4. **No `frozen_I1_thresholds.py` was written.** `tools/frozen_I2_thresholds.py`
+   reads its stages, its output template and the canon path from whichever
+   conditions YAML it is handed, so it calibrates I1's four stages unchanged.
+   A second copy would give the canon recipe a second implementation.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| A1 | `saga/frozen/prevalence.py` — contract, validation, npz + `_addr.json` round trip, top-k mask, ring-matched controls, cell mean, the selection guard |
+| A2 | `saga/frozen/stages.py` — `in_b07`, `in_b08` (additive) |
+| A3 | `saga/frozen/norms.py`, `configs/frozen/I1_spatial.yaml`, `tools/frozen_I1_norms.py`, `.gitignore` |
+| A5 | `analysis/frozen_I1_spatial.py` → `results/frozen/I1_spatial/tables/T_I1a–g*.csv` |
+| A10 | `scripts/jobs/frozen_I1.sbatch` (the split is an ARGUMENT) |
+| A11 | `tests/test_I1_spatial.py` — 58 tests |
+
+`in_b07` is the residual stream entering `blocks[7]` = the output of
+`blocks[6]`; `in_b08` enters `blocks[8]`. 0-based in code, paper blocks 8 and
+9, which is `LOCKED_ANALYSIS.md` §2's pair ("paper blocks 8 and 9 = 0-based
+block indices 7 and 8") — these two stages are the INPUT to the blocks I3 and
+I4 edit. Both conventions are in the docstring and a test compares TENSORS
+against a manual block loop.
+
+The selection guard is an **allow-list**: only the discovery sha passes, so a
+map from a split nobody named is refused as firmly as an evaluation map. It
+was written, and tested, before the mask builders it protects.
+
+### Headline numbers, evaluation split, `fixed_cal`, 92 maps
+
+Seed stability (mean ρ over baseline pairs; `resid` = ring-adjusted):
+
+| cell | `s11_out` ρ / resid | `hist` ρ / resid | pairs |
+|---|---|---|---|
+| `vit_small\|mixup` | 0.923 / 0.798 | 0.915 / 0.786 | 6 |
+| `vit_base\|mixup` | 0.844 / 0.621 | 0.846 / 0.603 | 1 |
+| `vit_small\|nomix` | 0.909 / 0.770 | 0.724 / 0.688 | 1 |
+
+The address is seed-stable at `s11_out` as strongly as at `hist`, and it
+survives ring adjustment — it is not merely "both maps are bordered".
+
+Ring 0 vs ring 1 mean frequency, baselines, `s11_out`:
+
+| run | cell | ring 0 | ring 1 | peak | mass | gini excess |
+|---|---|---|---|---|---|---|
+| `e2r_vits_mixup_baseline_s1` | `vit_small\|mixup` | 0.0767 | 0.1661 | 1 | 20.37 | 0.220 |
+| `e2r_vits_mixup_baseline_s2` | `vit_small\|mixup` | 0.0682 | 0.1438 | 1 | 17.78 | 0.233 |
+| `e2r_vitb_mixup_baseline_s1` | `vit_base\|mixup` | 0.0459 | 0.1322 | 1 | 13.28 | 0.349 |
+| `e2r_vits_nomix_baseline_s1` | `vit_small\|nomix` | 0.0180 | 0.0172 | **0** | 2.92 | 0.136 |
+| `e2r_vits_nomix_baseline_s2` | `vit_small\|nomix` | 0.0273 | 0.0222 | **0** | 3.71 | 0.255 |
+
+**Every mixup baseline peaks at ring 1 (6 of 6, both stages). Neither
+true-nomix baseline does.** η²_pos is 0.020–0.040 for mixup and 0.0015–0.012
+for nomix. This is the contrast I6's pre-registered prediction is built on,
+measured here on our own controlled cell.
+
+Variant vs same-provenance baseline (mean ρ / ring-adjusted ρ, `s11_out`):
+
+| cell | variant | ρ | resid ρ | Δring-1 share | Δmass | n |
+|---|---|---|---|---|---|---|
+| `vit_small\|mixup` | saga | 0.879 | 0.710 | +0.042 | −7.84 | 4 |
+| `vit_small\|mixup` | registers | 0.749 | 0.369 | −0.050 | −13.92 | 2 |
+| `vit_base\|mixup` | saga | 0.809 | 0.500 | +0.034 | −4.73 | 2 |
+| `vit_base\|mixup` | registers | 0.238 | 0.029 | −0.240 | −5.60 | 1 |
+| `vit_small\|nomix` | saga | 0.825 | 0.728 | +0.003 | −2.55 | 2 |
+
+Descriptive only: these are residual map correlations between two
+checkpoints. A test greps every table for "relocat", "empties" and "sink
+function".
+
+### Tests
+
+`pytest -q`: **880 passed, 30 skipped** (was 821 + 30; +58 new, and the four
+I0 tests that the first `STAGES` edit broke are passing again, unmodified).
+
+### Pending
+
+Phase A′ (I6) has not started. Phase B has not been printed yet — the I6 job
+block goes in the same HPC handoff, so both are printed at the end of A′.
