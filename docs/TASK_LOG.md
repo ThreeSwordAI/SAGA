@@ -3698,3 +3698,54 @@ Every `eligible` / `eligible_legacy` row carries a full 64-char sha.
   measurement is already recorded and unchanged by the fix;
 - `docs/LOCKED_ANALYSIS.md` §11 can now be filled in with the four split
   shas above (D8 closed); D1-D7 remain open, D5 still blocking I4.
+
+### Addendum, same day — the dense `best` question, and the merge
+
+**The merge conflict.** The second `git merge --no-ff task/I0` into `main`
+conflicted on `manifest.json` and silently auto-merged `manifest.csv`. Both
+are GENERATED files and a textual merge of two independently-generated files
+is never a valid resolution, so neither was hand-merged: all three outputs
+were REGENERATED from the merged code plus the HPC's `ckpt_hashes.json`
+(117/117 hashed) and the result verified — no conflict markers, and
+`eligibility.md` agreeing with `manifest.csv`. Merge commit `11a0101`.
+
+Recorded for next time: **a generated file under `results/` should never be
+resolved by hand or by git's auto-merge — regenerate it.** The two sides
+regenerating the same artifact from different inputs is the normal state of
+affairs whenever a phase runs on the HPC and a fix lands locally.
+
+**Detection `best`: the human's call.** Detection saves no best checkpoint.
+The human asked why `last.pth` could not simply be used, and after the
+alternative (leave the row empty, with the duplicate-identity objection and
+the TASK-09 precedent) was put to them, directed that it be used where it is
+demonstrably the same file. Implemented as a RESOLUTION, not an assumption:
+
+- `detection_best_epoch()` reads the best-AP epoch from each run's own
+  `coco_eval_best.json` and the last epoch from its `log.csv`;
+- the `best` row resolves to `ckpt/last.pth` **only where they coincide** —
+  for all three runs they do (both epoch 24, AP 34.912 / 35.339 / 35.135), so
+  `last.pth` IS the best-AP weights;
+- a run that peaked earlier would NOT resolve: its row keeps
+  `ckpt_path = MISSING` and states that the best weights were never saved;
+- the shared sha256 across two `ckpt_kind`s is declared, not hidden —
+  `derived_params.resolves_to_ckpt_kind = "last"`, the `status_reason` says
+  any count must de-duplicate on sha256, and only the `last` row is
+  `eligible`, so no query over eligible rows can double-count a run.
+
+This is the opposite of the TASK-09 defect rather than a repeat of it: that
+bug was that one could not TELL whether `last.pth` was the best; here it is
+computed from the run's files, written into the row, and re-derived on every
+build. A test pins both branches.
+
+**Manifest state after all of this.** 124 rows; `ckpt_sha256` MISSING on
+**4**, and all four are the `ttr_edit` rows — inference-time edits of a base
+checkpoint, which have no checkpoint of their own by design. Every other row
+in the manifest is fully identified. A test permits no unexplained gap.
+
+`pytest -q`: **722 passed, 30 skipped**.
+
+**Still outstanding:** one optional re-run of `frozen_smoke.sbatch` to rewrite
+`smoke_e2r_vits_mixup_saga_s1.json` with the corrected PASS verdict (the
+measurement is unchanged by the tolerance fix, so this is cosmetic); and
+`docs/LOCKED_ANALYSIS.md` §11 to be filled in with the four split shas, which
+closes D8. D1-D7 remain open, D5 still blocking I4.
