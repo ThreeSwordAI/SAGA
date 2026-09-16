@@ -3997,3 +3997,119 @@ project's existing finite-sample reference and is not re-derived.
 **Phase B1**: the calibration sweep. Until `results/frozen/I2_terminal/`
 comes back there is no `thresholds_cal.json`, no records, no tables and no D1
 proposal. C1 cannot start.
+
+---
+
+## 2026-09-16 — TASK I2, PHASE B1 LANDED (calibration sweep verified; no tables, no figures)
+
+The human ran `scripts/jobs/frozen_I2.sbatch` on `results/frozen/splits/calibration.json`
+and pushed the results to `main`. This entry records **what came back and what
+was verified**, so C1 can be run later without re-deriving any of it. On the
+human's instruction, **no table, no figure and no D1 proposal was produced in
+this session** — only the inputs they are built from, which are all committed.
+
+### Commits
+
+| commit | what |
+|---|---|
+| `1e88350` | `Merge branch 'task/I2'` — Phase A code onto `main` |
+| `d983eb3` | `[I2] phase B1: terminal-gate sweep on the calibration split (19 runs)` — 18 runs |
+| `e8e24ef` | `[I2] phase B1: e2r_vitb_mixup_baseline_s1 (array index 1)` — the 19th |
+
+Array index 1 (`e2r_vitb_mixup_baseline_s1`, the ViT-B/mixup **designated
+calibration baseline**) did not produce output in the first submission. Its
+checkpoint was fine — the threshold pass had already loaded it and recorded
+n = 2000 for that cell — so only the sweep was missing. It was resubmitted
+alone as `--array=1`; the completion marker records `n_records_skipped = 0`,
+so it was a clean first write and not a partial append onto a half-finished
+file. The 18 already-complete runs were untouched (`--skip-if-done`).
+
+### Verification (every number below read from the committed files)
+
+| check | result |
+|---|---|
+| run directories complete | **19 / 19**, each with `records.parquet`, `diag.parquet`, `maps.npz`, `records.done.json`, `diag.done.json`, `run_meta.json` |
+| split | `calibration`, sha `6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003` — identical on every run, and the sha `LOCKED_ANALYSIS` §11 records |
+| `ckpt_sha256` | every `records.done.json` matches its manifest row |
+| `state_restored` | `True` on all 19 |
+| rows | **102,000** records, **242,000** diag |
+| format | parquet throughout — the pyarrow preflight passed, no CSV fallback |
+| size | 18.2 MB over 115 files; largest single file 1.41 MB (`e2r_vitb_mixup_saga_s1/diag.parquet`) |
+| problems | none |
+
+Row counts per run are exactly what the conditions file implies, which is the
+cheapest proof that `applies_to` did what it says: a baseline or register
+checkpoint runs `native` only (1 condition -> 2,000 records, 3 stages ->
+6,000 diag rows) and a SAGA checkpoint runs all five (5 conditions -> 10,000
+records, 11 condition-stage pairs -> 22,000 diag rows). 11 x 6,000 +
+8 x 22,000 = 242,000.
+
+### `results/frozen/I2_terminal/thresholds_cal.json` (D2)
+
+Three cells x three stages, each from the cell's canon-designated baseline on
+2,000 calibration images, k = 5.0, fp32. `canon_file_sha256_lf` matches the
+digest `tests/test_I2_terminal.py` pins, so the historical file was not
+touched.
+
+| cell | `tau_cal[s11_out]` | `tau_cal[hist]` | `tau_cal[s12_post_norm]` | `tau_canon` | source |
+|---|---|---|---|---|---|
+| `vit_small\|mixup` | 18.62135 | 20.90086 | 18.12993 | 20.8515625 | `e2r_vits_mixup_baseline_s1` |
+| `vit_base\|mixup` | 95.35532 | 127.81152 | 14.60908 | 127.3125 | `e2r_vitb_mixup_baseline_s1` |
+| `vit_small\|nomix` | 19.93944 | 22.77754 | 20.78095 | 22.859375 | `e2r_vits_nomix_baseline_s1` |
+
+`tau_cal[hist]` and `tau_canon` are the same recipe on two different splits
+(calibration vs discovery), which is what §5 asked to be visible. **No
+interpretation of the difference is offered here** — that belongs in C1's
+tables beside the diagnostics they feed.
+
+### What is now saved, and what C1 needs from it
+
+Everything the five tables, the D1 decision and Figure 5A are built from is
+committed on `main`:
+
+| input | path |
+|---|---|
+| per-image functional response | `results/frozen/I2_terminal/<run_id>/records.parquet` (19) |
+| per-image x condition x stage diagnostics | `results/frozen/I2_terminal/<run_id>/diag.parquet` (19) |
+| per-position exceedance counts + `n_images` | `results/frozen/I2_terminal/<run_id>/maps.npz` (19) |
+| per-run provenance (device, seed, git sha, tau, state_restored) | `results/frozen/I2_terminal/<run_id>/run_meta.json` (19) |
+| completion markers | `<run_id>/{records,diag}.done.json` (19 each) |
+| per-stage thresholds | `results/frozen/I2_terminal/thresholds_cal.json` |
+| historical thresholds (read-only) | `results/diagsplit/fixed_thresholds_canon.json` |
+| cohort and pairing | `results/frozen/I0_manifest/manifest.json`, `analysis/build_pooled_tables.py` |
+| the builders themselves | `analysis/build_I2_tables.py`, `analysis/i2_decision.py` |
+
+C1 is therefore a pure re-derivation from committed inputs and needs no HPC
+time. Two prerequisites, both mechanical:
+
+1. **`pip install pyarrow` in the LOCAL venv.** The records are parquet;
+   without it `analysis/build_I2_tables.py` raises a `TableError` naming the
+   install command. It is declared in `requirements.txt`.
+2. A worktree that can see the results — `task/I2` was fast-forwarded onto
+   `main` at `e8e24ef` for this entry, so `../SAGA-I2` is current.
+
+Then:
+
+```
+python analysis/build_I2_tables.py            # -> results/frozen/I2_terminal/tables/
+python analysis/i2_decision.py --out results/frozen/I2_terminal/D1_verdict.json
+```
+
+`analysis/build_I2_tables.py` imports `analysis.address_analysis.
+concentration_null` (400 Binomial simulations per distinct mass), so the
+`T_I2d` build is minutes rather than seconds.
+
+### Still open
+
+- **D1 is not decided.** `docs/LOCKED_ANALYSIS.md` §1 still reads
+  `DECISION NEEDED`. The rule is code (`analysis/i2_decision.py`, §7, cutoff
+  0.70, voting cell `vit_small|mixup` with its 4 pairs all present), it has
+  not been run on these results, and the human signs it either way.
+- **B2 must not run before D1 is signed** (task §10). The split question
+  flagged in the Phase A entry — §9's B2 line names `evaluation.json`
+  (10,000 images) while §2/§8 budget 2,000 — is still open and only matters
+  at B2.
+
+### Pending from HPC
+
+**Nothing.** B1 is complete and verified. Everything remaining in I2 is local.
