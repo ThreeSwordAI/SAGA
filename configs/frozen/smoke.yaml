@@ -1,0 +1,56 @@
+# configs/frozen/smoke.yaml — TASK I0's ONLY conditions file
+# ===========================================================
+# The conditions `tools/frozen_eval.py` runs for the I0 smoke. I0 ships this
+# file and no other: I1-I7 each add their own, and each is committed BEFORE
+# its job runs, which is what makes "the analysis configuration was fixed
+# before the evaluation outcomes were inspected" a property of the repository
+# rather than a promise (plan §6.2).
+#
+# Nothing here is selectable from the command line. `tools/frozen_eval.py`
+# takes WHICH run, WHICH split, WHERE the data is and how many images — never
+# a layer, an epsilon, a mask or a permutation.
+#
+# The terminal-gate conditions apply only to a SAGA checkpoint; on a baseline
+# or register model `terminal_gate_override` refuses, which is the intended
+# behaviour and is what `tools/frozen_smoke.py` records as SKIP.
+
+work_package: I0_smoke
+
+# The historical stage, so the smoke's diagnostics are directly comparable
+# with every number already in results/. `hist` is an ALIAS resolved by
+# saga/frozen/stages.py (currently s12_pre_norm) — writing `hist` here means
+# "whatever the historical diagnostics used", which is the intent.
+stage: hist
+
+# fp32 everywhere: tools/eval.py recorded amp='off' for every historical
+# number, and a logit COMPARISON in bf16 would be dominated by the cast.
+precision: fp32
+
+conditions:
+  - id: native
+    edit_type: native
+
+  # The declared identity: rebuilds the gate's own map and applies it through
+  # the replacement module, so a bit-exact match also proves the replacement
+  # path itself is exact. `layer: -1` is not accepted — the layer index is
+  # resolved per checkpoint by tools/frozen_smoke.py, and this condition
+  # names block 11 (0-based) of the 12-block production models.
+  - id: identity_gate
+    edit_type: gate_edit
+    params: {layer: 11, mode: original}
+
+  # I2's terminal patch-gate constants. Proposition 2 (plan §5.6) says a
+  # CLS-only readout cannot see these; the smoke MEASURES that rather than
+  # assuming it.
+  - id: terminal_gate_0.25
+    edit_type: terminal_gate_override
+    params: {value: 0.25}
+  - id: terminal_gate_0.50
+    edit_type: terminal_gate_override
+    params: {value: 0.5}
+  - id: terminal_gate_0.75
+    edit_type: terminal_gate_override
+    params: {value: 0.75}
+  - id: terminal_gate_1.00       # 1.0 is a BYPASS of that gate
+    edit_type: terminal_gate_override
+    params: {value: 1.0}
