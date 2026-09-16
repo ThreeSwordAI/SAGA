@@ -1,0 +1,20 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "624a6006447345b4fe7f9ee15cedfae3d1c36838cf2f0fe38907261f5e530daf",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 5,
+  "n_records_appended": 50000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vits_mixup_saga_s2",
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stage": "hist",
+  "tau_cal": {
+    "hist": 20.907052993774414,
+    "s11_out": 18.698548316955566,
+    "s12_post_norm": 18.131425857543945
+  },
+  "tau_canon": 20.8515625,
+  "work_package": "I2_terminal"
+}

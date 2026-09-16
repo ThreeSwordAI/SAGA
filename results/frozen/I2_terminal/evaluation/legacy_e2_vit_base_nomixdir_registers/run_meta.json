@@ -1,0 +1,63 @@
+{
+  "cell": "vit_base|mixup",
+  "ckpt_sha256": "82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 30000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/legacy_e2_vit_base_nomixdir_registers",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 655,
+      "sha256": "a4ddeb3cb8f676e32bad6a457dd2a0aadd0cc2fd93098a9a4990ffa8c4f2b0c8"
+    },
+    "diag.parquet": {
+      "bytes": 2291931,
+      "sha256": "09ea11f78f7d49671d57f85c97f16148011790c156d05003e62ced329459eda3"
+    },
+    "maps.npz": {
+      "bytes": 15520,
+      "sha256": "2f0aa6779a1bc61be9183976b85e562bb022a85ceeccfddc8372f4be365d67e4"
+    },
+    "records.done.json": {
+      "bytes": 655,
+      "sha256": "73512a913130505110b55ee37359b1f62fed3cf60e66af2e8846d216b6379b47"
+    },
+    "records.parquet": {
+      "bytes": 228057,
+      "sha256": "d6624dcac3b3eec57fd69e337ff233326725f4a8dba633f7e662fd12b0b45953"
+    }
+  },
+  "run_id": "legacy_e2_vit_base_nomixdir_registers",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "f197c4c3d5aadd3a37de9b5abf3bdbca990a652c752f2cd821b733d3976a955e",
+  "state_hash_before": "f197c4c3d5aadd3a37de9b5abf3bdbca990a652c752f2cd821b733d3976a955e",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 127.26842498779297,
+    "s11_out": 96.32040786743164,
+    "s12_post_norm": 14.671914100646973
+  },
+  "tau_canon": 127.3125
+}

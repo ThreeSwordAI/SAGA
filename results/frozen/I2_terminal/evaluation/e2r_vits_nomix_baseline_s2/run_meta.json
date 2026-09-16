@@ -1,0 +1,63 @@
+{
+  "cell": "vit_small|nomix",
+  "ckpt_sha256": "50acc743467a51828d2bf24e84f241705e33b1cf6a68a8e7f3a46413ed95d086",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 30000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/e2r_vits_nomix_baseline_s2",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 646,
+      "sha256": "443655df0b35ae00df0fcca5c27beab46b52f1a4e3cf39b8d79b2e1c9acb574f"
+    },
+    "diag.parquet": {
+      "bytes": 2259861,
+      "sha256": "d2661b725b78e611621dc5dbdbaad988f50dc37a8a3a87c7d2aec987127df52f"
+    },
+    "maps.npz": {
+      "bytes": 15484,
+      "sha256": "d590cb2bd5dd048a9250e264e20183b9f1d24661f24a7905f3bcdaea1cd99a21"
+    },
+    "records.done.json": {
+      "bytes": 646,
+      "sha256": "7dc4e956a340096c8d1e7f2ec5445279da331b758cfd276b82bae4c4789e399c"
+    },
+    "records.parquet": {
+      "bytes": 229151,
+      "sha256": "baf1b70e936ee9a3ed411cdef26337d86f07f5e44068d800f382ce3a8598c697"
+    }
+  },
+  "run_id": "e2r_vits_nomix_baseline_s2",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "1721252dc922deb3b11bd843969afd5a7131013531d5297f1aad1ec53d9af024",
+  "state_hash_before": "1721252dc922deb3b11bd843969afd5a7131013531d5297f1aad1ec53d9af024",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 22.828205108642578,
+    "s11_out": 19.938284873962402,
+    "s12_post_norm": 20.78439712524414
+  },
+  "tau_canon": 22.859375
+}

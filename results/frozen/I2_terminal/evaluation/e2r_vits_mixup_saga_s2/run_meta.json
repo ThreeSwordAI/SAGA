@@ -1,0 +1,118 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "624a6006447345b4fe7f9ee15cedfae3d1c36838cf2f0fe38907261f5e530daf",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.25": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.25
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 10000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.50": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.5
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 10000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.75": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.75
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 10000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 1.0
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 10000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 110000,
+  "n_records": 50000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/e2r_vits_mixup_saga_s2",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 645,
+      "sha256": "c57bab3b91c097eaebc36cd1804af50602345b6c7ecea8a7a0f3f7217a32e2ed"
+    },
+    "diag.parquet": {
+      "bytes": 7050332,
+      "sha256": "a14e4c2ea68f1b2882ef3061feab6642055749bb6700fce29c466130c1c07620"
+    },
+    "maps.npz": {
+      "bytes": 50068,
+      "sha256": "581b5acc406db44810e9150b8d95d17e3bd0f2e1014b3e681ff338ccbe9bfb63"
+    },
+    "records.done.json": {
+      "bytes": 644,
+      "sha256": "cf2015064ba552f7fe325c38413d624ddf54d3b7b0dd8e9340eae5ee40cee56e"
+    },
+    "records.parquet": {
+      "bytes": 397948,
+      "sha256": "c8b374b4c1d8899513a444e73836d122ab53d4ac86cf3392e68dad215512c775"
+    }
+  },
+  "run_id": "e2r_vits_mixup_saga_s2",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "94025607bc163e75059bd6208b7b276e82d3d55f73960ae0d63c74b2bebfcb12",
+  "state_hash_before": "94025607bc163e75059bd6208b7b276e82d3d55f73960ae0d63c74b2bebfcb12",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.907052993774414,
+    "s11_out": 18.698548316955566,
+    "s12_post_norm": 18.131425857543945
+  },
+  "tau_canon": 20.8515625
+}

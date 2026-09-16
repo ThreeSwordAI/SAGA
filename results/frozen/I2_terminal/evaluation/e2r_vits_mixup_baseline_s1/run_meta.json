@@ -1,0 +1,63 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 30000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/e2r_vits_mixup_baseline_s1",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 648,
+      "sha256": "2a1433aba1a3d55000204c78a182051bcbb5ff85429557c96937e0744f45061b"
+    },
+    "diag.parquet": {
+      "bytes": 2318009,
+      "sha256": "008e77eee580a7a247b221e4065807ccefd7654f8821f9c1206e2a0d4d26995e"
+    },
+    "maps.npz": {
+      "bytes": 15492,
+      "sha256": "7f8a7452151dd5db92f632ffe1bc6cf84289831d02a5e0d43ca9ccca0c4a1422"
+    },
+    "records.done.json": {
+      "bytes": 648,
+      "sha256": "1a89bde1088660d411e0c7cce0523ff399b8f6a38623bcf4840ca717ba77a9b9"
+    },
+    "records.parquet": {
+      "bytes": 227889,
+      "sha256": "efba2ba99e92d7caabe853e6d3bac07ee184f9dc7c1ddf9f65421cb332d7c5ae"
+    }
+  },
+  "run_id": "e2r_vits_mixup_baseline_s1",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+  "state_hash_before": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.907052993774414,
+    "s11_out": 18.698548316955566,
+    "s12_post_norm": 18.131425857543945
+  },
+  "tau_canon": 20.8515625
+}

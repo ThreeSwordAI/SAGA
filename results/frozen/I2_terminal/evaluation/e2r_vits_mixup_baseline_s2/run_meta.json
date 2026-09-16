@@ -1,0 +1,63 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "baeee13f1864b926489bb186587ec65152fa8a935806fdf491971899db37ca7d",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 30000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/e2r_vits_mixup_baseline_s2",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 648,
+      "sha256": "7fb01edfcfaec7af897d227562cf047fe1b5798766006c0a3babc15277c39739"
+    },
+    "diag.parquet": {
+      "bytes": 2288752,
+      "sha256": "4b53b8fa7c4aeb93e06bb5560f90051d1aa6a95445a1dc49df421d1ec62d4e16"
+    },
+    "maps.npz": {
+      "bytes": 15492,
+      "sha256": "9f7d90eca2b0c49b57c1e27d6d5f4aa75f66ad7b07da6c4ea0fbdc3a71bd89f2"
+    },
+    "records.done.json": {
+      "bytes": 648,
+      "sha256": "53f865c518fd2079e55eab7c64a667fc2e8f1643009b9243eb943ef90c652e53"
+    },
+    "records.parquet": {
+      "bytes": 228051,
+      "sha256": "d32d72784de16ba288e57680057d3aea9712dbc3d618cdcac950eb530e7e3e1c"
+    }
+  },
+  "run_id": "e2r_vits_mixup_baseline_s2",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "a9c823db6c11b2afad3200a5f55439525a0601d9ce4440294211143d780ab320",
+  "state_hash_before": "a9c823db6c11b2afad3200a5f55439525a0601d9ce4440294211143d780ab320",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.907052993774414,
+    "s11_out": 18.698548316955566,
+    "s12_post_norm": 18.131425857543945
+  },
+  "tau_canon": 20.8515625
+}

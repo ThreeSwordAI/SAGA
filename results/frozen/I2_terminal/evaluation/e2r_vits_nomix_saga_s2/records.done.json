@@ -1,0 +1,20 @@
+{
+  "cell": "vit_small|nomix",
+  "ckpt_sha256": "68d64007a4bcae2335cf7ead1fe698e1df73e48ef538f9727c46ddc186ffd5ab",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 5,
+  "n_records_appended": 50000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vits_nomix_saga_s2",
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stage": "hist",
+  "tau_cal": {
+    "hist": 22.828205108642578,
+    "s11_out": 19.938284873962402,
+    "s12_post_norm": 20.78439712524414
+  },
+  "tau_canon": 22.859375,
+  "work_package": "I2_terminal"
+}

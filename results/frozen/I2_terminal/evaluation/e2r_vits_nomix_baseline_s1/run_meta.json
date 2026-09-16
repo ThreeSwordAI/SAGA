@@ -1,0 +1,63 @@
+{
+  "cell": "vit_small|nomix",
+  "ckpt_sha256": "207a5e907fab6e3bf23abafce51b2bc55687b10ae70e65bf72c84b78fbe63c95",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "c2f4aa95be76f641cd99a5dcc0d9a385e9d5ba27",
+  "n_diag": 30000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/evaluation/e2r_vits_nomix_baseline_s1",
+  "outputs": {
+    "diag.done.json": {
+      "bytes": 646,
+      "sha256": "41cd937517096240c45efae2ffdec703ee5a9dc2ee0c8fd1b5156483f53234e5"
+    },
+    "diag.parquet": {
+      "bytes": 2260685,
+      "sha256": "61536acae0ba4c858a2cf6f5bb7504da16eeb57f23a130d6668a4f8943008587"
+    },
+    "maps.npz": {
+      "bytes": 15484,
+      "sha256": "48e3bcce27ab6e4ea14745395fb4f9d7576d3b68be7c33175ae25dfe8d12e5b1"
+    },
+    "records.done.json": {
+      "bytes": 646,
+      "sha256": "fa3a0da35a6b517758680657a23119afc06e1d09da1ccfce7aef3ae1db4f3a2d"
+    },
+    "records.parquet": {
+      "bytes": 229096,
+      "sha256": "e4092fefcec479aa0f0b883e02241b013c3bb060725f80af7ffaec552d753906"
+    }
+  },
+  "run_id": "e2r_vits_nomix_baseline_s1",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/evaluation.json",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "state_hash_after": "80bdd1b3376ac331ee6907f21b2e08651464178482e7b37726368e10ef4a0250",
+  "state_hash_before": "80bdd1b3376ac331ee6907f21b2e08651464178482e7b37726368e10ef4a0250",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 22.828205108642578,
+    "s11_out": 19.938284873962402,
+    "s12_post_norm": 20.78439712524414
+  },
+  "tau_canon": 22.859375
+}
