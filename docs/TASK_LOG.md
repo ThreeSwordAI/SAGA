@@ -3833,3 +3833,167 @@ so nothing depends on it.
 ### Pending from HPC
 
 **Nothing.** TASK I0 is complete.
+
+---
+
+## 2026-09-16 — TASK I2, PHASE A (terminal sweep code, YAML, decision rule)
+
+Worktree `../SAGA-I2`, branch `task/I2`, off `main` at `c689de8`. Phase A only:
+code, conditions, job file, tests. **Nothing was run on the HPC and no
+scientific number exists yet.** D1 in `docs/LOCKED_ANALYSIS.md` §1 is still
+`DECISION NEEDED`; this session produced the machinery that will propose it.
+
+### What I2 is for
+
+Under a CLS-only loss the last block's patch gate receives no gradient and
+sits at σ(0) = 0.5 in every SAGA checkpoint. I0 measured the architectural
+half on the real model: overriding that gate moves the CLS logits by exactly
+0. The empirical half is open — how much of the SAGA-vs-baseline gap on every
+patch diagnostic is produced by that untrained constant rather than by
+anything training did. Until that is measured, no patch diagnostic computed
+at `hist` is safe to typeset and I1/I3/I4/I5 do not know which stage to
+report.
+
+### Commits (all on `task/I2`, none pushed)
+
+| commit | what |
+|---|---|
+| `c689de8` | the task file, on `main` (see "Deviations" below) |
+| `b2e587e` | **D1** `configs/frozen/I2_terminal.yaml` |
+| `c48a410` | framework: `saga/frozen/diag.py`, multi-stage capture, `maps.npz`, per-stage diag rows, `pyarrow` in `requirements.txt` |
+| `8f30373` | **D2** writer `tools/frozen_I2_thresholds.py` |
+| `b2510f7` | **D4** `analysis/build_I2_tables.py`, `analysis/i2_decision.py` |
+| `f67f3da` | **D7** `scripts/jobs/frozen_I2.sbatch` |
+| `7b0e7e6` | **D8** `tests/test_I2_terminal.py` |
+
+`pytest -q`: **792 passed, 30 skipped** (739 + 30 before this task; +52 I2
+functions and +1 from the repo-wide `set -u` job-file parametrization picking
+up the new sbatch). No existing test was weakened, skipped or deleted.
+
+### The conditions (`configs/frozen/I2_terminal.yaml`)
+
+| condition | applies_to | stages captured in one forward |
+|---|---|---|
+| `native` | baseline, registers, saga | `s11_out`, `hist`, `s12_post_norm` |
+| `term_0.50` / `term_0.25` / `term_0.75` / `term_1.00` | saga | `hist`, `s12_post_norm` |
+
+`s11_out` is captured ONCE, under `native`: it is the output of the
+second-to-last block and cannot depend on the last block's gate. A test
+asserts the bit-identity under all four constants instead of the YAML
+producing two numbers that are equal by construction.
+
+### Diagnostic keys per (image, condition, stage)
+
+`norm_p50`, `norm_p90`, `norm_p99`, `norm_p999`, `norm_max`, `mad_thr`,
+`count_fixed_canon`, `count_fixed_cal`, `count_mad`, `cos_all`,
+`cos_nosink_mad`, `eff_rank` — plus the §2.7 provenance columns,
+`stage_resolved`, `n_patches`, `tau_cal_value`, `tau_canon_value`.
+`count_fixed_canon` exists at `hist` and is the literal `MISSING` at every
+other stage. `maps.npz` carries per-position exceedance COUNTS (int64 `[196]`)
+plus `n_images`, per (condition, stage, basis) for bases `fixed_cal` and
+`mad`.
+
+### Framework additions (additive; `saga/frozen/edits.py` untouched)
+
+- `saga/frozen/diag.py` — the diagnostics, the MAD threshold VALUE, the
+  read-only canon loader, the calibrated-threshold writer, the map
+  accumulator and `maps.npz`.
+- `saga/frozen/runner.py` — `load_conditions` validates `applies_to` /
+  `stages` / gate constants; `conditions_for(variant)`;
+  `run_condition_multistage`; `run_work_package_stages`; `eligible_cohort` /
+  `eligible_run_ids` (the 19 rows in one deterministic order, baselines
+  first).
+- `saga/frozen/records.py` — `DIAG_STAGE_COLUMNS`, `DIAG_STAGE_KEY`, and an
+  explicit `columns` argument on `check_rows` / `append_rows`.
+- `tools/frozen_eval.py` — routes to the multi-stage loop when the COMMITTED
+  conditions file declares per-condition stages; `--skip-if-done`.
+
+Every one of these is covered by a test in `tests/test_I2_terminal.py`, and
+`saga/frozen/diag.py` is inside the glob TASK I0's AST no-training test
+already uses.
+
+### Deviations from the task file, and the repo facts behind them
+
+1. **`tools/frozen_manifest_hashes.py --verify` does not exist** (§9). The
+   tool skips paths already present in `ckpt_hashes.json`, so re-running it
+   verifies nothing. The verification that matters is
+   `saga.frozen.runner.verify_checkpoint`, which hashes the checkpoint and
+   REFUSES a mismatch before every single load. The printed B1 block says so
+   instead of inventing a flag.
+2. **`classification/scripts/env_alex.sh`** (§9) exists, but every committed
+   job file sources `/home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh`
+   by absolute path. The job file and the printed block use the committed
+   pattern.
+3. **`bash scripts/sync_results.sh`** (§9) stages only `results/runs/*`,
+   `results/detection/*` and `results/segmentation/*`. It would commit nothing
+   for I2, so the printed block stages `results/frozen/I2_terminal/`
+   explicitly, as TASK I0's job file also did.
+4. **`saga/metrics.py` exports no MAD-threshold function.** The threshold is
+   computed inside `sink_counts_mad` and `_nosink_per_image` and never
+   returned, and I2 needs the value. `saga/frozen/diag.mad_threshold` exposes
+   it and is pinned two ways by test — the counts above it are bit-equal to
+   `sink_counts_mad`, and its values equal
+   `tools/compute_fixed_thr.per_image_mad_thresholds` to fp32 precision.
+   `saga/metrics.py` was not modified.
+5. **D6 (bootstrap seed) is still `DECISION NEEDED`** in `LOCKED_ANALYSIS`
+   §12; §6 of the task file asks for "the seed from D6". Its stated default
+   `0` is used, declared in the YAML and recorded in every table row and in
+   `build_meta.json`, so defaulting stays a visible decision.
+6. **pyarrow is not in the HPC environment** (How to Run.md §2 lists
+   torch/torchvision/timm/pyyaml/scipy/seaborn/matplotlib/pandas) and was not
+   in `requirements.txt`. `saga/frozen/records.py` writes parquet when pyarrow
+   is importable and CSV otherwise; D3 names `.parquet` and §8 budgets "a few
+   MB". As CSV the cohort's diag files are well over a hundred MB of text,
+   which must not enter git. pyarrow is now declared in `requirements.txt`
+   and `scripts/jobs/frozen_I2.sbatch` REFUSES to run without it. **The human
+   must install it once in the conda env before B1, and locally before C1.**
+7. **`thresholds_cal.json` must exist before any SAGA run in its cell**, and
+   an array is concurrent. Resolved by every task calling
+   `tools/frozen_I2_thresholds.py --if-missing`: it computes only the cells
+   that are missing, `merge_thresholds_cal` refuses to overwrite a cell
+   already on disk, and the write is tmp + fsync + rename, so concurrent
+   tasks cannot corrupt it. The cost is a possible duplicated calibration in
+   the first few tasks; submitting `--array=0-7` first (the eight baselines,
+   which contain all three designated calibration sources) and the rest with
+   `--dependency=afterok:` avoids it entirely and is optional.
+8. **The canon file's raw sha256 is platform-dependent.** The working copy is
+   CRLF on Windows and LF on the cluster. The test pins the digest of the
+   LF-normalised bytes (`c30f2b99…`) and the three tau values beside it, so
+   the pin is a statement about content.
+9. **`count_fixed_canon` and `tau_canon_value` are STRING columns.** They are
+   `MISSING` off `hist`; a parquet column cannot hold both a float and a
+   string, and a null would be silently skipped by a mean. `MISSING` stays a
+   value in both the parquet and the CSV form.
+10. **`T_I2b_sweep.csv` covers all 19 runs**, not only the SAGA ones as §6
+    words it. A gap in `T_I2c` is uninterpretable without the level it is a
+    gap from, and the baseline/register rows cost nothing.
+11. **The task file itself was committed to `main`** (`c689de8`) at the
+    human's explicit instruction in the session prompt, before the worktree
+    was cut, so `git worktree add … main` carried it into the branch and the
+    later merge has no untracked-file collision. `CLAUDE.md` otherwise puts
+    every task commit on the task branch; this is one specification file, and
+    it is recorded here because it is an exception.
+
+### Open question the human must settle before B2 (not before B1)
+
+**§9's B2 line runs on `evaluation.json`, which is 10,000 images**
+(`LOCKED_ANALYSIS` §11), while §2 budgets "≤ 5 forward passes of 2,000 images
+per checkpoint" and §8 says "19 × 2,000 images are a few MB". Evaluation is
+therefore 5× the runtime and 5× the records. `results/frozen/splits/sub2k.json`
+(2,000 images, a verified subset of evaluation) exists and would match the
+stated budget. Nothing in the code or the job file assumes either — the split
+is an argument — so this only needs deciding when B2 is submitted.
+
+### Cost note for C1
+
+`analysis/build_I2_tables.py` imports `analysis.address_analysis.
+concentration_null`, which runs 400 Binomial simulations per distinct
+(mass, n_images, n_positions). The I2 map table has a few hundred distinct
+masses, so the `T_I2d` build is minutes rather than seconds. It is the
+project's existing finite-sample reference and is not re-derived.
+
+### Pending from HPC
+
+**Phase B1**: the calibration sweep. Until `results/frozen/I2_terminal/`
+comes back there is no `thresholds_cal.json`, no records, no tables and no D1
+proposal. C1 cannot start.
