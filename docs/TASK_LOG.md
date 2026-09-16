@@ -3426,3 +3426,162 @@ the primary checkout carries another session's branch).
 document (generated)` on `main`.
 
 **Pending from HPC:** nothing.
+
+---
+
+## 2026-09-16 — TASK I0, PHASE A (manifest, splits, framework, smoke)
+
+Worktree `../SAGA-I0`, branch `task/I0`, commit tag `[I0]`. Local-only; not
+pushed. Phases B (HPC) and C (next session) not started.
+
+### Done
+
+**D1 — cohort manifest** (`analysis/build_I0_manifest.py` →
+`results/frozen/I0_manifest/{manifest.csv,manifest.json,eligibility.md}`).
+**124 rows**, one per saved checkpoint or checkpoint-derived condition:
+
+| family | eligible | eligible_legacy | invalid | superseded | derived |
+|---|---|---|---|---|---|
+| e2r_300ep | 10 | — | 4 | 10 | — |
+| legacy_300ep | — | 9 | 6 | 9 | — |
+| ablation_100ep | 6 | — | — | 6 | — |
+| finetune | 24 | — | — | 24 | — |
+| dense_det | 3 | — | — | 3 | — |
+| dense_seg | 3 | — | — | 3 | — |
+| ttr_edit | — | — | — | — | 4 |
+
+The 300-epoch cohort is **19 completed conditions** (= the 10 eligible e2r
++ 9 eligible_legacy `last` rows): 8 baselines (4 ViT-S/mixup, 2 ViT-S
+true-nomix, 2 ViT-B/mixup), 8 matching SAGA, 3 registers (2 ViT-S/mixup,
+1 ViT-B/mixup, all legacy). The 10 fresh e2r conditions carry
+`seed_controlled=1`; the 9 legacy repeats `0` with `seed=MISSING`.
+The VOID legacy ViT-B mixup-**directory** trio is `invalid` for both
+checkpoint kinds (last.pth at epochs 74/199/249 of 300, from
+`ckpt_forensics.csv`), and so are the two never-started
+`e2r_vitb_mixup_*_s2` runs (1 of 300 epochs, `end_time` null).
+
+`recipe_actual`, cell membership and the VOID exclusion are **imported**
+from `analysis/build_pooled_tables.py` (as TASK-07 did), never redefined —
+a source-level test asserts that. For e2r/abl runs the recipe is read from
+the run's own resolved config and cross-checked against its augmentation
+block. Seeds come from `meta.json` + `config.resolved.yaml` and must agree;
+the diagnostics JSON `seed` (tools/diagnose.py's evaluation default of 0) is
+never read. `n_prefix` and the gate parameter counts come from a MODEL built
+through `tools/model_factory.py`; a test compares the latter against
+`analysis/build_ablation_tables.gate_param_counts`.
+
+**The historical feature stage, identified not assumed: `s12_pre_norm`** —
+the output of the LAST transformer block, **before** the final LayerNorm.
+Code citation: `saga/metrics.py:287-291` registers a forward hook on each
+`model.blocks[i]` storing the block's own output; `saga/metrics.py:324-325`
+takes `feats[L-1][:, P:, :]`; `saga/vit.py:238-241` applies `self.norm`
+only after the block loop; `tools/diagnose.py:89-95` is the historical
+driver. Exposed as the alias `hist` in `saga/frozen/stages.py` and pinned by
+`tests/test_I0_frozen.py::test_hist_stage_matches_the_historical_hook`,
+which RUNS the real `compute_diagnostics` hook and compares tensors rather
+than asserting a constant.
+
+**D2 — write-once split builder** (`tools/build_frozen_splits.py`).
+calibration (2,000; 2/class), evaluation (10,000; 10/class), sub1k, sub2k.
+Disjointness by construction; sub1k/sub2k nested inside evaluation and
+checked as subsets. Stdlib only. The splits themselves are built in Phase B.
+
+**D3 — `docs/LOCKED_ANALYSIS.md`, DRAFT.** Eight `DECISION NEEDED` items
+(listed below), each with the default that applies if unanswered.
+
+**D4 — framework** `saga/frozen/{stages,edits,records,runner}.py` +
+`tools/frozen_eval.py` + `configs/frozen/smoke.yaml`. Three interventions,
+each a context manager that sha256-hashes every parameter and buffer on
+entry and exit and refuses to exit if they differ:
+`terminal_gate_override` (I2), `gate_edit` (I3: original / mean /
+mu+alpha·delta / permute / permute_within_ring / dihedral) and
+`receiver_perturbation` (I4, with plan §5.5 energy matching). All exclude
+prefix rows using the model's own count and work on the timm 4-register
+model without wrapping it in `SAGAViT`. Ring indices imported from
+`analysis/address_analysis.py`.
+
+**D5/D6 — `tools/frozen_smoke.py`, `tools/frozen_manifest_hashes.py`,
+`scripts/jobs/frozen_smoke.sbatch`.** Dry-run on tiny CPU models: SAGA
+8 PASS / 1 expected FAIL (an untrained model on noise cannot match a
+recorded top-1), baseline and reg4 4 PASS with the gate checks correctly
+SKIP.
+
+**D7 — tests**: `tests/test_I0_{frozen,manifest,splits}.py`, 111 CPU tests.
+
+### Additive only
+
+`saga/gate.py`, `saga/vit.py`, `saga/metrics.py`, `tools/eval.py` and
+`tools/diagnose.py` are **untouched** — no stage hook needed a change there.
+No historical result file, note, table or threshold was edited. New keys and
+new directories only.
+
+### Discrepancies found (recorded, not improvised)
+
+1. **`docs/SAGA_ICLR2027_FINAL_PLAN.md` had not been placed in `docs/`.**
+   Taken from the copy the human had prepared and committed, since the task
+   file's D3 is filled in from its §5.5/§6/§13.3. `docs/TASK_I0_FROZEN_FRAMEWORK.md`
+   was present but untracked in the main checkout; it is now committed on
+   this branch. **A `git merge` into `main` will refuse while that untracked
+   copy is still there — delete it in the main worktree first** (it is
+   byte-identical to the committed one).
+2. **The worktree `../SAGA-I0` did not exist**; created with
+   `git worktree add ../SAGA-I0 -b task/I0 main`.
+3. **Task file §9 puts `tools/build_frozen_splits.py` on the login node. It
+   cannot run there.** The builder needs an extracted `val/<synset>/*.JPEG`
+   tree to list, and this cluster keeps ImageNet only as tarballs on janus,
+   staged per-job to node-local `/scratch` (`How to Run.md` §5); there is no
+   persistent extracted copy. The split build was moved INTO
+   `frozen_smoke.sbatch`, immediately after staging, with `--if-missing` so
+   a resubmit is a no-op. Everything else in §9 is unchanged.
+4. **Task file §9 sources `classification/scripts/env_alex.sh`.** Both that
+   file and `scripts/env_alex.sh` exist and are live, but the job files that
+   have COMPLETED real runs source `scripts/env_alex.sh`, and only that one
+   exports `TORCHRUN`. The job file and the printed block use
+   `scripts/env_alex.sh`.
+5. **The smoke needs hashed checkpoints.** `frozen_smoke.py` refuses a
+   manifest row whose `ckpt_sha256` is MISSING, so
+   `frozen_manifest_hashes.py` **and** a manifest rebuild with `--hashes`
+   must run on the login node BEFORE the sbatch. The job file checks this
+   and exits 1 with the two commands if it is not done.
+6. `ckpt_path` for in-repo checkpoints was initially an absolute local path,
+   which would not resolve on the HPC; it is now repo-relative for in-repo
+   checkpoints and absolute for the vault/woody ones.
+
+### Open decisions for the human (all eight `DECISION NEEDED` in LOCKED_ANALYSIS.md)
+
+| # | § | Question | Default if unanswered |
+|---|---|---|---|
+| D1 | 1 | Stage for all new patch diagnostics | `hist` (= `s12_pre_norm`), pending I2 |
+| D2 | 3 | Dihedral subset: all 8, or fewer? | all 8 |
+| D3 | 4 | The ten fixed permutation index lists are not yet generated | `RandomState(0..9).permutation(196)`, committed by I3 Phase A |
+| D4 | 5 | I4 prevalence-map basis: `canon` or `mad`? | `canon` |
+| D5 | 5 | **BLOCKING** — the discovery map at the INPUT to block 7/8 does not exist; the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | none |
+| D6 | 8 | Bootstrap seed | `0` |
+| D7 | 9 | Multiplicity correction across the three primary contrasts | none, all three named in advance |
+| D8 | 11 | The five split shas | filled in Phase B |
+
+Also for the human: `docs/LOCKED_ANALYSIS.md` carries three `PENDING` lines
+(signed by / date frozen / git sha at freeze). Until they are filled in
+nothing in it is locked and no I3/I4 Phase-B job may run.
+
+### Commits (branch `task/I0`, not pushed)
+
+- `8a30a76` [I0] task file and the ICLR-2027 plan it is drafted from
+- `70533a0` [I0] D4: the frozen-intervention framework
+- `9c7516c` [I0] D1: cohort manifest
+- `f2b4e4a` [I0] D2: write-once split builder
+- `42b59d3` [I0] D5+D6: smoke checker, hash tool, and the Phase-B job file
+- `6c2e9d4` [I0] D3: docs/LOCKED_ANALYSIS.md (DRAFT)
+- `d4aca50` [I0] D7: tests
+
+`pytest -q`: **717 passed, 30 skipped** (606 pre-existing + 111 new; the
+skips are pre-existing).
+
+### Pending from HPC (Phase B)
+
+- `results/frozen/splits/{calibration,evaluation,sub1k,sub2k}.json` + `README.md`
+- `results/frozen/I0_manifest/ckpt_hashes.json`
+- `results/frozen/I0_manifest/{manifest.csv,manifest.json,eligibility.md}` rebuilt with hashes
+- `results/frozen/I0_manifest/smoke_*.json` (three files)
+
+Phase C cannot start before those land.
