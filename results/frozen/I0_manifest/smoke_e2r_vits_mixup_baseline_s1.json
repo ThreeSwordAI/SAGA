@@ -1,0 +1,166 @@
+{
+  "arch": "vit_small",
+  "checks": [
+    {
+      "check": "native_matches_recorded",
+      "detail": "32-image subset top-1 vs the recorded 50k top-1; band 25.0 pts \u2014 a LOADER sanity check, not an equality (the two image sets differ)",
+      "measured": {
+        "abs_diff": 14.888000000000005,
+        "recorded_full_val_top1": 78.862,
+        "subset_nll": 0.3967423141002655,
+        "subset_top1": 93.75
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "identity_is_bit_exact",
+      "detail": "block 11 of this SAGAViT has no gate (gate_mode='none', or a baseline/register model). Gate interventions apply to SAGA checkpoints only.",
+      "measured": "MISSING",
+      "status": "SKIP"
+    },
+    {
+      "check": "terminal_gate_invariance",
+      "detail": "block 11 of this SAGAViT has no gate (gate_mode='none', or a baseline/register model). Gate interventions apply to SAGA checkpoints only.",
+      "measured": "MISSING",
+      "status": "SKIP"
+    },
+    {
+      "check": "prefix_rows_untouched",
+      "detail": "receiver_perturbation at epsilon=0.25 on 8 patch coordinates; the 1 prefix row(s) of block 10's output must be bit-identical. The injected norm is reported alongside so a PASS cannot come from an edit that did nothing.",
+      "measured": {
+        "layer": 10,
+        "max_abs_prefix_diff": 0.0,
+        "max_injected_norm": 2.893799304962158,
+        "n_masked_coords": 8,
+        "n_prefix": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "permutation_preserves",
+      "detail": "'Attention' object has no attribute 'gate'",
+      "measured": "MISSING",
+      "status": "SKIP"
+    },
+    {
+      "check": "ring_permutation_counts",
+      "detail": "'Attention' object has no attribute 'gate'",
+      "measured": "MISSING",
+      "status": "SKIP"
+    },
+    {
+      "check": "energy_matched_norm",
+      "detail": "plan \u00a75.5: alpha_iM = kappa_i / ||M .* U_i||_F, so every candidate mask injects the same Frobenius energy for that image. The achieved norm is measured from the tensor actually subtracted.",
+      "measured": {
+        "achieved_mean": 0.8366262689232826,
+        "kappa_mean": 0.8366262629628182,
+        "layer": 10,
+        "max_abs_rel_error": 7.20907826647316e-08,
+        "n_zero_norm_images": 0,
+        "tolerance": 0.0001
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "stage_shapes",
+      "detail": "N_patches = N - n_prefix = 197 - 1 = 196 at every stage, including on a register model where n_prefix is 5",
+      "measured": {
+        "expected_n_patches": 196,
+        "hist_alias_of": "s12_pre_norm",
+        "n_logits": 1000,
+        "n_prefix": 1,
+        "n_tokens": 197,
+        "shapes": {
+          "hist": [
+            32,
+            196,
+            384
+          ],
+          "s11_out": [
+            32,
+            196,
+            384
+          ],
+          "s12_post_norm": [
+            32,
+            196,
+            384
+          ],
+          "s12_pre_norm": [
+            32,
+            196,
+            384
+          ]
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "state_restored",
+      "detail": "sha256 over every parameter and buffer (name, dtype, shape, bytes); an edit that did not restore is a hard failure at the edit, not a wrong number three work packages later",
+      "measured": {
+        "hash_after": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+        "hash_before": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+        "n_edits_checked": 1,
+        "per_edit": {
+          "receiver_perturbation": true
+        }
+      },
+      "status": "PASS"
+    }
+  ],
+  "ckpt_kind": "last",
+  "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+  "device": "cuda",
+  "gate_mode": "MISSING",
+  "git_sha": "a986c367e837497702004194e7c89589b5369bee",
+  "hist_stage": "s12_pre_norm",
+  "image_ids": [
+    "n01440764/ILSVRC2012_val_00009346_n01440764",
+    "n01440764/ILSVRC2012_val_00011993_n01440764",
+    "n01440764/ILSVRC2012_val_00017699_n01440764",
+    "n01440764/ILSVRC2012_val_00021740_n01440764",
+    "n01440764/ILSVRC2012_val_00026397_n01440764",
+    "n01440764/ILSVRC2012_val_00037375_n01440764",
+    "n01440764/ILSVRC2012_val_00039905_n01440764",
+    "n01440764/ILSVRC2012_val_00040358_n01440764",
+    "n01440764/ILSVRC2012_val_00045866_n01440764",
+    "n01440764/ILSVRC2012_val_00045880_n01440764",
+    "n01443537/ILSVRC2012_val_00000994_n01443537",
+    "n01443537/ILSVRC2012_val_00002241_n01443537",
+    "n01443537/ILSVRC2012_val_00010363_n01443537",
+    "n01443537/ILSVRC2012_val_00010509_n01443537",
+    "n01443537/ILSVRC2012_val_00020436_n01443537",
+    "n01443537/ILSVRC2012_val_00028713_n01443537",
+    "n01443537/ILSVRC2012_val_00032258_n01443537",
+    "n01443537/ILSVRC2012_val_00046915_n01443537",
+    "n01443537/ILSVRC2012_val_00048864_n01443537",
+    "n01443537/ILSVRC2012_val_00049712_n01443537",
+    "n01484850/ILSVRC2012_val_00002752_n01484850",
+    "n01484850/ILSVRC2012_val_00008848_n01484850",
+    "n01484850/ILSVRC2012_val_00019409_n01484850",
+    "n01484850/ILSVRC2012_val_00027514_n01484850",
+    "n01484850/ILSVRC2012_val_00029481_n01484850",
+    "n01484850/ILSVRC2012_val_00031466_n01484850",
+    "n01484850/ILSVRC2012_val_00031808_n01484850",
+    "n01484850/ILSVRC2012_val_00037135_n01484850",
+    "n01484850/ILSVRC2012_val_00037488_n01484850",
+    "n01484850/ILSVRC2012_val_00039865_n01484850",
+    "n01491361/ILSVRC2012_val_00002969_n01491361",
+    "n01491361/ILSVRC2012_val_00003204_n01491361"
+  ],
+  "n_fail": 0,
+  "n_images": 32,
+  "n_pass": 5,
+  "n_prefix": 1,
+  "n_skip": 4,
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "e2r_vits_mixup_baseline_s1",
+  "seed": 0,
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "timestamp": "2026-09-16T09:54:31.183194+00:00",
+  "variant": "baseline",
+  "verdict": "PASS"
+}

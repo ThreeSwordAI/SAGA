@@ -1,0 +1,211 @@
+{
+  "arch": "vit_small",
+  "checks": [
+    {
+      "check": "native_matches_recorded",
+      "detail": "32-image subset top-1 vs the recorded 50k top-1; band 25.0 pts \u2014 a LOADER sanity check, not an equality (the two image sets differ)",
+      "measured": {
+        "abs_diff": 8.147999999999996,
+        "recorded_full_val_top1": 79.352,
+        "subset_nll": 0.44799795746803284,
+        "subset_top1": 87.5
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "identity_is_bit_exact",
+      "detail": "gate_edit(mode='original') rebuilds the gate's own map and applies it through the replacement module; anything but 0.0 means the replacement path is not the identity it claims to be",
+      "measured": {
+        "max_abs_logit_diff": 0.0,
+        "n_images": 32,
+        "n_images_bit_exact": 32
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "terminal_gate_invariance",
+      "detail": "plan \u00a75.6 Proposition 2: a CLS-only readout cannot see the terminal PATCH gate. A failure is a readout/hook/implementation problem and is investigated as one before it is reported as a finding.",
+      "measured": {
+        "max_abs_logit_diff_by_value": {
+          "0.25": 0.0,
+          "0.5": 0.0,
+          "0.75": 0.0,
+          "1.0": 0.0
+        },
+        "tolerance": 0.001,
+        "worst": 0.0
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "prefix_rows_untouched",
+      "detail": "receiver_perturbation at epsilon=0.25 on 8 patch coordinates; the 1 prefix row(s) of block 10's output must be bit-identical. The injected norm is reported alongside so a PASS cannot come from an edit that did nothing.",
+      "measured": {
+        "layer": 10,
+        "max_abs_prefix_diff": 0.0,
+        "max_injected_norm": 2.328650712966919,
+        "n_masked_coords": 8,
+        "n_prefix": 1
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "permutation_preserves",
+      "detail": "a position permutation is a relabelling: per-head mean and the per-head multiset of gate values must both be exactly preserved",
+      "measured": {
+        "layer": 10,
+        "max_abs_per_head_mean_diff": 5.960464477539063e-08,
+        "n_patches": 196,
+        "per_head_sorted_values_identical": true
+      },
+      "status": "FAIL"
+    },
+    {
+      "check": "ring_permutation_counts",
+      "detail": "rings from analysis.address_analysis.border_distance_map (THE ring definition, TASK-07/TASK-13); a within-ring permutation must move no coordinate between rings, and one that does must be refused",
+      "measured": {
+        "cross_ring_permutation_refused": true,
+        "n_coords_changing_ring": 0,
+        "n_patches": 196,
+        "ring_counts_after": {
+          "0": 52,
+          "1": 44,
+          "2": 36,
+          "3": 28,
+          "4": 20,
+          "5": 12,
+          "6": 4
+        },
+        "ring_counts_before": {
+          "0": 52,
+          "1": 44,
+          "2": 36,
+          "3": 28,
+          "4": 20,
+          "5": 12,
+          "6": 4
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "energy_matched_norm",
+      "detail": "plan \u00a75.5: alpha_iM = kappa_i / ||M .* U_i||_F, so every candidate mask injects the same Frobenius energy for that image. The achieved norm is measured from the tensor actually subtracted.",
+      "measured": {
+        "achieved_mean": 0.6071620276197791,
+        "kappa_mean": 0.607162031531334,
+        "layer": 10,
+        "max_abs_rel_error": 8.958675322482422e-08,
+        "n_zero_norm_images": 0,
+        "tolerance": 0.0001
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "stage_shapes",
+      "detail": "N_patches = N - n_prefix = 197 - 1 = 196 at every stage, including on a register model where n_prefix is 5",
+      "measured": {
+        "expected_n_patches": 196,
+        "hist_alias_of": "s12_pre_norm",
+        "n_logits": 1000,
+        "n_prefix": 1,
+        "n_tokens": 197,
+        "shapes": {
+          "hist": [
+            32,
+            196,
+            384
+          ],
+          "s11_out": [
+            32,
+            196,
+            384
+          ],
+          "s12_post_norm": [
+            32,
+            196,
+            384
+          ],
+          "s12_pre_norm": [
+            32,
+            196,
+            384
+          ]
+        }
+      },
+      "status": "PASS"
+    },
+    {
+      "check": "state_restored",
+      "detail": "sha256 over every parameter and buffer (name, dtype, shape, bytes); an edit that did not restore is a hard failure at the edit, not a wrong number three work packages later",
+      "measured": {
+        "hash_after": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+        "hash_before": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+        "n_edits_checked": 6,
+        "per_edit": {
+          "gate_edit_dihedral": true,
+          "gate_edit_mean": true,
+          "gate_edit_mean_plus_alpha_delta": true,
+          "gate_edit_permute": true,
+          "receiver_perturbation": true,
+          "terminal_gate_override": true
+        }
+      },
+      "status": "PASS"
+    }
+  ],
+  "ckpt_kind": "last",
+  "ckpt_sha256": "5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5",
+  "device": "cuda",
+  "gate_mode": "MISSING",
+  "git_sha": "a986c367e837497702004194e7c89589b5369bee",
+  "hist_stage": "s12_pre_norm",
+  "image_ids": [
+    "n01440764/ILSVRC2012_val_00009346_n01440764",
+    "n01440764/ILSVRC2012_val_00011993_n01440764",
+    "n01440764/ILSVRC2012_val_00017699_n01440764",
+    "n01440764/ILSVRC2012_val_00021740_n01440764",
+    "n01440764/ILSVRC2012_val_00026397_n01440764",
+    "n01440764/ILSVRC2012_val_00037375_n01440764",
+    "n01440764/ILSVRC2012_val_00039905_n01440764",
+    "n01440764/ILSVRC2012_val_00040358_n01440764",
+    "n01440764/ILSVRC2012_val_00045866_n01440764",
+    "n01440764/ILSVRC2012_val_00045880_n01440764",
+    "n01443537/ILSVRC2012_val_00000994_n01443537",
+    "n01443537/ILSVRC2012_val_00002241_n01443537",
+    "n01443537/ILSVRC2012_val_00010363_n01443537",
+    "n01443537/ILSVRC2012_val_00010509_n01443537",
+    "n01443537/ILSVRC2012_val_00020436_n01443537",
+    "n01443537/ILSVRC2012_val_00028713_n01443537",
+    "n01443537/ILSVRC2012_val_00032258_n01443537",
+    "n01443537/ILSVRC2012_val_00046915_n01443537",
+    "n01443537/ILSVRC2012_val_00048864_n01443537",
+    "n01443537/ILSVRC2012_val_00049712_n01443537",
+    "n01484850/ILSVRC2012_val_00002752_n01484850",
+    "n01484850/ILSVRC2012_val_00008848_n01484850",
+    "n01484850/ILSVRC2012_val_00019409_n01484850",
+    "n01484850/ILSVRC2012_val_00027514_n01484850",
+    "n01484850/ILSVRC2012_val_00029481_n01484850",
+    "n01484850/ILSVRC2012_val_00031466_n01484850",
+    "n01484850/ILSVRC2012_val_00031808_n01484850",
+    "n01484850/ILSVRC2012_val_00037135_n01484850",
+    "n01484850/ILSVRC2012_val_00037488_n01484850",
+    "n01484850/ILSVRC2012_val_00039865_n01484850",
+    "n01491361/ILSVRC2012_val_00002969_n01491361",
+    "n01491361/ILSVRC2012_val_00003204_n01491361"
+  ],
+  "n_fail": 1,
+  "n_images": 32,
+  "n_pass": 8,
+  "n_prefix": 1,
+  "n_skip": 0,
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "e2r_vits_mixup_saga_s1",
+  "seed": 0,
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "timestamp": "2026-09-16T09:54:52.735255+00:00",
+  "variant": "saga",
+  "verdict": "FAIL"
+}

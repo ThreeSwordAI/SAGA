@@ -81,5 +81,5 @@ Counted from a model built through `tools/model_factory.py` at each run's own re
 
 ## Checkpoint hashes
 
-48 of 124 rows carry a `ckpt_sha256`; **76** are `MISSING` and are filled by `tools/frozen_manifest_hashes.py` on the HPC, where the checkpoints live. `saga/frozen/runner.py` REFUSES to evaluate a row whose `ckpt_sha256` is still MISSING.
+114 of 124 rows carry a `ckpt_sha256`; **10** are `MISSING` and are filled by `tools/frozen_manifest_hashes.py` on the HPC, where the checkpoints live. `saga/frozen/runner.py` REFUSES to evaluate a row whose `ckpt_sha256` is still MISSING.
 
