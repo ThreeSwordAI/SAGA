@@ -225,6 +225,7 @@ def load_conditions(conditions_yaml):
         seen.add(c["id"])
         _check_applies_to(conditions_yaml, c)
         _check_stages(conditions_yaml, c)
+        _check_diag(conditions_yaml, c)
         if c["edit_type"] == "terminal_gate_override":
             value = float((c.get("params") or {}).get("value", float("nan")))
             if value not in TERMINAL_GATE_VALUES:
@@ -232,15 +233,134 @@ def load_conditions(conditions_yaml):
                     f"{conditions_yaml}: condition {c['id']!r} asks for "
                     f"terminal gate value {value!r}, which is not one of the "
                     f"declared constants {TERMINAL_GATE_VALUES}")
-    declared = [("stages" in c) for c in doc["conditions"]]
+    # Only the conditions that RECORD diagnostics are asked to name a stage:
+    # a `diag: false` condition writes no diag row, so it has no stage to
+    # declare and declaring one would be a claim the file does not keep.
+    recording = [c for c in doc["conditions"] if c.get("diag", True)]
+    declared = [("stages" in c) for c in recording]
     if any(declared) and not all(declared):
         raise RunnerError(
             f"{conditions_yaml}: {sum(declared)} of {len(declared)} conditions "
             f"declare `stages`. A work package is single-stage or multi-stage "
             f"throughout — mixing them would write two row shapes into one "
             f"diag file")
+    lying = [c["id"] for c in doc["conditions"]
+             if not c.get("diag", True) and "stages" in c]
+    if lying:
+        raise RunnerError(
+            f"{conditions_yaml}: conditions {lying} declare `stages` and "
+            f"`diag: false`. Nothing is captured for them, so the stage list "
+            f"would describe a measurement that never happens")
     doc.setdefault("precision", "fp32")
+    _resolve_permutations(conditions_yaml, doc)
     return doc
+
+
+def _check_diag(conditions_yaml, c: dict):
+    """`diag:` is optional and BOOLEAN; default True (TASK B §3).
+
+    A 61-condition sweep records the patch diagnostics for 3 of its
+    conditions and the functional response for all of them. Gating that with
+    a declared flag keeps the choice in the committed file, where every other
+    choice about this sweep already lives; the alternative — dropping
+    `stages` from the other 58 — is refused by the single-stage/multi-stage
+    rule below, and rightly so.
+    """
+    if "diag" not in c:
+        return
+    if not isinstance(c["diag"], bool):
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} has diag="
+            f"{c['diag']!r}; expected true or false. The patch diagnostics "
+            f"are recorded or they are not — there is no third state.")
+
+
+def condition_diag(conditions: dict, c: dict) -> bool:
+    """Whether one condition records the patch diagnostics. Default True."""
+    return bool(c.get("diag", True))
+
+
+def layer_cell(params: dict) -> str:
+    """The `layer` record column, as a STRING — MISSING or a decimal index.
+
+    Every I2 sweep wrote the literal MISSING here, because no I2 condition
+    names a layer. I3 is the first work package where SOME conditions do
+    (`original` does not, the 60 edits do), and a parquet column cannot hold
+    both an int and a string: `pa.Table.from_pylist` raises
+    `ArrowTypeError: Expected bytes, got a 'int' object` on the first mixed
+    batch and the whole sweep is lost at the write.
+
+    A string column keeps MISSING a VALUE (I0 handoff §8.2) and is what
+    `count_fixed_canon` already does for exactly the same reason
+    (saga/frozen/diag.py::_int_str).
+    """
+    v = params.get("layer", MISSING)
+    if v is None or v == MISSING:
+        return MISSING
+    return str(int(v))
+
+
+#: A condition may name a permutation instead of spelling out 196 indices:
+#:     params: {layer: 7, mode: permute, perm: {source: position, index: 0}}
+#: `source` is a top-level list in the permutations file.
+PERM_SOURCES = ("position", "within_ring")
+
+
+def _resolve_permutations(conditions_yaml, doc: dict):
+    """Turn every `perm: {source, index}` into the committed index list.
+
+    Resolved HERE, at parse time on the login node, so a typo costs a parse
+    and not a staged dataset — and resolved from `permutations_file` and
+    NOWHERE else, which is what "permutations are loaded from a committed
+    file, never drawn" means in practice (LOCKED_ANALYSIS §4, TASK B §7).
+
+    The resolved list goes on the condition under `_perm`, NOT into `params`:
+    `params` is serialised into the `edit_params` column of every record row,
+    and a 196-integer list there would add ~1 kB to each of 610,000 rows for
+    information that is already pinned by the file's sha256. The declared
+    `{source, index}` stays in `params`, which is the readable form anyway.
+    """
+    specs = [(c, (c.get("params") or {}).get("perm")) for c in doc["conditions"]]
+    specs = [(c, p) for c, p in specs if isinstance(p, dict)]
+    if not specs:
+        return
+    path = doc.get("permutations_file")
+    if not path:
+        raise RunnerError(
+            f"{conditions_yaml}: condition {specs[0][0]['id']!r} names a "
+            f"permutation by {{source, index}} but the document declares no "
+            f"`permutations_file`. A permutation that is not read from a "
+            f"committed file is a permutation this project did not fix in "
+            f"advance.")
+    p = Path(path)
+    if not p.exists():
+        raise RunnerError(f"{conditions_yaml}: permutations_file {p} not found")
+    raw = p.read_bytes()
+    perms = json.loads(raw.decode("utf-8"))
+    doc["permutations_file"] = str(path)
+    # LF-normalised, as every other digest this project records: the file is
+    # checked out with CRLF on Windows and LF on the cluster.
+    doc["permutations_sha256"] = hashlib.sha256(
+        raw.replace(b"\r\n", b"\n")).hexdigest()
+
+    for c, spec in specs:
+        source, index = spec.get("source"), spec.get("index")
+        if source not in PERM_SOURCES:
+            raise RunnerError(
+                f"{conditions_yaml}: condition {c['id']!r} asks for "
+                f"permutation source {source!r}; expected one of "
+                f"{list(PERM_SOURCES)}")
+        lists = perms.get(source)
+        if not isinstance(lists, list):
+            raise RunnerError(
+                f"{conditions_yaml}: {p} has no {source!r} list")
+        if not isinstance(index, int) or isinstance(index, bool) \
+                or not 0 <= index < len(lists):
+            raise RunnerError(
+                f"{conditions_yaml}: condition {c['id']!r} asks for "
+                f"{source}[{index!r}], but {p} holds {len(lists)} of them "
+                f"(0..{len(lists) - 1})")
+        c["_perm"] = np.asarray(lists[index], dtype=np.int64)
 
 
 def _check_applies_to(conditions_yaml, c: dict):
@@ -341,7 +461,15 @@ def _edit_context(model, condition: dict):
     if kind == "terminal_gate_override":
         return fn(model, float(params["value"])), params
     if kind == "gate_edit":
-        perm = params.get("perm")
+        # `_perm` is the list `load_conditions` resolved out of the committed
+        # permutations file; it wins over a literal `perm`, and a dict that
+        # reached here unresolved would be a parse that did not happen.
+        perm = condition.get("_perm", params.get("perm"))
+        if isinstance(perm, dict):                       # pragma: no cover
+            raise RunnerError(
+                f"condition {condition['id']!r} still carries an unresolved "
+                f"permutation reference {perm!r} — load_conditions resolves "
+                f"these, so this document was not parsed through it")
         if isinstance(perm, list):
             perm = np.asarray(perm)
         return fn(model, int(params["layer"]), params["mode"],
@@ -526,7 +654,7 @@ def run_work_package(*, row, conditions, dataset, out_dir, device="cpu",
                     edit_params=json.dumps(params, sort_keys=True,
                                            separators=(",", ":"),
                                            default=str),
-                    layer=params.get("layer", MISSING),
+                    layer=layer_cell(params),
                     epsilon=params.get("epsilon", MISSING),
                     measured_perturbation_norm=(
                         info.get("measured_perturbation_norm",
@@ -538,7 +666,7 @@ def run_work_package(*, row, conditions, dataset, out_dir, device="cpu",
                 if diag:
                     diag_rows.append(dict(
                         row_common, edit_type=cond["edit_type"],
-                        layer=params.get("layer", MISSING),
+                        layer=layer_cell(params),
                         **{k: v[i] for k, v in diag.items()}))
             cursor += n
         summary["conditions"][cond["id"]] = {
@@ -622,6 +750,7 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
     from torch.utils.data import DataLoader
 
     from saga.frozen import diag as fdiag
+    from saga.frozen import reference as fref
 
     model = build_from_row(row, ckpt_path=ckpt_path, device=device)
     n_prefix = infer_num_prefix_tokens(model)
@@ -665,65 +794,96 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
                    {c["id"] for c in conditions["conditions"]}
                    - {c["id"] for c in declared})}
 
-    for cond in declared:
-        stages = condition_stages(conditions, cond)
-        cursor = 0
-        edit_info = {}
-        for b, (images, targets) in enumerate(loader):
-            if max_images is not None and cursor >= max_images:
-                break
-            images = images.to(device)
-            targets = targets.to(device)
-            if max_images is not None and cursor + images.shape[0] > max_images:
-                keep = max_images - cursor
-                images, targets = images[:keep], targets[:keep]
+    # TASK B / I3 B2a — the native reference, for `delta_update_norm`. Built
+    # BEFORE any edit is entered (it captures the block's own modules) and
+    # held for the whole sweep; None unless the conditions file asks for it,
+    # so I1's and I2's documents run exactly as they did. See
+    # saga/frozen/reference.py for why the native update is recomputed from
+    # the block input rather than cached across batches.
+    want_update = bool(conditions.get("measure_update_norm", False))
+    perm_sha = conditions.get("permutations_sha256", MISSING)
+    record_cols = rec.RECORD_UPDATE_COLUMNS if want_update else None
+    summary["measure_update_norm"] = want_update
+    summary["permutations_sha256"] = perm_sha
 
-            resp, captured, info, logits = run_condition_multistage(
-                model, images, targets, cond, stages,
-                native_logits=native_by_batch.get(b))
-            if cond["edit_type"] == "native":
-                native_by_batch[b] = logits
-            edit_info = info or edit_info
+    with fref.update_reference(model, conditions, enabled=want_update) as ref:
+        if ref is not None:
+            summary["update_reference"] = ref.info()
+        for cond in declared:
+            # `diag: false` records the functional response only. Passing no
+            # stages registers no capture hooks and leaves the diagnostics block
+            # below a no-op, which is exactly what "diag only where the YAML says
+            # so" means for 58 of I3's 61 conditions.
+            stages = (condition_stages(conditions, cond)
+                      if condition_diag(conditions, cond) else ())
+            layer_edited = fref.condition_layer(cond) if ref is not None else None
+            cursor = 0
+            edit_info = {}
+            for b, (images, targets) in enumerate(loader):
+                if max_images is not None and cursor >= max_images:
+                    break
+                images = images.to(device)
+                targets = targets.to(device)
+                if max_images is not None and cursor + images.shape[0] > max_images:
+                    keep = max_images - cursor
+                    images, targets = images[:keep], targets[:keep]
 
-            n = images.shape[0]
-            params = dict(cond.get("params") or {})
-            for i in range(n):
-                record_rows.append(dict(
-                    base, image_id=ids[cursor + i], condition_id=cond["id"],
-                    edit_type=cond["edit_type"],
-                    edit_params=json.dumps(params, sort_keys=True,
-                                           separators=(",", ":"), default=str),
-                    layer=params.get("layer", MISSING),
-                    epsilon=params.get("epsilon", MISSING),
-                    measured_perturbation_norm=MISSING,
-                    **{k: v[i] for k, v in resp.items()}))
+                if ref is not None:
+                    ref.clear()
+                resp, captured, info, logits = run_condition_multistage(
+                    model, images, targets, cond, stages,
+                    native_logits=native_by_batch.get(b))
+                if cond["edit_type"] == "native":
+                    native_by_batch[b] = logits
+                edit_info = info or edit_info
 
-            for stage in stages:
-                patches = captured[stage]
-                canon_tau = (tau_canon if fdiag.canon_defines_stage(stage)
-                             else MISSING)
-                values, stage_maps = fdiag.patch_diagnostics(
-                    patches, tau_cal=tau_cal[stage], tau_canon=canon_tau)
-                maps.add(cond["id"], stage, stage_maps)
+                n = images.shape[0]
+                # AFTER the edit context has exited, so the recomputed branch is
+                # the native one (saga/frozen/reference.py).
+                deltas = (ref.delta_update_norm(layer_edited, n)
+                          if ref is not None else None)
+                params = dict(cond.get("params") or {})
+                extra = ({} if deltas is None else
+                         {"permutations_sha256": perm_sha})
                 for i in range(n):
-                    diag_rows.append(dict(
-                        base, image_id=ids[cursor + i],
-                        condition_id=cond["id"], stage=stage,
-                        stage_resolved=resolve_stage(stage),
+                    record_rows.append(dict(
+                        base, image_id=ids[cursor + i], condition_id=cond["id"],
                         edit_type=cond["edit_type"],
-                        n_patches=int(patches.shape[1]),
-                        tau_cal_value=tau_cal[stage],
-                        tau_canon_value=(str(canon_tau)
-                                         if isinstance(canon_tau, float)
-                                         else MISSING),
-                        **{k: v[i] for k, v in values.items()}))
-            cursor += n
-        summary["conditions"][cond["id"]] = {
-            "edit_type": cond["edit_type"], "n_images": cursor,
-            "stages": list(stages),
-            "edit_info": {k: v for k, v in edit_info.items()
-                          if not isinstance(v, (list, tuple)) or len(v) <= 16},
-        }
+                        edit_params=json.dumps(params, sort_keys=True,
+                                               separators=(",", ":"), default=str),
+                        layer=layer_cell(params),
+                        epsilon=params.get("epsilon", MISSING),
+                        measured_perturbation_norm=MISSING,
+                        **({} if deltas is None
+                           else dict(extra, delta_update_norm=deltas[i])),
+                        **{k: v[i] for k, v in resp.items()}))
+
+                for stage in stages:
+                    patches = captured[stage]
+                    canon_tau = (tau_canon if fdiag.canon_defines_stage(stage)
+                                 else MISSING)
+                    values, stage_maps = fdiag.patch_diagnostics(
+                        patches, tau_cal=tau_cal[stage], tau_canon=canon_tau)
+                    maps.add(cond["id"], stage, stage_maps)
+                    for i in range(n):
+                        diag_rows.append(dict(
+                            base, image_id=ids[cursor + i],
+                            condition_id=cond["id"], stage=stage,
+                            stage_resolved=resolve_stage(stage),
+                            edit_type=cond["edit_type"],
+                            n_patches=int(patches.shape[1]),
+                            tau_cal_value=tau_cal[stage],
+                            tau_canon_value=(str(canon_tau)
+                                             if isinstance(canon_tau, float)
+                                             else MISSING),
+                            **{k: v[i] for k, v in values.items()}))
+                cursor += n
+            summary["conditions"][cond["id"]] = {
+                "edit_type": cond["edit_type"], "n_images": cursor,
+                "stages": list(stages),
+                "edit_info": {k: v for k, v in edit_info.items()
+                              if not isinstance(v, (list, tuple)) or len(v) <= 16},
+            }
 
     hash_after = state_hash(model)
     summary["state_hash_after"] = hash_after
@@ -734,7 +894,8 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
             f"sweep ({hash_before[:12]} -> {hash_after[:12]})")
 
     out_dir = Path(out_dir)
-    n_rec, skip_rec = rec.append_rows(out_dir, "records", record_rows)
+    n_rec, skip_rec = rec.append_rows(out_dir, "records", record_rows,
+                                      columns=record_cols)
     n_diag, skip_diag = rec.append_rows(
         out_dir, "diag", diag_rows, key=rec.DIAG_STAGE_KEY,
         columns=rec.DIAG_STAGE_COLUMNS)
@@ -743,6 +904,8 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
         "run_id": row["run_id"], "ckpt_sha256": row["ckpt_sha256"],
         "work_package": conditions["work_package"], "stage": report_stage,
         "hist_stage": HIST_STAGE, "split_name": split_name,
+        "permutations_file": conditions.get("permutations_file", MISSING),
+        "permutations_sha256": perm_sha,
         "split_sha256": split_sha, "n_conditions": len(declared),
         "n_records_appended": n_rec, "n_records_skipped": skip_rec,
         "cell": cell, "tau_cal": tau_cal, "tau_canon": tau_canon,

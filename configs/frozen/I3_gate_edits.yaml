@@ -1,0 +1,446 @@
+# configs/frozen/I3_gate_edits.yaml — TASK B / I3's conditions, and the only
+# place they are defined
+# =============================================================================
+# I3 asks whether the SPATIAL ARRANGEMENT of the learned gate matters to the
+# model that learned it. A trained SAGA checkpoint is edited at inference —
+# the gate at ONE block replaced by its per-head mean, by a partially
+# flattened version, by a permutation with the same per-head histogram, by a
+# ring-preserving symmetry — and the paired per-image NLL is measured against
+# the unedited forward.
+#
+# NO RETRAINING. The answer is therefore about what the frozen model USES,
+# not about what a scalar gate trained from scratch would achieve. That second
+# question needs Track T and is not claimed here (TASK B section 10).
+#
+# 61 conditions per checkpoint:
+#
+#     original                          1
+#     per layer l in {7, 8}:
+#       mean_L{l}                       1
+#       mean_half_L{l}                  1
+#       perm{k}_L{l},      k = 0..9    10
+#       ringperm{k}_L{l},  k = 0..9    10
+#       dihedral{t}_L{l},  t = 0..7     8
+#                                   ------
+#                           1 + 2 x 30 = 61
+#
+# Nothing below is selectable from the command line. tools/frozen_eval.py
+# takes WHICH run, WHICH split, WHERE the data is and how many images — never
+# a condition, a layer, a permutation or a threshold. This file is committed
+# before the job runs, which is what makes "the analysis configuration was
+# fixed before the outcomes were inspected" a property of this repository
+# rather than a promise (plan section 6.2, I0 handoff section 1).
+
+work_package: I3_gate_edits
+
+# D1 is CLOSED at `s11_out` (docs/LOCKED_ANALYSIS.md section 1), so every new
+# patch diagnostic is reported there. I3 records it for three conditions only
+# (see `diag:` below); the other 58 record the functional response alone.
+stage: s11_out
+
+# fp32 everywhere: tools/eval.py recorded amp='off' for every historical
+# number, and a logit COMPARISON in bf16 would be dominated by the cast.
+precision: fp32
+
+# ── Layers ───────────────────────────────────────────────────────────────────
+# 0-based blocks 7 and 8 = paper blocks 8 and 9 (LOCKED_ANALYSIS section 2).
+# Selected because TASK-07 found the gate's suppression map significantly
+# anti-correlated with the sink address there in all four ViT-S/mixup repeats
+# — a selection made on DISCOVERY material, disclosed as such. No layer is
+# selected after inspecting an evaluation loss. Each condition edits ONE
+# layer; joint edits are not in scope.
+
+# ── Thresholds ───────────────────────────────────────────────────────────────
+# CONSUMED, NOT RECOMPUTED. `tau_cal[s11_out]` for this split was computed by
+# TASK I2 from each cell's canon-designated baseline and is committed at the
+# path below. I3 reads it and calibrates nothing: a second calibration with
+# the same key and a different value is exactly the kind of drift
+# saga/frozen/diag.py exists to prevent.
+#
+# There is deliberately NO `calibration_stages` key here. That key is what
+# tools/frozen_I2_thresholds.py reads, and pointing that tool at this file
+# would make it write into I2's directory. I3's job file never runs it.
+thresholds_canon: results/diagsplit/fixed_thresholds_canon.json
+thresholds_cal: results/frozen/I2_terminal/{split_name}/thresholds_cal.json
+
+# ── Permutations: read, never drawn ──────────────────────────────────────────
+# D3 is CLOSED: the ten position and ten within-ring permutations of the 14x14
+# grid are generated once, committed, and shared across every checkpoint on
+# the same grid. A condition names one by {source, index}; the runner resolves
+# it out of this file at parse time and records the file's sha256 on EVERY
+# record row. saga/frozen/edits.py::gate_edit refuses to draw a permutation,
+# and an AST test refuses any numpy.random / torch.rand* call on the run-time
+# path, so there is no code path that could sample a fresh one per checkpoint.
+permutations_file: configs/frozen/permutations_14x14.json
+
+# ── The size of each edit ────────────────────────────────────────────────────
+# `delta_update_norm` = ||u_edit - u_native||_F over the patch rows of the
+# attention-branch residual update at the edited block (saga/frozen/reference.py).
+# A gate collapsed to its mean and a gate permuted within its rings are not the
+# same size of intervention; TASK B section 3 therefore reports Delta-NLL within
+# DECILES of this quantity, so the families are compared at equal injected
+# energy. Energy matching in I3 is by stratification and costs no extra
+# forward pass — this is the clarification of the LOCKED I3 variant list
+# (section 3 item 7) that goes into the LOCKED file with the freeze.
+measure_update_norm: true
+energy_strata: 10
+
+# Image-level bootstrap (LOCKED_ANALYSIS section 8: 10,000 resamples; D6 =
+# seed 0, CLOSED). Recorded here and in every output so the value is visible.
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# `applies_to: [saga]` on every one of them: a gate edit needs a gate, and
+# saga/frozen/edits.py refuses a baseline or a register model rather than
+# treating it as "already flat". Pointing this file at a non-SAGA run is a
+# loud refusal, not an empty sweep.
+#
+# `diag:` is the patch-diagnostics switch (TASK B section 3): `original`,
+# `mean_L7` and `mean_L8` record the s11_out summaries, the other 58 record
+# the functional response only. 61 x 10,000 rows of diagnostics for conditions
+# no table reads would be an hour of SVDs and a gigabyte of parquet.
+conditions:
+  # 1. The reference. A PLAIN forward: `original` is the unedited model,
+  #    the source of the cached native logits every
+  #    `max_abs_logit_diff_vs_native` is measured against, and the
+  #    reference of every Delta in TASK B section 4. Its own
+  #    `delta_update_norm` is 0 by definition.
+  #
+  #    LOCKED_ANALYSIS section 3 item 1 describes `original` as the gate's
+  #    own map pushed through the REPLACEMENT MODULE, as a bit-exactness
+  #    control. That control is `dihedral0` below, which is exactly that
+  #    and is required to be bit-identical to this condition; making
+  #    `original` itself the plain forward is what lets it be the native
+  #    cache the runner needs as its first condition.
+  - id: original
+    edit_type: native
+    applies_to: [saga]
+    stages: [s11_out]
+    diag: true
+  # ---- block 7 (0-based) = paper block 8 ----------------------------------------
+  # mu_h at every position: the arrangement removed entirely, the
+  # per-head mean kept. C1 is this minus `original`.
+  - id: mean_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: mean}
+    applies_to: [saga]
+    stages: [s11_out]
+    diag: true
+  # mu_h + 0.5 * delta_h(p): half the arrangement. LOCKED_ANALYSIS
+  # section 3 item 3 fixes alpha = 0.5; it is not a swept knob.
+  - id: mean_half_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: mean_plus_alpha_delta, alpha: 0.5}
+    applies_to: [saga]
+    diag: false
+  # The 10 fixed POSITION permutations, shared across heads, read
+  # from `permutations_file` by index. Same per-head histogram, no
+  # ring structure preserved.
+  - id: perm0_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 0}}
+    applies_to: [saga]
+    diag: false
+  - id: perm1_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 1}}
+    applies_to: [saga]
+    diag: false
+  - id: perm2_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 2}}
+    applies_to: [saga]
+    diag: false
+  - id: perm3_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 3}}
+    applies_to: [saga]
+    diag: false
+  - id: perm4_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 4}}
+    applies_to: [saga]
+    diag: false
+  - id: perm5_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 5}}
+    applies_to: [saga]
+    diag: false
+  - id: perm6_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 6}}
+    applies_to: [saga]
+    diag: false
+  - id: perm7_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 7}}
+    applies_to: [saga]
+    diag: false
+  - id: perm8_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 8}}
+    applies_to: [saga]
+    diag: false
+  - id: perm9_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute, perm: {source: position, index: 9}}
+    applies_to: [saga]
+    diag: false
+  # The 10 fixed WITHIN-RING permutations: the arrangement inside
+  # each Chebyshev ring destroyed, the ring profile untouched.
+  - id: ringperm0_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 0}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm1_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 1}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm2_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 2}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm3_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 3}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm4_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 4}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm5_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 5}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm6_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 6}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm7_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 7}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm8_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 8}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm9_L7
+    edit_type: gate_edit
+    params: {layer: 7, mode: permute_within_ring, perm: {source: within_ring, index: 9}}
+    applies_to: [saga]
+    diag: false
+  # The 8 symmetries of the 14x14 grid (D2, all 8). t = 0 is the
+  # identity and MUST be bit-identical to `original`.
+  - id: dihedral0_L7          # identity
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 0}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral1_L7          # flip_lr
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 1}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral2_L7          # rot90
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 2}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral3_L7          # rot90_flip_lr
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 3}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral4_L7          # rot180
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 4}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral5_L7          # rot180_flip_lr
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 5}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral6_L7          # rot270
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 6}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral7_L7          # rot270_flip_lr
+    edit_type: gate_edit
+    params: {layer: 7, mode: dihedral, perm: 7}
+    applies_to: [saga]
+    diag: false
+  # ---- block 8 (0-based) = paper block 9 ----------------------------------------
+  # mu_h at every position: the arrangement removed entirely, the
+  # per-head mean kept. C1 is this minus `original`.
+  - id: mean_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: mean}
+    applies_to: [saga]
+    stages: [s11_out]
+    diag: true
+  # mu_h + 0.5 * delta_h(p): half the arrangement. LOCKED_ANALYSIS
+  # section 3 item 3 fixes alpha = 0.5; it is not a swept knob.
+  - id: mean_half_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: mean_plus_alpha_delta, alpha: 0.5}
+    applies_to: [saga]
+    diag: false
+  # The 10 fixed POSITION permutations, shared across heads, read
+  # from `permutations_file` by index. Same per-head histogram, no
+  # ring structure preserved.
+  - id: perm0_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 0}}
+    applies_to: [saga]
+    diag: false
+  - id: perm1_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 1}}
+    applies_to: [saga]
+    diag: false
+  - id: perm2_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 2}}
+    applies_to: [saga]
+    diag: false
+  - id: perm3_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 3}}
+    applies_to: [saga]
+    diag: false
+  - id: perm4_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 4}}
+    applies_to: [saga]
+    diag: false
+  - id: perm5_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 5}}
+    applies_to: [saga]
+    diag: false
+  - id: perm6_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 6}}
+    applies_to: [saga]
+    diag: false
+  - id: perm7_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 7}}
+    applies_to: [saga]
+    diag: false
+  - id: perm8_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 8}}
+    applies_to: [saga]
+    diag: false
+  - id: perm9_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute, perm: {source: position, index: 9}}
+    applies_to: [saga]
+    diag: false
+  # The 10 fixed WITHIN-RING permutations: the arrangement inside
+  # each Chebyshev ring destroyed, the ring profile untouched.
+  - id: ringperm0_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 0}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm1_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 1}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm2_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 2}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm3_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 3}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm4_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 4}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm5_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 5}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm6_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 6}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm7_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 7}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm8_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 8}}
+    applies_to: [saga]
+    diag: false
+  - id: ringperm9_L8
+    edit_type: gate_edit
+    params: {layer: 8, mode: permute_within_ring, perm: {source: within_ring, index: 9}}
+    applies_to: [saga]
+    diag: false
+  # The 8 symmetries of the 14x14 grid (D2, all 8). t = 0 is the
+  # identity and MUST be bit-identical to `original`.
+  - id: dihedral0_L8          # identity
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 0}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral1_L8          # flip_lr
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 1}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral2_L8          # rot90
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 2}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral3_L8          # rot90_flip_lr
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 3}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral4_L8          # rot180
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 4}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral5_L8          # rot180_flip_lr
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 5}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral6_L8          # rot270
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 6}
+    applies_to: [saga]
+    diag: false
+  - id: dihedral7_L8          # rot270_flip_lr
+    edit_type: gate_edit
+    params: {layer: 8, mode: dihedral, perm: 7}
+    applies_to: [saga]
+    diag: false

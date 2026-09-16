@@ -14,6 +14,7 @@ would be invisible on a CLS-only model and would silently invalidate every
 register comparison (plan §13.3).
 """
 
+import ast
 import json
 from pathlib import Path
 
@@ -899,3 +900,122 @@ def test_no_optimizer_or_training_import_in_the_frozen_package():
             elif isinstance(node, ast.Attribute):
                 assert node.attr not in ("backward", "zero_grad"), \
                     f"{path.name} calls .{node.attr}()"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# No sampling on the run-time path (TASK B §7, extending the guard above)
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: The modules a frozen SWEEP actually executes. Permutations, ring
+#: permutations, dihedral transforms and masks are loaded from committed files
+#: or from fixed definitions; a random draw ANYWHERE here would mean the
+#: object being applied was not the object that was fixed in advance.
+RUNTIME_FROZEN = ("edits.py", "runner.py", "reference.py", "records.py",
+                  "stages.py", "diag.py")
+
+#: The generator functions that are allowed to draw, with the ONE constructor
+#: they may use. These do not run inside a sweep: `split_half_indices` shuffles
+#: an image order for a reliability statistic, and `ring_matched_controls`
+#: builds the D5 control masks that are then COMMITTED to
+#: `configs/frozen/I4_masks.json` and loaded back by sha256. Both take an
+#: explicit seed. The list is exhaustive and the test fails on anything new,
+#: so widening it is a visible decision in a diff rather than a habit.
+SAMPLING_ALLOWLIST = {
+    ("norms.py", "split_half_indices"): "np.random.RandomState",
+    ("prevalence.py", "ring_matched_controls"): "np.random.RandomState",
+}
+
+
+def _attribute_chain(node):
+    """`np.random.RandomState` for the Attribute node of that expression."""
+    parts, n = [], node
+    while isinstance(n, ast.Attribute):
+        parts.append(n.attr)
+        n = n.value
+    if isinstance(n, ast.Name):
+        parts.append(n.id)
+    return ".".join(reversed(parts))
+
+
+def _sampling_sites(path):
+    """[(function name, chain, lineno)] for every random-ish reference."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    found, stack = [], []
+
+    def walk(node, fn):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            fn = node.name
+        if isinstance(node, ast.Attribute):
+            chain = _attribute_chain(node)
+            if (chain.split(".")[-2:-1] == ["random"]
+                    or chain.startswith("torch.rand")
+                    or chain.startswith("random.")):
+                found.append((fn, chain, node.lineno))
+        for child in ast.iter_child_nodes(node):
+            walk(child, fn)
+
+    walk(tree, "<module>")
+    # keep the longest chain per (function, line): the visitor sees the
+    # outer Attribute and its prefix at the same position
+    best = {}
+    for fn, chain, lineno in found:
+        key = (fn, lineno)
+        if key not in best or len(chain) > len(best[key][1]):
+            best[key] = (fn, chain, lineno)
+    return sorted(best.values(), key=lambda t: t[2])
+
+
+def test_no_sampling_on_the_frozen_run_time_path():
+    """TASK B §7: no code path draws a random spatial object at run time.
+
+    `gate_edit` already REFUSES to invent a permutation, and D3's lists are
+    committed — but that guarantee is only as good as the absence of a second
+    code path that could sample one. This asserts the absence directly, at the
+    AST level, on the modules a sweep executes.
+    """
+    targets = [REPO / "saga" / "frozen" / n for n in RUNTIME_FROZEN]
+    targets.append(REPO / "tools" / "frozen_eval.py")
+    for path in targets:
+        assert path.exists(), f"{path} is missing — the guard names it"
+        sites = _sampling_sites(path)
+        assert not sites, (
+            f"{path.name} references {[s[1] for s in sites]} at line(s) "
+            f"{[s[2] for s in sites]}. Nothing on the frozen run-time path "
+            f"may draw a random number: the permutations, the dihedral "
+            f"transforms and the I4 masks are read from committed files.")
+
+
+def test_every_other_sampling_site_in_the_frozen_package_is_declared():
+    """The generators outside the run-time path, and ONLY those.
+
+    `saga/frozen/norms.py` and `saga/frozen/prevalence.py` (TASK A / I1) do
+    draw, with an explicit seed, to build artifacts that are then committed
+    and loaded back by digest. They are allowed BY NAME, with the one
+    constructor they may use — never a module-level `np.random.*` call, which
+    would run off the global stream and be irreproducible. A new sampling
+    site anywhere in `saga/frozen/` fails this test until it is declared here.
+    """
+    seen = {}
+    for path in sorted((REPO / "saga" / "frozen").glob("*.py")):
+        if path.name in RUNTIME_FROZEN:
+            continue                     # covered by the test above
+        for fn, chain, lineno in _sampling_sites(path):
+            key = (path.name, fn)
+            assert key in SAMPLING_ALLOWLIST, (
+                f"{path.name}:{lineno} in {fn}() references {chain}, which no "
+                f"entry of SAMPLING_ALLOWLIST permits. A frozen work package "
+                f"that needs a random draw declares it here, with its seed, "
+                f"or it does not draw.")
+            assert chain == SAMPLING_ALLOWLIST[key], (
+                f"{path.name}:{lineno} in {fn}() uses {chain}; the allowlist "
+                f"permits {SAMPLING_ALLOWLIST[key]} only. A bare "
+                f"`np.random.<fn>` call draws from the GLOBAL stream and is "
+                f"not reproducible from a recorded seed.")
+            seen[key] = chain
+    # the allowlist is not allowed to rot either: an entry whose call site has
+    # gone is a permission nobody is using and nobody will notice widening
+    stale = sorted(set(SAMPLING_ALLOWLIST) - set(seen))
+    assert not stale, (
+        f"SAMPLING_ALLOWLIST still permits {stale}, but those call sites no "
+        f"longer exist. Remove the entry rather than leaving a standing "
+        f"permission for a draw that is not happening.")

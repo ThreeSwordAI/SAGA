@@ -4929,3 +4929,219 @@ not re-downloaded.**
 Phase B, attempt 2. The HPC has one unpushed commit (`4917b11`, the weight
 shas) which must be pushed BEFORE the local merge, or the merge will not see
 it.
+## 2026-09-17 — TASK B — I3 PHASE A (conditions, native reference, contrasts, tables, job file, tests)
+
+Worktree `../SAGA-B`, branch `task/B`, tag `[I3]`. Nine commits, `3b85813`
+(task file) through `3607d67` (tests), plus this entry. No push. Nothing ran
+on the HPC. **I4 is NOT part of this session** — the checkpoint between the
+two work packages is deliberate.
+
+Track A's I1 Phase A was already merged into `main` (`3703e11`) when this
+branch was cut. Track A then merged I6 Phase A and two Phase-B-attempt
+commits while this work was in progress, so `task/B` was rebased onto
+`e3a2b46` at the end. ONE conflict, in `docs/TASK_LOG.md`, resolved by
+keeping both tracks' entries in chronological order (Track A's I6 Phase A and
+Phase B attempt 1 on 2026-09-16/17, then this one). `saga/frozen/runner.py`
+did NOT conflict: Track A's new commits do not touch it, nor `records.py`,
+`edits.py`, `tests/test_I0_frozen.py` or `docs/I0_HANDOFF.md`. Their
+`saga/frozen/stages.py` change is additive (I6's external analog stages) and
+does not touch `model_blocks` or `num_prefix_tokens`, which `reference.py`
+uses.
+
+### The 61 conditions
+
+`configs/frozen/I3_gate_edits.yaml`, and they exist nowhere else.
+
+| family | per layer | layers | total |
+|---|---|---|---|
+| `original` (plain forward, the reference of every Δ) | — | — | 1 |
+| `mean_L{ℓ}` | 1 | 7, 8 | 2 |
+| `mean_half_L{ℓ}` (α = 0.5) | 1 | 7, 8 | 2 |
+| `perm{k}_L{ℓ}`, k = 0..9 | 10 | 7, 8 | 20 |
+| `ringperm{k}_L{ℓ}`, k = 0..9 | 10 | 7, 8 | 20 |
+| `dihedral{t}_L{ℓ}`, t = 0..7 | 8 | 7, 8 | 16 |
+| **total** | **30** | | **61** |
+
+All `applies_to: [saga]` — a gate edit needs a gate, and pointing the file at
+a baseline is a loud refusal rather than an empty sweep. All edit ONE layer.
+Three record the `s11_out` diagnostics (`original`, `mean_L7`, `mean_L8`); the
+other 58 record the functional response only.
+
+The dihedral transforms are indexed by `DIHEDRAL_OPS`, which is
+`(k_rot90, flip)` for k = 0..3 and flip in (False, True):
+
+| t | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|---|
+| | identity | flip_lr | rot90 | rot90+flip | rot180 | rot180+flip | rot270 | rot270+flip |
+
+`t = 0` is the identity, and `dihedral0` must be bit-identical to `original`.
+`saga/frozen/edits.dihedral_permutation()` is now the ONE definition; the
+conditions file names the transforms and the tests check them as
+ring-preserving bijections against `analysis.address_analysis.ring_indices`.
+A second derivation for that purpose could have drifted from the one actually
+applied — a `dihedral3` that is still *a* symmetry, but not the one the tables
+say it is.
+
+### `delta_update_norm`, and the one place the task file was not followed
+
+`saga/frozen/reference.py` (new) computes, per image, ‖u_edit − u_native‖_F
+over the PATCH rows of the attention-branch residual update
+`drop_path1(ls1(attn(norm1(x))))` at the edited block. The runner edit is
+small: a `with fref.update_reference(...)` around the existing condition loop,
+one `ref.clear()` before each forward and one `ref.delta_update_norm()` after
+it, plus the new column. The loop body is otherwise unchanged apart from its
+indentation — `git diff -w` shows the real change.
+
+**The task file says "computed against the cached native forward of the same
+batch". It is NOT cached, and the departure is deliberate.** The runner's loop
+is condition-major, so a cache of u_native would have to hold every batch at
+once: 10,000 images × 196 patches × 384 dims × 4 B × 2 layers = **6.0 GB for
+ViT-S and 12.0 GB for ViT-B**, in a job whose memory request this repository
+does not document (`How to Run.md` has no `--mem` line, and I did not invent
+one). It does not have to be cached: every I3 condition edits ONE block, so
+the residual stream ENTERING that block is bit-identical to the native one,
+and u_native is recovered by evaluating the block's own attention branch once
+more after the edit context has restored the gate — one attention branch,
+about 1/24 of a forward. Verified three ways on a fake model: the
+recomposition reproduces a HOOKED native update bit-identically, the measured
+delta equals a hand computation that uses no part of `reference.py`, and
+`original` and `dihedral0` both measure exactly 0.0.
+
+Both hooks sit on modules no edit ever swaps — the block itself (pre-hook, for
+its input) and `drop_path1` (forward hook, for u_edit) — so they are
+registered once for the whole sweep. A hook on `attn` would be ordered against
+`receiver_perturbation`'s returning hook (I0 handoff §5); a hook on the gate
+would have to be re-registered inside every edit, because `gate_edit` replaces
+that module.
+
+### Three more runner changes, all additive
+
+- `diag:` per condition (default true), because `load_conditions` refuses a
+  document where only some conditions declare `stages`, and I3 needs the
+  diagnostics for 3 of 61. A non-recording condition declares no `stages` and
+  is refused if it does.
+- `perm: {source, index}` resolved out of `permutations_file` at parse time,
+  with the file's sha256 written onto EVERY record row. The resolved 196
+  indices stay out of `params`, which is serialised into `edit_params` on each
+  of 610,000 rows.
+- `measure_update_norm: true` selects `RECORD_UPDATE_COLUMNS`, the way
+  `DIAG_STAGE_COLUMNS` is already selected. I1's and I2's documents keep the
+  old schema exactly; a test pins that.
+
+### A real bug found on the way
+
+The `layer` record column mixed the literal `MISSING` with an int as soon as a
+work package had both kinds of condition, and **pyarrow refuses that column
+outright** (`ArrowTypeError: Expected bytes, got a 'int' object`). Every I2
+condition is layer-less, so it had never happened; I3 is the first sweep where
+it does, and it would have lost the whole run at the write, after the GPU
+time. `runner.layer_cell()` makes it a string column, as `count_fixed_canon`
+already is and for the same reason. **`epsilon` has the same shape and will
+hit it in I4** (`native` MISSING, `prim_e10_L7` 0.10) — that is a one-line fix
+in B2b and is listed under Pending rather than done here.
+
+### Discrepancies between the task file, LOCKED_ANALYSIS and the repository
+
+Four, none of them silent.
+
+1. **The AST guard could not be written as specified.** "Any `numpy.random` /
+   `torch.rand*` call inside `saga/frozen/` is a test failure" fails on code
+   Track A has already merged: `norms.py::split_half_indices` and
+   `prevalence.py::ring_matched_controls`, both `np.random.RandomState` with
+   an explicit seed. Neither runs inside a sweep — the first shuffles an image
+   order for a reliability statistic, the second BUILDS the D5 masks that are
+   then committed and loaded back by digest — so the guard is two-tier: a hard
+   ban on the six modules a sweep executes plus `tools/frozen_eval.py`, and a
+   pinned `(file, function) → np.random.RandomState` allowlist for the rest,
+   never a bare `np.random.<fn>`, which draws off the global stream and is not
+   reproducible from a recorded seed. A new sampling site anywhere in the
+   package fails until declared; a declared site that disappears fails too, so
+   the permission cannot outlive its call. **If the human wants the literal
+   ban, Track A's two generators have to move out of `saga/frozen/` first.**
+2. **LOCKED §9 names different I3 contrasts than the task file.** LOCKED says
+   the I3 primary contrasts are "`original` vs `permute`, and `permute` vs
+   `permute_within_ring`"; the task file's D7 table says C1 = `mean` −
+   `original` and C2 = mean(10 `perm`) − mean(7 non-identity `dihedral`).
+   Implemented per the task file, which is the specification this session was
+   given. **LOCKED §9 must be reconciled before the file is frozen** — and the
+   freeze gates I4, so this is on the critical path.
+3. **LOCKED §3 item 7 lists an energy-matched EDIT as a 7th I3 variant.** The
+   task file replaces it with decile stratification of `delta_update_norm` and
+   says so explicitly ("goes into the LOCKED file with the freeze"). The 61
+   conditions contain no energy-matched forward. Same freeze, same
+   reconciliation.
+4. **LOCKED §3 item 1 makes `original` the gate's own map through the
+   REPLACEMENT module; the task file makes it a plain forward.** Implemented
+   as a plain forward, because the runner needs its first condition to be the
+   native pass it caches logits from. Nothing is lost: `dihedral0` IS the
+   gate's own map through the replacement module, and §3 already requires it
+   to be bit-identical to `original`, so the bit-exactness control LOCKED asks
+   for is in the 61 under another name.
+
+And one correction to the task file's own HPC block: §9 says "array 0-3 = the
+4 ViT-S/mixup SAGA checkpoints, array 4-7 = exploratory". The repository's
+cohort order sorts by (arch, recipe_actual, variant, provenance_tag, run_id)
+and puts ViT-B first, so the primary cell is **2-5** and the pair that decides
+is **4-5**. The command is unchanged (`--array=0-7` runs all 8); the job file
+carries the map the manifest actually produces, checks it at run time, and a
+test pins it.
+
+### The contrasts module decides; nothing is re-framed by inspection
+
+`analysis/i34_contrasts.py`. C1 and C2 complete, C3 a typed stub raising
+`NotImplementedError("C3 is I4 Phase A′")`. `decide()` is LOCKED §10 — the two
+fresh ViT-S/mixup checkpoints and only they vote, direction consistent, both
+image-level bootstrap CIs (10,000 resamples, seed 0) exclude zero. An absent
+deciding checkpoint is `insufficient`, never `null`: an absence is not a
+measurement. `interpret_i3` returns the §4 branch text VERBATIM (including its
+U+2011 non-breaking hyphens) and a test asserts each branch appears
+byte-for-byte in the task file. A (C1, C2) pattern the guide did not
+anticipate — either contrast negative, or C2 alone positive — lands in a
+fourth branch that says it is unanticipated rather than borrowing the nearest
+named sentence. All five outcomes are exercised on synthetic records.
+
+C2 excludes `dihedral0` explicitly: it is bit-identical to `original`, so
+including it would shrink the contrast by 1/8 for a reason unrelated to
+arrangement.
+
+### Tables
+
+`analysis/frozen_I3_analysis.py` builds T_I3a–d and computes no contrast of
+its own — T_I3b is `i34_contrasts` output reshaped into CSV. The deciles of
+T_I3c are pooled over conditions per checkpoint, not per family: per-family
+deciles would put each family's own median in bin 5 and make the comparison
+vacuous. The stratum unit is an (image, condition) PAIR, and the column is
+named `n_pairs` so nobody reads it as an image count. Every row carries its
+scope — fresh (decides), legacy (reported), exploratory — computed from the
+manifest and never from an array index.
+
+### Tests
+
+`pytest -q` on the rebased branch: **1006 passed, 1 failed, 30 skipped.**
+Track B contributes +67 — 64 in the new I3 file, 2 in the extended I0 guard,
+and 1 because the repo-wide `set -u` ordering pin over `scripts/**/*.sbatch`
+picked up `frozen_I3.sbatch` and it passes. Before the rebase, on the old
+`main`, the same code was 947 passed / 30 skipped / 0 failed.
+
+**THE ONE FAILURE IS NOT TRACK B's AND IS NOT FIXED HERE.**
+`tests/test_I6_external.py::test_the_download_tool_writes_a_sha_without_touching_anything_else`
+fails identically at `e3a2b46` with none of Track B's code present — verified
+by running it in a detached worktree at that commit. It is Track A's I6 Phase
+B in flight: the committed config still says `PENDING` where the HPC's
+`4917b11` wrote `1e747b4a…`. It belongs to Track A and touching it from here
+would be editing another task's work.
+
+Nothing weakened, skipped or deleted. `docs/I0_HANDOFF.md` moved
+101 → 103 test functions,
+regenerated by its own generator at the sha it records — no prose changed, and
+`tests/test_I0_phasec.py` is the test that demands it.
+
+### Pending
+
+- I3 Phase B has not run. The HPC block is printed with this entry.
+- I4 Phase A′ has not started. Its precondition — `saga/frozen/prevalence.py`
+  on `main` — is ALREADY satisfied, so it can begin whenever the human says
+  so. B2b should start by giving `epsilon` the `layer_cell()` treatment.
+- I4 Phase B stays embargoed until D5 is closed and `docs/LOCKED_ANALYSIS.md`
+  carries `STATUS: FROZEN`. Discrepancies 2 and 3 above have to be settled in
+  that same act.

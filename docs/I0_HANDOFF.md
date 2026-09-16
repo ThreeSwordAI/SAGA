@@ -9,11 +9,11 @@ I0 concluded nothing scientific, by design. It exists so that I1-I7 share one de
 
 | phase | what | state |
 |---|---|---|
-| A | manifest, splits builder, framework, smoke checker, hash tool, 101 test functions | **done** |
+| A | manifest, splits builder, framework, smoke checker, hash tool, 103 test functions | **done** |
 | B | HPC: split build, checkpoint hashes, 32-image smoke on three checkpoints | **done** |
 | C | handoff, `LOCKED_ANALYSIS` split shas, final row counts | **done** |
 
-TASK I0 contributes 101 test functions (47 frozen, 34 manifest, 20 splits); the repo-wide total is deliberately not quoted here, since it drifts with every other task.
+TASK I0 contributes 103 test functions (49 frozen, 34 manifest, 20 splits); the repo-wide total is deliberately not quoted here, since it drifts with every other task.
 
 ## 1. What a later work package actually uses
 
