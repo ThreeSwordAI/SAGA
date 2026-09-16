@@ -444,10 +444,22 @@ def test_the_terminal_override_restores_the_model(saga_model, images):
 # The multi-stage loop
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _rows(out_dir, kind):
+    """The `kind` file as string-valued dicts, parquet OR csv.
+
+    `saga/frozen/records.py` writes parquet when pyarrow is importable and
+    CSV otherwise — the HPC has it, a bare login node may not — so a test
+    that reads back what the runner wrote must not assume either. Values are
+    normalised to `str` so one assertion covers both (CSV gives strings;
+    parquet gives typed values).
+    """
+    from analysis.build_I2_tables import read_rows
+    return [{k: (MISSING if v is None else str(v)) for k, v in row.items()}
+            for row in read_rows(rec.records_path(out_dir, kind))]
+
+
 def _diag_rows(out_dir):
-    with open(rec.records_path(out_dir, "diag"), newline="",
-              encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+    return _rows(out_dir, "diag")
 
 
 def test_the_sweep_writes_one_diag_row_per_image_condition_stage(
@@ -509,9 +521,7 @@ def test_every_row_carries_the_provenance_columns(saga_model, tmp_path,
         # the declared stage name AND what it resolves to, on every row
         assert r["stage_resolved"] == (HIST_STAGE if r["stage"] == "hist"
                                        else r["stage"])
-    with open(rec.records_path(tmp_path, "records"), newline="",
-              encoding="utf-8") as f:
-        records = list(csv.DictReader(f))
+    records = _rows(tmp_path, "records")
     assert set(records[0]) == set(rec.RECORD_COLUMNS)
     assert {r["stage"] for r in records} == {"hist"}
 
@@ -1278,6 +1288,7 @@ I2_FILES = [
     REPO / "tools" / "frozen_I2_thresholds.py",
     REPO / "analysis" / "build_I2_tables.py",
     REPO / "analysis" / "i2_decision.py",
+    REPO / "analysis" / "build_D1_proposal.py",
 ]
 
 
@@ -1288,7 +1299,7 @@ def test_no_optimizer_or_training_import_in_the_new_I2_files():
     banned_modules = ("torch.optim", "torch.optim.lr_scheduler")
     banned_names = {"AdamW", "Adam", "SGD", "backward", "step",
                     "LabelSmoothingCrossEntropy", "Mixup"}
-    assert len(I2_FILES) == 4
+    assert len(I2_FILES) == 5
     for path in I2_FILES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
@@ -1306,6 +1317,115 @@ def test_no_optimizer_or_training_import_in_the_new_I2_files():
             elif isinstance(node, ast.Attribute):
                 assert node.attr not in ("backward", "zero_grad"), \
                     f"{path.name} calls .{node.attr}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase C1 — the committed tables and the generated D1 proposal
+# ─────────────────────────────────────────────────────────────────────────────
+
+RESULTS = REPO / "results" / "frozen" / "I2_terminal"
+TABLE_DIR = RESULTS / "tables"
+PROPOSAL = RESULTS / "D1_proposal.md"
+
+needs_results = pytest.mark.skipif(
+    not (TABLE_DIR / "T_I2c_gaps.csv").exists(),
+    reason="the I2 sweep results / tables are not present in this checkout")
+
+
+@needs_results
+def test_the_committed_proposal_is_what_the_generator_produces():
+    """A generated file under results/ is REGENERATED, never hand-merged
+    (I0 handoff §8.6). Two builds must agree with each other AND with what
+    is committed — so a hand edit to the note shows up here as a failure."""
+    from analysis.build_D1_proposal import build
+    once = build(TABLE_DIR, RESULTS / "thresholds_cal.json")
+    twice = build(TABLE_DIR, RESULTS / "thresholds_cal.json")
+    assert once == twice, "the generator is not deterministic"
+    assert PROPOSAL.read_text(encoding="utf-8") == once, (
+        "results/frozen/I2_terminal/D1_proposal.md differs from what "
+        "analysis/build_D1_proposal.py produces — regenerate it, never edit "
+        "it by hand")
+
+
+@needs_results
+def test_no_generated_markdown_table_row_contains_an_unescaped_pipe():
+    """A literal `|` inside a cell silently breaks its row, and every cell
+    name in this project is `<arch>|<recipe_actual>`. TASK I0 Phase C hit
+    this twice; it cannot come back."""
+    text = PROPOSAL.read_text(encoding="utf-8")
+    rows = [l for l in text.splitlines()
+            if l.startswith("|") and l.rstrip().endswith("|")]
+    assert rows, "no markdown table rows found in the proposal"
+    widths = {}
+    block = 0
+    prev_was_row = False
+    for line in text.splitlines():
+        is_row = line.startswith("|") and line.rstrip().endswith("|")
+        if is_row and not prev_was_row:
+            block += 1
+        prev_was_row = is_row
+        if not is_row:
+            continue
+        # count only the SEPARATORS: an escaped pipe is content
+        n = line.replace("\\|", "\x00").count("|") - 1
+        widths.setdefault(block, []).append((n, line))
+    for cols in widths.values():
+        counts = {n for n, _ in cols}
+        assert len(counts) == 1, (
+            "a table block has rows of differing column counts, which means "
+            "an unescaped `|`:\n  "
+            + "\n  ".join(f"{n}: {l}" for n, l in cols))
+
+
+@needs_results
+def test_the_proposal_is_unsigned_and_quotes_the_rule_verbatim():
+    """The module proposes; the human signs. The note must carry an EMPTY
+    signature block and the rule's own sentence, unedited."""
+    from analysis.i2_decision import DECISION_CELL, decide, load_gaps
+    text = PROPOSAL.read_text(encoding="utf-8")
+    assert "**PROPOSED — NOT SIGNED**" in text
+    assert text.count("`PENDING`") == 2          # date, git sha
+    assert "(the human — nobody else)" in text
+
+    gaps, n_pairs = load_gaps(TABLE_DIR / "T_I2c_gaps.csv")[DECISION_CELL]
+    v = decide(gaps, cell=DECISION_CELL, n_pairs=n_pairs)
+    assert "> " + v["sentence"] in text, \
+        "the note must quote the rule's sentence verbatim, not a paraphrase"
+    assert f"D1 = `{v['d1_stage']}`" in text
+    # and it must still say what the cutoff is and that it is conventional
+    assert "conventional" in text
+    assert f"{v['cutoff']:.2f}" in text
+
+
+@needs_results
+def test_LOCKED_ANALYSIS_D1_is_still_open():
+    """C1 proposes D1; it does not sign it. Until the human does, §1 stays
+    `DECISION NEEDED` and no B2 or I1/I3/I4/I5 Phase-B run may start."""
+    locked = (REPO / "docs" / "LOCKED_ANALYSIS.md").read_text(encoding="utf-8")
+    section = locked.split("## 1. Feature stage")[1].split("## 2.")[0]
+    assert "DECISION NEEDED" in section
+    assert "STATUS: **DRAFT — NOT YET FROZEN**" in locked
+    assert locked.count("`PENDING`") >= 2
+
+
+@needs_results
+def test_the_committed_tables_are_from_one_split_and_the_whole_cohort():
+    import csv as _csv
+    names = ["T_I2a_invariance.csv", "T_I2b_sweep.csv", "T_I2c_gaps.csv",
+             "T_I2d_maps.csv", "T_I2e_registers.csv"]
+    shas = set()
+    for name in names:
+        with open(TABLE_DIR / name, newline="", encoding="utf-8") as f:
+            rows = list(_csv.DictReader(f))
+        assert rows, name
+        shas |= {r["split_sha256"] for r in rows}
+        assert {r["work_package"] for r in rows} == {"I2_terminal"}
+    assert len(shas) == 1, f"the tables mix {len(shas)} splits"
+    meta = json.loads((TABLE_DIR / "build_meta.json").read_text("utf-8"))
+    assert meta["split_name"] == "calibration"
+    assert meta["bootstrap_resamples"] == 10000 and meta["bootstrap_seed"] == 0
+    assert not meta["runs_absent"], meta["runs_absent"]
+    assert len(meta["runs_present"]) == 19
 
 
 def test_the_new_framework_file_is_inside_the_I0_ast_tests_glob():
