@@ -4500,3 +4500,111 @@ zero-mass note and the τ table; and the C2 log entry.
 
 **One login-node command**: build the evaluation tables and push them. No
 GPU. Nothing else is outstanding.
+
+---
+
+## 2026-09-16 — TASK I2, PHASE C2 — COMPLETE
+
+Worktree `../SAGA-I2`, branch `task/I2`, off `main` at `d6dc7bd`. Local only.
+**TASK I2 is finished.** Nothing is pending from the HPC.
+
+### The evaluation tables are complete
+
+`analysis/build_I2_tables.py` was re-run on the cluster against the raw
+records, and the tables came back with `runs_with_records: 19`,
+`runs_from_primary_pack: []`, no run absent: `T_I2a` 32 rows, `T_I2b` 121,
+`T_I2c` 108, `T_I2d` 176, `T_I2e` 48, no all-MISSING column.
+
+**The primary pack was validated against them.** The survivals computed
+locally from `figures_data/frozen/I2_evaluation_primary.npz` — before the
+raw tables existed — are the same numbers the parquet-built tables give:
+`cos_all` 0.6797, `cos_nosink_mad` 0.6941, `eff_rank` 0.8766,
+`count_fixed_cal` 0.9136, `count_mad` 0.9408. So the claim that every
+reported number regenerates from the repository while the raw parquet stays
+on the cluster is now a measured fact on real evaluation data, not only the
+unit test on calibration.
+
+### The architectural half, on 10,000 images
+
+8 SAGA checkpoints x 4 constants:
+
+| | measured |
+|---|---|
+| max abs logit difference vs native | **0** exactly |
+| min top-1 agreement with native | **1** |
+| max mean abs ΔNLL | **0** |
+| `native` ≡ `term_0.50` (φ_L = 0) | **8 of 8** bit-identical |
+| max abs Δ`cos_all` at `hist` under `term_1.00` | 0.1991 |
+
+Proposition 2 holds exactly on both splits, at 2,000 and at 10,000 images.
+
+### D1 corroborated
+
+The rule, run once on the evaluation tables as a consistency check and NOT
+acted on, returns **branch 3, `s11_out`** — the same branch as calibration,
+with the same two diagnostics failing the bypass test and every survival
+agreeing to within 0.032. Both non-voting cells reproduce their calibration
+branch. D1 stays signed on calibration, by design.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| D6 | `figures_data/frozen/F5A_terminal.npz` — 568 series over 8 pairs, 168 kB |
+| D9 | `docs/I2_HANDOFF.md` (138 lines, generated) and this entry |
+| — | `analysis/build_F5A_terminal.py`, `analysis/build_I2_handoff.py` |
+
+`F5A_terminal.npz` carries, per pair and at BOTH stages the terminal
+conditions are captured at, the SAGA value at each of the five conditions,
+its paired baseline under `native`, and the gap — plus the ZERO LINE:
+`logit_diff|<run_id>` is 0 at every constant on all 8 checkpoints and
+`top1_agree|<run_id>` is 1. On the `s1` pair at `hist`, `cos_all` runs
+0.3366 (native) → 0.3366 (`term_0.50`, identical) → 0.3889 (bypass) against a
+baseline of 0.4729. That is the panel: the diagnostic moves, the classifier
+does not.
+
+`docs/I2_HANDOFF.md` COPIES the signed D1 sentence out of
+`LOCKED_ANALYSIS.md` §1 rather than restating it, and carries the evaluation
+architectural table, the calibration-vs-evaluation survival comparison, the
+non-voting cells on both splits, the τ table (canon vs calibrated, three
+stages), the `s12_post_norm` zero-mass note with the norms behind it, a map
+of where everything lives, and what I2 does NOT settle.
+
+### Tests
+
+Five new, each skipped when the evaluation tables are not in the checkout:
+the tables came from the raw records (`T_I2a` has 32 rows, which a pack-built
+table cannot produce); Proposition 2 holds exactly AND the patch rows move,
+so the equality is not vacuous; Figure 5A carries both stages, a flat zero
+line on all 8 checkpoints, and `term_0.50` == `native` with `term_1.00` != it;
+the handoff regenerates byte-identically and its D1 sentence is the one
+`LOCKED_ANALYSIS` carries; and no generated table row has an unescaped `|`.
+The AST no-training check now covers both new generators.
+
+`pytest -q`: **821 passed, 30 skipped**.
+
+### TASK I2, final state
+
+| phase | what | state |
+|---|---|---|
+| A | framework additions, conditions, job file, 52 tests | done |
+| B1 | calibration sweep, 19/19 | done |
+| C1 | tables, the D1 proposal | done |
+| — | D1 SIGNED at `s11_out`; D2/D3/D4/D6/D7 closed | done |
+| B2 | evaluation sweep, 19/19 | done |
+| C2 | evaluation tables, Figure 5A, handoff | done |
+
+### What I2 leaves open, deliberately
+
+- **D5 still blocks I4**: the prevalence map at the INPUT to block 7/8 does
+  not exist, and I1 owns it. `TASK_I1` has not been written.
+- `docs/LOCKED_ANALYSIS.md` remains a DRAFT. Seven of eight decisions are
+  closed; freezing the document is a separate act.
+- I2 is descriptive. It shows a patch statistic moving while the classifier
+  does not; it establishes no mechanism and cannot on its own justify
+  acceptance. The 0.70 cutoff is conventional, and §3(a) of `D1_proposal.md`
+  records how close the branch was.
+
+### Pending from HPC
+
+**Nothing.** TASK I2 is complete.
