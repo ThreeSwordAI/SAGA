@@ -90,6 +90,24 @@ DIAG_STAGE_COLUMNS = PROVENANCE_COLUMNS + (
     "cos_all", "cos_nosink_mad", "eff_rank",
 )
 
+#: The functional response of a sweep that also measures how big the edit
+#: was (TASK B / I3 B2a). Two ADDITIVE columns on `RECORD_COLUMNS`, selected
+#: explicitly by `append_rows(..., columns=RECORD_UPDATE_COLUMNS)` exactly as
+#: `DIAG_STAGE_COLUMNS` is — a work package that measures the injected energy
+#: and one that does not are two column sets for one kind of file, and
+#: widening the shared schema would invalidate every `records.parquet` I2
+#: already wrote.
+#:
+#: `delta_update_norm` is ||u_edit - u_native||_F over the patch rows of the
+#: attention-branch residual update at the edited block (saga/frozen/reference.py).
+#: `permutations_sha256` is the sha256 of the committed permutation file the
+#: condition's `perm` was resolved from, on EVERY row — so a row whose
+#: permutation came from an edited file can never be mistaken for one that
+#: did not (TASK B §7, no sampling).
+RECORD_UPDATE_COLUMNS = RECORD_COLUMNS + (
+    "delta_update_norm", "permutations_sha256",
+)
+
 SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS}
 
 #: Key for a per-stage diag file: one row per (condition, stage, image).
