@@ -34,13 +34,25 @@ from pathlib import Path
 import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from saga.frozen import records as rec  # noqa: E402
 from saga.frozen.records import records_path  # noqa: E402
 from saga.frozen.runner import (load_conditions, load_manifest_row,  # noqa: E402
                                 load_split, run_work_package,
-                                verify_checkpoint)
+                                run_work_package_stages, verify_checkpoint)
 from saga.run_registry import git_sha  # noqa: E402
 
 MISSING = "MISSING"
+
+
+def is_multistage(conditions: dict) -> bool:
+    """True when the conditions file declares per-condition `stages`.
+
+    Which loop runs is a property of the COMMITTED conditions file, not a
+    command-line flag: a work package that measures three stages in one
+    forward says so in its YAML, and `load_conditions` has already refused a
+    document that declares `stages` on only some of its conditions.
+    """
+    return any("stages" in c for c in conditions["conditions"])
 
 
 class FrozenSplitDataset(torch.utils.data.Dataset):
@@ -92,7 +104,12 @@ def main():
                    help="absolute norm threshold for the fixed sink count "
                         "(results/diagsplit/fixed_thresholds_canon.json)")
     p.add_argument("--effrank", action="store_true",
-                   help="also compute effective rank (SVD; sub1k only)")
+                   help="also compute effective rank (SVD; sub1k only). "
+                        "Ignored by a multi-stage conditions file, which "
+                        "records the TASK I2 §4 key set unconditionally.")
+    p.add_argument("--skip-if-done", action="store_true",
+                   help="exit 0 when this run's completion marker already "
+                        "names this exact checkpoint (resubmit-safe)")
     p.add_argument("--device", default="cuda")
     p.add_argument("--seed", type=int, default=0)
     args = p.parse_args()
@@ -113,6 +130,7 @@ def main():
                                  transform=build_val_transform(224))
 
     out_dir = (Path(args.out_root) / conditions["work_package"] / args.run_id)
+    multistage = is_multistage(conditions)
     print(f"frozen_eval: {args.run_id}/{args.ckpt_kind} "
           f"{row['arch']}/{row['variant']} gate_mode={row.get('gate_mode')}")
     print(f"             ckpt_sha256={sha[:16]}…  split={split_name} "
@@ -122,14 +140,36 @@ def main():
           f"{args.conditions}")
     print(f"             -> {out_dir}")
 
-    summary = run_work_package(
-        row=row, conditions=conditions, dataset=dataset, out_dir=out_dir,
-        device=device, batch_size=args.batch_size, fixed_thr=args.fixed_thr,
-        with_effrank=args.effrank, split_name=split_name,
-        split_sha=split_sha, git_sha=git_sha(),
-        git_dirty=row.get("git_dirty", MISSING),
-        patch_file=row.get("patch_file", MISSING), ckpt_path=args.ckpt,
-        max_images=args.max_images)
+    if args.skip_if_done and rec.is_done(out_dir, "records", sha):
+        print(f"             already complete for this checkpoint — "
+              f"nothing rewritten")
+        return 0
+
+    if multistage:
+        from saga.frozen import diag as fdiag
+        tau_cal_doc = fdiag.load_thresholds_cal(conditions["thresholds_cal"],
+                                                split_sha256=split_sha)
+        canon_doc = fdiag.load_canon_thresholds(conditions["thresholds_canon"])
+        print(f"             multi-stage: tau_cal from "
+              f"{conditions['thresholds_cal']} "
+              f"(split {tau_cal_doc['split_sha256'][:16]}…)")
+        summary = run_work_package_stages(
+            row=row, conditions=conditions, dataset=dataset, out_dir=out_dir,
+            device=device, batch_size=args.batch_size, split_name=split_name,
+            split_sha=split_sha, git_sha=git_sha(),
+            git_dirty=row.get("git_dirty", MISSING),
+            patch_file=row.get("patch_file", MISSING), ckpt_path=args.ckpt,
+            max_images=args.max_images, tau_cal_doc=tau_cal_doc,
+            canon_doc=canon_doc)
+    else:
+        summary = run_work_package(
+            row=row, conditions=conditions, dataset=dataset, out_dir=out_dir,
+            device=device, batch_size=args.batch_size,
+            fixed_thr=args.fixed_thr, with_effrank=args.effrank,
+            split_name=split_name, split_sha=split_sha, git_sha=git_sha(),
+            git_dirty=row.get("git_dirty", MISSING),
+            patch_file=row.get("patch_file", MISSING), ckpt_path=args.ckpt,
+            max_images=args.max_images)
 
     print(f"\nwrote {records_path(out_dir, 'records')} "
           f"(+{summary['n_records']} rows)")

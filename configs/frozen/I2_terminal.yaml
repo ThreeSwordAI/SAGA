@@ -1,0 +1,112 @@
+# configs/frozen/I2_terminal.yaml — TASK I2's conditions, and the only place
+# they are defined
+# =============================================================================
+# Under a CLS-only loss the last block's patch gate receives no gradient and
+# sits at sigma(0) = 0.5 in every SAGA checkpoint. I0 measured the
+# architectural half on the real model: overriding that gate moves the CLS
+# logits by exactly 0. I2 measures the empirical half — how much of the
+# SAGA-vs-baseline gap on the patch diagnostics is produced by that untrained
+# constant rather than by anything training did.
+#
+# Nothing below is selectable from the command line. `tools/frozen_eval.py`
+# takes WHICH run, WHICH split, WHERE the data is and how many images — never
+# a condition, a stage, a gate constant or a threshold. This file is committed
+# before the job runs, which is what makes "the analysis configuration was
+# fixed before the outcomes were inspected" a property of this repository
+# rather than a promise (plan §6.2, I0 handoff §1).
+
+work_package: I2_terminal
+
+# The DECLARED reporting stage, carried on every `records` row. It is `hist`
+# because every historical patch number in results/ was computed there, and
+# because D1 — which stage all new patch diagnostics use — is exactly what
+# this work package exists to decide. The per-condition `stages:` lists below
+# are what is actually captured; `hist` is an ALIAS resolved once in
+# saga/frozen/stages.py (currently s12_pre_norm), so writing it here means
+# "whatever the historical diagnostics used" and every diag row carries both
+# the declared name and `stage_resolved`.
+stage: hist
+
+# fp32 everywhere: tools/eval.py recorded amp='off' for every historical
+# number, and a logit COMPARISON in bf16 would be dominated by the cast.
+precision: fp32
+
+# ── Thresholds ───────────────────────────────────────────────────────────────
+# Two families, and they are not interchangeable (task §5).
+#
+#   thresholds_canon  the HISTORICAL absolute tau per (arch, recipe_actual)
+#                     cell. Calibrated at the LAST BLOCK on the discovery
+#                     split, so `count_fixed_canon` is defined at `hist` and
+#                     is the literal MISSING at every other stage. This file
+#                     is opened READ-ONLY and is never recalibrated (§10);
+#                     tests/test_I2_terminal.py pins its sha256.
+#
+#   thresholds_cal    the same recipe re-run per stage on the split being
+#                     evaluated, from each cell's designated BASELINE
+#                     checkpoint, written by tools/frozen_I2_thresholds.py.
+#                     New keys in a new file. At `hist` it reproduces the
+#                     canon recipe on a different split, so the tables can
+#                     show tau_canon and tau_cal[hist] side by side and the
+#                     split effect stays visible instead of being absorbed.
+thresholds_canon: results/diagsplit/fixed_thresholds_canon.json
+thresholds_cal: results/frozen/I2_terminal/thresholds_cal.json
+
+# The stages the calibration must cover — every stage any condition below
+# declares. tools/frozen_I2_thresholds.py reads this list; the runner refuses
+# a cell that is not calibrated at a stage it is about to measure.
+calibration_stages: [s11_out, hist, s12_post_norm]
+
+# Image-level bootstrap for the paired gaps (LOCKED_ANALYSIS §8: 10,000
+# resamples). D6 — the bootstrap seed — is still DECISION NEEDED in
+# LOCKED_ANALYSIS §12; 0 is its stated default and is recorded here and in
+# every output so that defaulting is a visible decision, not a silent one.
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# `applies_to` is the checkpoint's variant, from the manifest row — a
+# terminal-gate override on a baseline or register model has no gate to
+# override and saga/frozen/edits.py refuses it, so those runs declare `native`
+# only. `stages` is captured in ONE forward per condition, so s11_out and
+# s12_pre_norm under the same edit are two readouts of one computation.
+#
+# s11_out CANNOT depend on the terminal gate — it is the output of the
+# second-to-last block, and the edit swaps the LAST block's gate — so it is
+# captured once, under `native`. A test asserts it is bit-identical when
+# captured under any term_* condition on a fake model.
+conditions:
+  - id: native
+    edit_type: native
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out, hist, s12_post_norm]
+
+  # phi_L = 0 is a weight-decay fixed point, so sigma(phi_L) = 0.50 and this
+  # condition must be bit-identical to `native` on every real SAGA
+  # checkpoint. The table reports the MEASURED max |delta| and flags any
+  # checkpoint where it is not 0 — the equality is checked, never assumed.
+  - id: term_0.50
+    edit_type: terminal_gate_override
+    params: {value: 0.50}
+    applies_to: [saga]
+    stages: [hist, s12_post_norm]
+
+  - id: term_0.25
+    edit_type: terminal_gate_override
+    params: {value: 0.25}
+    applies_to: [saga]
+    stages: [hist, s12_post_norm]
+
+  - id: term_0.75
+    edit_type: terminal_gate_override
+    params: {value: 0.75}
+    applies_to: [saga]
+    stages: [hist, s12_post_norm]
+
+  # 1.00 is a BYPASS of the terminal gate: the condition that says what the
+  # SAGA-vs-baseline diagnostic gap looks like with the untrained constant
+  # removed. The decision rule in §7 of the task file is computed from it.
+  - id: term_1.00
+    edit_type: terminal_gate_override
+    params: {value: 1.00}
+    applies_to: [saga]
+    stages: [hist, s12_post_norm]

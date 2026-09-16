@@ -70,7 +70,30 @@ DIAG_COLUMNS = PROVENANCE_COLUMNS + (
     "eff_rank",
 )
 
+#: The per-STAGE diagnostics of a multi-stage sweep (TASK I2 §4), one row per
+#: image x condition x stage. Written to the SAME `diag` file stem — a stage
+#: sweep and a single-stage sweep are two column sets for one kind of file, so
+#: `append_rows(..., "diag", rows, columns=DIAG_STAGE_COLUMNS)` selects this
+#: one explicitly rather than a second file name drifting into the tree.
+#:
+#: `stage` (a provenance column) varies PER ROW here and joins the key;
+#: `stage_resolved` carries what the alias resolved to, so a row that says
+#: `hist` also says `s12_pre_norm` and a reader never has to know the alias.
+#: `count_fixed_canon` and `tau_canon_value` are STRING columns: they are the
+#: literal MISSING off `hist` (§4) and a parquet column cannot hold both a
+#: float and a string, while a null would be silently skipped by a mean.
+DIAG_STAGE_COLUMNS = PROVENANCE_COLUMNS + (
+    "edit_type", "stage_resolved", "n_patches",
+    "norm_p50", "norm_p90", "norm_p99", "norm_p999", "norm_max",
+    "mad_thr", "tau_cal_value", "tau_canon_value",
+    "count_fixed_canon", "count_fixed_cal", "count_mad",
+    "cos_all", "cos_nosink_mad", "eff_rank",
+)
+
 SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS}
+
+#: Key for a per-stage diag file: one row per (condition, stage, image).
+DIAG_STAGE_KEY = ("condition_id", "stage", "image_id")
 
 
 def records_ext() -> str:
@@ -95,11 +118,16 @@ def done_marker(out_dir, kind: str) -> Path:
     return Path(out_dir) / f"{kind}.done.json"
 
 
-def check_rows(rows, kind: str):
+def check_rows(rows, kind: str, columns=None):
     """Every row must carry exactly the schema's columns — no extra key that
     would be silently dropped, no missing key that would become an empty
-    cell. Returns the column tuple."""
-    cols = SCHEMAS[kind]
+    cell. Returns the column tuple.
+
+    `columns` overrides the default schema for `kind` (a multi-stage sweep
+    writes `DIAG_STAGE_COLUMNS` into the `diag` file); the check itself is
+    unchanged, and a row set is still validated against exactly one schema.
+    """
+    cols = tuple(columns) if columns is not None else SCHEMAS[kind]
     want = set(cols)
     for i, row in enumerate(rows):
         got = set(row)
@@ -127,7 +155,8 @@ def _read_existing(path: Path, cols):
         return list(csv.DictReader(f))
 
 
-def append_rows(out_dir, kind: str, rows, *, key=("condition_id", "image_id")):
+def append_rows(out_dir, kind: str, rows, *, key=("condition_id", "image_id"),
+                columns=None):
     """Append `rows` to the `kind` file, atomically and idempotently.
 
     Rows whose `key` tuple is already present are SKIPPED, so a resubmitted
@@ -136,8 +165,12 @@ def append_rows(out_dir, kind: str, rows, *, key=("condition_id", "image_id")):
 
     The write is tmp + fsync + rename over the WHOLE file, so a reader never
     sees a partial row; the completion marker is written last.
+
+    `key` widens for a file whose rows are keyed by more than (condition,
+    image) — a per-stage sweep passes `DIAG_STAGE_KEY` — and `columns`
+    selects a non-default schema for `kind`.
     """
-    cols = check_rows(rows, kind)
+    cols = check_rows(rows, kind, columns)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     path = records_path(out_dir, kind)
