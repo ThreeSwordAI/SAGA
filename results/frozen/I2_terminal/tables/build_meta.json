@@ -1,0 +1,40 @@
+{
+  "bootstrap_chunk": 500,
+  "bootstrap_resamples": 10000,
+  "bootstrap_seed": 0,
+  "generated_at": "2026-09-16T15:09:29.309644+00:00",
+  "generated_by": "analysis/build_I2_tables.py",
+  "git_sha": "cdf63caca2ac41cfd3ec7ba262902cad0deb3181",
+  "rows": {
+    "T_I2a_invariance.csv": 32,
+    "T_I2b_sweep.csv": 121,
+    "T_I2c_gaps.csv": 108,
+    "T_I2d_maps.csv": 176,
+    "T_I2e_registers.csv": 48
+  },
+  "runs_absent": [],
+  "runs_present": [
+    "legacy_e2_vit_base_nomixdir_baseline",
+    "e2r_vitb_mixup_baseline_s1",
+    "legacy_e2_vit_small_mixupdir_baseline",
+    "legacy_e2_vit_small_nomixdir_baseline",
+    "e2r_vits_mixup_baseline_s1",
+    "e2r_vits_mixup_baseline_s2",
+    "e2r_vits_nomix_baseline_s1",
+    "e2r_vits_nomix_baseline_s2",
+    "legacy_e2_vit_base_nomixdir_registers",
+    "legacy_e2_vit_base_nomixdir_saga",
+    "e2r_vitb_mixup_saga_s1",
+    "legacy_e2_vit_small_mixupdir_registers",
+    "legacy_e2_vit_small_nomixdir_registers",
+    "legacy_e2_vit_small_mixupdir_saga",
+    "legacy_e2_vit_small_nomixdir_saga",
+    "e2r_vits_mixup_saga_s1",
+    "e2r_vits_mixup_saga_s2",
+    "e2r_vits_nomix_saga_s1",
+    "e2r_vits_nomix_saga_s2"
+  ],
+  "split_name": "calibration",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "work_package": "I2_terminal"
+}
