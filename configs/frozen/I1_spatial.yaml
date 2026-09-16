@@ -1,0 +1,112 @@
+# configs/frozen/I1_spatial.yaml — TASK A / I1's conditions, and the only
+# place they are defined
+# =============================================================================
+# I1 asks whether lower occurrence means WEAKER SPATIAL STRUCTURE or just a
+# SPARSER ESTIMATE of the same structure, and — now that D1 is `s11_out` —
+# whether the structure measured for four years at the last block exists one
+# block earlier, and at the inputs to blocks 7 and 8 where I3 and I4 act.
+#
+# CONSUME I2, DO NOT RECOMPUTE IT. TASK I2 already produced, on both splits
+# and for all 19 runs, the exceedance COUNT maps at `s11_out`, `hist` and
+# `s12_post_norm` under both bases, in
+# results/frozen/I2_terminal/<split>/<run_id>/maps.npz. Seed stability, ring
+# profiles, the recipe contrast, concentration excess and the variant
+# comparison at `s11_out` are CPU work on those files and need no GPU at all.
+#
+# This file therefore declares ONLY the inference I2 did not do:
+#
+#   1. the per-token NORM FIELD, which a count cannot reconstruct and which
+#      the scale-only null (T_I1b) rescales and re-thresholds; and
+#   2. the two BLOCK-INPUT stages `in_b07` / `in_b08`, which D5 needs and
+#      which no committed artifact contains — every `*_addr.json` in the
+#      repository is a last-block map.
+#
+# and it captures `s11_out` and `hist` in the same forward passes, because
+# they cost nothing extra once the hooks are registered and because the
+# per-image INDICATORS (for the image-level bootstrap and the split-half
+# reliability) are not recoverable from I2's summed counts either.
+#
+# Nothing below is selectable from the command line. The driver takes WHICH
+# run, WHICH split, WHERE the data is — never a condition, a stage or a
+# threshold. This file is committed before the job runs, which is what makes
+# "the analysis configuration was fixed before the outcomes were inspected" a
+# property of this repository rather than a promise (I0 handoff §1).
+
+work_package: I1_spatial
+
+# The DECLARED reporting stage. D1 is CLOSED at `s11_out`
+# (docs/LOCKED_ANALYSIS.md §1), so every new patch diagnostic is reported
+# there; `hist` is captured beside it as the historical control, never alone.
+stage: s11_out
+
+# fp32 everywhere, as in I2: a norm field is the input to a threshold
+# comparison and a bf16 cast moves counts near the threshold.
+precision: fp32
+
+# ── Thresholds ───────────────────────────────────────────────────────────────
+# NEW KEYS IN A NEW FILE, per split. `tau_cal[cell][stage]` is the canon
+# recipe (tools/compute_fixed_thr.per_image_mad_thresholds — the function
+# that produced every value in fixed_thresholds_canon.json) re-run per stage
+# on the split being processed, from each cell's canon-DESIGNATED baseline.
+#
+# The historical `tau_canon` is calibrated at the LAST BLOCK on the discovery
+# split. At `in_b07` and `in_b08` it has no meaning at all — the residual
+# stream there is on a different scale — so `count_fixed_canon` is the literal
+# MISSING at both, exactly as it is at `s11_out` (I2 §4).
+#
+# results/diagsplit/fixed_thresholds_canon.json is opened READ-ONLY;
+# saga/frozen/diag.py::write_thresholds_cal refuses to write to it by
+# resolved path and a test pins its sha256.
+#
+# `{split_name}` is a TEMPLATE, not a path: discovery thresholds are used
+# only for D5's mask selection and evaluation thresholds only for reporting,
+# and a tau from one split applied to the other would be an undeclared
+# threshold with the same key and a different meaning.
+thresholds_canon: results/diagsplit/fixed_thresholds_canon.json
+thresholds_cal: results/frozen/I1_spatial/{split_name}/thresholds_cal.json
+
+# Every stage any condition below declares. At `s11_out` and `hist` on the
+# evaluation split these must reproduce I2's own thresholds_cal.json to
+# numerical tolerance — the same recipe on the same split from the same
+# baseline — and a test compares them once both exist (task file §5).
+calibration_stages: [s11_out, in_b07, in_b08, hist]
+
+# Image-level bootstrap (LOCKED_ANALYSIS §8: 10,000 resamples; D6 = seed 0,
+# CLOSED). Recorded here and in every output so the value is visible.
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# TWO, and no third. `applies_to` is the checkpoint's variant from the
+# manifest row: a terminal-gate override on a baseline or a register model
+# has no gate to override and saga/frozen/edits.py refuses it.
+conditions:
+  # Every run, four stages, ONE forward pass per batch: capture_stages hooks
+  # blocks[6], blocks[7], blocks[L-2] and blocks[L-1] together.
+  #
+  # `in_b07` is the residual stream ENTERING blocks[7] — the output of
+  # blocks[6] — and `in_b08` enters blocks[8]. 0-based, and they are paper
+  # blocks 8 and 9 under the LOCKED numbering (LOCKED_ANALYSIS §2: "paper
+  # blocks 8 and 9 = 0-based block indices 7 and 8"). These two stages are
+  # the INPUT to the two blocks I3 and I4 edit, which is where LOCKED §5 says
+  # the prevalence map I4 perturbs has to be defined.
+  - id: native
+    edit_type: native
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out, in_b07, in_b08, hist]
+
+  # The bypass control, SAGA only, at `hist` only. phi_L = 0 in every trained
+  # SAGA checkpoint (a CLS-only loss never reaches the terminal patch gate),
+  # so this is the map with the untrained terminal constant removed — the
+  # control D1 requires beside every final-block number.
+  #
+  # It is NOT captured at s11_out: the edit swaps the LAST block's gate, and
+  # s11_out is the output of the second-to-last block, so it cannot depend on
+  # it. I2 pinned that with a bit-identity test and stored no s11_out map
+  # under any term_* condition; capturing one here would be a fourth copy of
+  # the same numbers.
+  - id: term_1.00
+    edit_type: terminal_gate_override
+    params: {value: 1.00}
+    applies_to: [saga]
+    stages: [hist]
