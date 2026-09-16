@@ -759,6 +759,32 @@ def test_conditions_with_an_unknown_edit_or_duplicate_id_are_refused(tmp_path):
         load_conditions(p)
 
 
+def _written_rows(out_dir, kind):
+    """What the runner actually wrote, in WHICHEVER format it chose.
+
+    `saga/frozen/records.py` writes parquet when pyarrow is importable and
+    CSV otherwise, with the same schema and the same file stem either way
+    (the module docstring says so, and `records_path` tells a reader which
+    one is there). This test used to assume CSV, which silently made it an
+    assertion about the environment rather than about the runner: it passed
+    only where pyarrow was absent, and failed with a UnicodeDecodeError on
+    every machine that had it — including the cluster, once TASK I2 required
+    pyarrow for the I2 sweep. Every assertion below is unchanged; values are
+    normalised to `str` because CSV yields strings and parquet yields typed
+    values.
+    """
+    path = rec.records_path(out_dir, kind)
+    if path.suffix == ".parquet":
+        import pyarrow.parquet as pq
+        rows = pq.read_table(path).to_pylist()
+    else:
+        import csv as _csv
+        with open(path, newline="", encoding="utf-8") as f:
+            rows = list(_csv.DictReader(f))
+    return [{k: ("" if v is None else str(v)) for k, v in r.items()}
+            for r in rows]
+
+
 def test_run_work_package_writes_traceable_rows_and_restores_state(
         saga_model, tmp_path, monkeypatch):
     """The whole loop on CPU with a fake model and fake data: every row
@@ -804,10 +830,7 @@ def test_run_work_package_writes_traceable_rows_and_restores_state(
     assert state_hash(saga_model) == before
     assert summary["n_records"] == 8            # 4 images x 2 conditions
 
-    import csv as _csv
-    with open(rec.records_path(tmp_path, "records"), newline="",
-              encoding="utf-8") as f:
-        got = list(_csv.DictReader(f))
+    got = _written_rows(tmp_path, "records")
     assert len(got) == 8
     for r in got:
         assert r["ckpt_sha256"] == "a" * 64
@@ -823,9 +846,7 @@ def test_run_work_package_writes_traceable_rows_and_restores_state(
     assert len(edited) == 4
     assert max(float(r["max_abs_logit_diff_vs_native"]) for r in edited) < 1e-4
     # ... while the patch diagnostics at the same stage DO move
-    with open(rec.records_path(tmp_path, "diag"), newline="",
-              encoding="utf-8") as f:
-        diag = list(_csv.DictReader(f))
+    diag = _written_rows(tmp_path, "diag")
     assert len(diag) == 8
     by_cond = {}
     for r in diag:
