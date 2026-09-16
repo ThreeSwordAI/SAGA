@@ -465,10 +465,19 @@ def verify_weight_sha(entry: dict) -> str:
             f"and commit the registry before any job reads these weights.")
     path = cached_weight_path(entry)
     if path is None:
+        from huggingface_hub import constants as hf_constants
         raise ExternalError(
             f"{entry['model_id']}: no cached weight file for "
-            f"{entry['hub_id']!r}. Compute nodes have no network; run the "
-            f"download tool on the login node first.")
+            f"{entry['hub_id']!r}.\n"
+            f"  huggingface_hub looked in: {hf_constants.HF_HUB_CACHE}\n"
+            f"  HF_HOME={os.environ.get('HF_HOME')!r} "
+            f"SAGA_HF_HOME={os.environ.get('SAGA_HF_HOME')!r}\n"
+            f"Compute nodes have no network, so the file must already be "
+            f"there. If the path above is not the registry's hf_home, the "
+            f"download tool wrote to a different cache and the weights need "
+            f"moving — which is what happened on 2026-09-16, when "
+            f"huggingface_hub had frozen its cache constant before HF_HOME "
+            f"was set.")
     got = file_sha256(path)
     if got != expected:
         raise ExternalError(

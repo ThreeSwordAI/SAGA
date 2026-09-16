@@ -39,18 +39,69 @@ No training, no optimizer, no probe fitting, no inference.
 """
 
 import argparse
+import os
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+REGISTRY = "configs/frozen/I6_models.yaml"
+
+
+def _registry_from_argv(argv=None) -> str:
+    """`--registry` read straight off the command line, before argparse.
+
+    The cache location has to be set before ANY heavy import (see below), and
+    argparse cannot run that early without also importing the module it is
+    configuring. Scanning argv for one flag is the smallest thing that works.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    for i, arg in enumerate(argv):
+        if arg == "--registry" and i + 1 < len(argv):
+            return argv[i + 1]
+        if arg.startswith("--registry="):
+            return arg.split("=", 1)[1]
+    return REGISTRY
+
+
+def preset_cache_env(registry_path=None) -> str:
+    """Point HF_HOME / TORCH_HOME at the registry's woody path — FIRST.
+
+    `huggingface_hub` resolves its cache directory into MODULE CONSTANTS at
+    import time, and `saga.frozen.external` imports `timm`, which imports
+    `huggingface_hub`. Setting the variables after that import has no effect
+    at all: the download silently lands in `$HOME/.cache/huggingface`.
+
+    That is not hypothetical. On Alex, 2026-09-16, it put ~2 GB of weights on
+    /home/hpc — a 104.9 G soft quota that was already at 119.9 G — and the
+    compute nodes, which DO get the variables from the job file's exports,
+    then found no cached file and every I6 array task failed
+    (job 4262896). Hence: before the imports, not inside main().
+
+    Only `yaml` is imported here, which pulls in nothing that reads the cache.
+    """
+    import yaml
+
+    root = os.environ.get("SAGA_HF_HOME")
+    if not root:
+        path = Path(registry_path or _registry_from_argv())
+        root = yaml.safe_load(path.read_text(encoding="utf-8"))["hf_home"]
+    os.environ["HF_HOME"] = str(root)
+    os.environ["TORCH_HOME"] = str(root)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(Path(root) / "hub")
+    return str(root)
+
+
+# MUST stay above the imports below. `# noqa: E402` on them is not a style
+# concession — the ordering is the fix.
+_CACHE_ROOT = preset_cache_env()
+
 from saga.frozen.external import (UNAVAILABLE,  # noqa: E402
                                   WEIGHT_FILENAMES, ExternalError,
                                   availability, file_sha256, load_registry,
                                   set_cache_env, timm_version)
-
-REGISTRY = "configs/frozen/I6_models.yaml"
 
 
 def download_weights(hub_id: str, cache_root: str):
@@ -136,6 +187,21 @@ def main():
     print(f"timm:          {version}")
     print(f"HF_HOME:       {root}")
     print(f"models:        {len(registry['models'])}")
+    # Where huggingface_hub ACTUALLY resolved its cache, read back from the
+    # library rather than from our own environment variable. The two differ
+    # exactly when the preset above ran too late, which is the failure this
+    # tool has already had once.
+    from huggingface_hub import constants as hf_constants
+    print(f"hub cache:     {hf_constants.HF_HUB_CACHE}")
+    if not str(hf_constants.HF_HUB_CACHE).startswith(str(root)):
+        raise SystemExit(
+            f"REFUSING TO DOWNLOAD: huggingface_hub resolved its cache to\n"
+            f"  {hf_constants.HF_HUB_CACHE}\n"
+            f"but the registry asks for\n"
+            f"  {root}\n"
+            f"The weights would land on the wrong filesystem and the compute "
+            f"nodes would not find them. Set SAGA_HF_HOME (and HF_HOME) in "
+            f"the shell before running this tool.")
     print()
 
     status = availability(registry)
