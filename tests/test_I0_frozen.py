@@ -302,14 +302,30 @@ def test_mean_plus_alpha_delta_interpolates(saga_model):
 
 
 def test_permutation_preserves_means_and_histograms(saga_model):
-    """Smoke check 5: a permutation is a relabelling — per-head mean AND the
-    per-head multiset of values are preserved exactly."""
+    """Smoke check 5: a permutation is a relabelling.
+
+    The per-head MULTISET of gate values is preserved BIT-exactly — that is
+    the invariant, and it is asserted without tolerance. The per-head MEAN is
+    a reduction over the permuted vector, and fp32 addition is not
+    associative, so it moves by a few ULP; the Phase-B ViT-S/mixup SAGA
+    checkpoint measured exactly one (5.96e-08). The smoke checker's constant
+    is imported rather than restated so the two cannot drift.
+    """
+    from tools.frozen_smoke import TOL_PERM_MEAN
+
     g = gate_map(saga_model.blocks[1].attn.gate, N_PATCHES)
     perm = np.random.RandomState(0).permutation(N_PATCHES)
     edited = build_edited_gate_map(g, "permute", perm=perm)
-    assert torch.allclose(edited.mean(dim=1), g.mean(dim=1), atol=1e-7)
     assert torch.equal(edited.sort(dim=1).values, g.sort(dim=1).values)
+    assert torch.allclose(edited.mean(dim=1), g.mean(dim=1),
+                          atol=TOL_PERM_MEAN, rtol=0)
     assert not torch.equal(edited, g)
+    # the tolerance is a few ULP, not a licence: it must not admit a change
+    # a real edit would make
+    assert TOL_PERM_MEAN < 1e-6
+    assert not torch.allclose(
+        build_edited_gate_map(g, "mean_plus_alpha_delta", alpha=0.5).mean(dim=1),
+        g.mean(dim=1) + 1e-5, atol=TOL_PERM_MEAN, rtol=0)
 
 
 def test_permutation_is_shared_across_heads(saga_model):

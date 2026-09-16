@@ -90,6 +90,29 @@ LEGACY_VARIANT = {"baseline": "baseline", "saga": "SAGA", "registers": "register
 
 DIAG_SPLIT = REPO / "results" / "diagsplit" / "val_diag_split.json"
 
+# What the dense trainers ACTUALLY write (TASK I0 §3: "record what weight
+# files actually exist per run"). Read from the trainers, not assumed — the
+# Phase-B hash pass found six `best.pth` paths that never existed:
+#   detection/tools/train.py    saves ckpt/last.pth ONLY. Its docstring
+#       (lines 22-23) records that the "new best AP" branch wrote to
+#       last.pth and never to a best file; the best-AP state is the JSON
+#       pair coco_eval_best.json + detections_val.json, which is exactly the
+#       case §3 warned about.
+#   segmentation/tools/train.py:438-439  saves ckpt/last.pth and
+#       ckpt/best_model.pth — `best_model.pth`, not `best.pth`.
+# None means "this family saves no checkpoint of that kind"; the row still
+# exists (so the absence is accounted for) with ckpt_path = MISSING.
+DENSE_CKPT_FILENAME = {
+    "dense_det": {"last": "last.pth", "best": None},
+    "dense_seg": {"last": "last.pth", "best": "best_model.pth"},
+}
+
+DENSE_NO_BEST_REASON = (
+    "no best checkpoint exists: the detection trainer saves ckpt/last.pth "
+    "only and records its best-AP state as the JSON pair coco_eval_best.json "
+    "+ detections_val.json (detection/tools/train.py:22-23, 346). MISSING is "
+    "the value, not a gap")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # small readers
@@ -546,8 +569,10 @@ def dense_rows(root: Path, family: str):
         epochs_cfg = meta.get("epochs_configured", meta.get("epochs", MISSING))
 
         for kind in ("last", "best"):
-            path = (f"{ckpt_dir}/{kind}.pth" if ckpt_dir
-                    else run_dir / "ckpt" / f"{kind}.pth")
+            filename = DENSE_CKPT_FILENAME[family][kind]
+            path = (MISSING if filename is None
+                    else (f"{ckpt_dir}/{filename}" if ckpt_dir
+                          else run_dir / "ckpt" / filename))
             if not complete:
                 status = "invalid"
                 reason = "meta.json end_time is null (run did not finish)"
@@ -556,10 +581,14 @@ def dense_rows(root: Path, family: str):
                 reason = (f"{family} head on backbone "
                           f"{meta.get('backbone_run', MISSING)}; a SEPARATE "
                           f"STRATUM from the classification cohort")
+            elif filename is None:
+                status = "superseded"
+                reason = DENSE_NO_BEST_REASON
             else:
                 status = "superseded"
                 reason = ("diagnostics come from the LAST checkpoint "
-                          "(TASK I0 §2.9)")
+                          "(TASK I0 §2.9); this family's best weights are "
+                          f"`{filename}`, not `best.pth`")
             rows.append(blank_row(
                 run_id=run_dir.name, family=family,
                 provenance_tag=f"s{meta.get('seed', MISSING)}",
@@ -571,7 +600,9 @@ def dense_rows(root: Path, family: str):
                 seed_source="meta.json seed (dense trainer)",
                 seed_controlled=0,
                 epochs_completed=epochs, epochs_configured=epochs_cfg,
-                ckpt_kind=kind, ckpt_path=ckpt_path_str(path),
+                ckpt_kind=kind,
+                ckpt_path=(MISSING if path is MISSING
+                           else ckpt_path_str(path)),
                 ckpt_sha256=MISSING,
                 ckpt_dir_source=("meta.json[\"ckpt_dir\"]" if ckpt_dir
                                  else "<run_dir>/ckpt (no ckpt_dir recorded)"),

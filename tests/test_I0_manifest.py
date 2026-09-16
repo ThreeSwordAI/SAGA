@@ -35,6 +35,7 @@ OUT = REPO / "results" / "frozen" / "I0_manifest"
 MANIFEST_CSV = OUT / "manifest.csv"
 MANIFEST_JSON = OUT / "manifest.json"
 ELIGIBILITY = OUT / "eligibility.md"
+HASHES = OUT / "ckpt_hashes.json"
 MISSING = "MISSING"
 
 
@@ -165,7 +166,48 @@ def test_every_other_family_uses_last_and_records_best_as_superseded(rows):
         assert not any(r["status"].startswith("eligible") for r in best), family
 
 
-def test_dense_rows_record_what_exists_and_missing_is_a_value(rows):
+def test_dense_rows_name_the_files_the_trainers_actually_write(rows):
+    """TASK I0 §3: "record what weight files actually exist per run". The
+    Phase-B hash pass found six `best.pth` paths that never existed, so the
+    filenames are now read from the trainers and pinned here against them.
+
+      detection    saves ckpt/last.pth ONLY — its best-AP state is the JSON
+                   pair coco_eval_best.json + detections_val.json, which is
+                   exactly the case §3 warned about.
+      segmentation saves ckpt/last.pth and ckpt/best_model.pth.
+    """
+    det_src = (REPO / "detection" / "tools" / "train.py").read_text(
+        encoding="utf-8")
+    seg_src = (REPO / "segmentation" / "tools" / "train.py").read_text(
+        encoding="utf-8")
+    assert 'ckpt_dir / "best_model.pth"' in seg_src
+    assert 'ckpt_dir / "best.pth"' not in seg_src
+    assert 'ckpt_dir / "best.pth"' not in det_src
+    assert 'ckpt_dir / "best_model.pth"' not in det_src
+    assert bm.DENSE_CKPT_FILENAME == {
+        "dense_det": {"last": "last.pth", "best": None},
+        "dense_seg": {"last": "last.pth", "best": "best_model.pth"}}
+
+    det = [r for r in rows if r["family"] == "dense_det"]
+    seg = [r for r in rows if r["family"] == "dense_seg"]
+    assert len(det) == 6 and len(seg) == 6
+    for r in det:
+        if r["ckpt_kind"] == "best":
+            # the row EXISTS so the absence is accounted for, but it claims
+            # no file
+            assert r["ckpt_path"] == MISSING, r["run_id"]
+            assert r["ckpt_sha256"] == MISSING, r["run_id"]
+            assert "no best checkpoint exists" in r["status_reason"]
+        else:
+            assert r["ckpt_path"].endswith("/ckpt/last.pth"), r["run_id"]
+    for r in seg:
+        want = "best_model.pth" if r["ckpt_kind"] == "best" else "last.pth"
+        assert r["ckpt_path"].endswith(f"/ckpt/{want}"), r["run_id"]
+    assert not any(r["ckpt_path"].endswith("/ckpt/best.pth")
+                   for r in det + seg)
+
+
+def test_dense_rows_record_their_backbone(rows):
     dense = [r for r in rows if r["family"] in ("dense_det", "dense_seg")]
     assert dense
     for r in dense:
@@ -178,9 +220,6 @@ def test_dense_rows_record_what_exists_and_missing_is_a_value(rows):
         assert (r["base_run_id"].startswith("e2r_")
                 or r["variant"] == "registers"), r["run_id"]
         assert len(r["base_ckpt_sha256"]) == 64, r["run_id"]
-        # no local checkpoint hashes: MISSING is the recorded value
-        assert r["ckpt_sha256"] == MISSING
-        assert r["ckpt_path"] not in ("", MISSING)
     fallback = [r for r in dense if r["variant"] == "registers"]
     assert fallback
     assert all(r["base_run_id"].startswith("legacy_") for r in fallback)
@@ -309,10 +348,19 @@ def test_manifest_json_agrees_with_the_csv(rows):
 
 def test_eligibility_note_is_generated_not_hand_typed(tmp_path):
     """Re-render from the committed run metadata; byte-identical or the note
-    has drifted from its inputs."""
-    rc = subprocess.run(
-        [sys.executable, str(REPO / "analysis" / "build_I0_manifest.py"),
-         "--out-dir", str(tmp_path)], cwd=REPO, capture_output=True, text=True)
+    has drifted from its inputs.
+
+    The committed manifest carries the Phase-B checkpoint hashes, so the
+    re-render must be given the same `ckpt_hashes.json` — a rebuild without
+    it would legitimately differ and would be testing the wrong thing. The
+    merge is new-values-only, so this also re-checks that every committed
+    sha still agrees with the hash pass.
+    """
+    args = [sys.executable, str(REPO / "analysis" / "build_I0_manifest.py"),
+            "--out-dir", str(tmp_path)]
+    if HASHES.exists():
+        args += ["--hashes", str(HASHES)]
+    rc = subprocess.run(args, cwd=REPO, capture_output=True, text=True)
     assert rc.returncode == 0, rc.stderr
     assert (tmp_path / "eligibility.md").read_text(encoding="utf-8") == \
         ELIGIBILITY.read_text(encoding="utf-8")
@@ -436,6 +484,75 @@ def test_merge_hashes_refuses_to_overwrite_a_recorded_value(tmp_path, rows):
         legacy["ckpt_path"]: legacy["ckpt_sha256"]}}))
     filled, agreed = bm.merge_hashes([dict(legacy)], hashes)
     assert (filled, agreed) == (0, 1)
+
+
+def test_phase_b_hashes_are_complete_and_agree_with_recorded_provenance(rows):
+    """The Phase-B hash pass is cross-checked against two files that recorded
+    checkpoint shas INDEPENDENTLY, long before this task existed. If the
+    hashing were wrong, these would disagree."""
+    if not HASHES.exists():
+        pytest.skip("ckpt_hashes.json not present (Phase B not run)")
+    doc = json.loads(HASHES.read_text(encoding="utf-8"))
+    assert doc["n_hashed"] >= 114
+
+    canon = json.loads(
+        (REPO / "results" / "diagsplit"
+         / "fixed_thresholds_canon.json").read_text(encoding="utf-8"))
+    for run, key in (("e2r_vits_mixup_baseline_s1", "vit_small|mixup"),
+                     ("e2r_vitb_mixup_baseline_s1", "vit_base|mixup"),
+                     ("e2r_vits_nomix_baseline_s1", "vit_small|nomix")):
+        got = next(r["ckpt_sha256"] for r in rows
+                   if r["run_id"] == run and r["ckpt_kind"] == "last")
+        assert got == canon["source_ckpt_sha256"][key], run
+
+    legacy = {}
+    with open(REPO / "results" / "legacy" / "checkpoint_manifest.csv",
+              newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            legacy[r["path"]] = r["sha256"]
+    checked = 0
+    for r in rows:
+        if r["ckpt_path"] in legacy:
+            assert r["ckpt_sha256"] == legacy[r["ckpt_path"]], r["run_id"]
+            checked += 1
+    assert checked == 24
+
+
+def test_every_remaining_missing_hash_is_accounted_for(rows):
+    """After Phase B, a MISSING ckpt_sha256 must fall into one of exactly
+    three named buckets. Anything else is an unexplained gap.
+
+    The third bucket is the segmentation `best_model.pth` rows, whose paths
+    were CORRECTED after the Phase-B hash pass ran against the wrong
+    filename. They stay MISSING until the hash tool is re-run; the assertion
+    is written so it keeps holding once they are filled, rather than failing
+    when things improve.
+    """
+    if not HASHES.exists():
+        pytest.skip("ckpt_hashes.json not present (Phase B not run)")
+    derived, no_file, pending, unexplained = [], [], [], []
+    for r in rows:
+        if r["ckpt_sha256"] != MISSING:
+            continue
+        if r["ckpt_kind"] == "derived":
+            derived.append(r["run_id"])
+        elif r["ckpt_path"] == MISSING:
+            no_file.append(r["run_id"])       # detection saves no best
+        elif r["family"] == "dense_seg" and r["ckpt_kind"] == "best":
+            pending.append(r["run_id"])
+        else:
+            unexplained.append((r["run_id"], r["ckpt_kind"], r["ckpt_path"]))
+
+    assert not unexplained, unexplained
+    assert len(derived) == 4                  # the TTR edits
+    assert len(no_file) == 3                  # det_* `best`
+    assert len(pending) <= 3                  # seg_* `best_model.pth`
+
+    # and every EVALUABLE row — anything an intervention could actually be
+    # run on — is fully identified
+    for r in rows:
+        if r["status"] in ("eligible", "eligible_legacy"):
+            assert len(r["ckpt_sha256"]) == 64, (r["run_id"], r["ckpt_kind"])
 
 
 def test_merge_hashes_fills_a_missing_value(tmp_path, rows):
