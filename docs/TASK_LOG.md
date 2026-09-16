@@ -4406,3 +4406,97 @@ independently still blocks I4 either way.
 **Phase B2** — the sweep on `results/frozen/splits/evaluation.json`. Until it
 comes back there are no evaluation tables, no `F5A_terminal.npz` and no
 `docs/I2_HANDOFF.md`. C2 is the next session.
+
+---
+
+## 2026-09-16 — TASK I2, PHASE B2 LANDED; D1 corroborated on evaluation. C2 is BLOCKED on one login-node command
+
+Worktree `../SAGA-I2`, branch `task/I2`, off `main` at `eb2c810`. C2 is
+**not complete**: the evaluation tables cannot be finished locally, for a
+reason that is my omission and is written down below so it is not repeated.
+
+### B2 verified
+
+| check | result |
+|---|---|
+| run directories | **19 / 19**, each with `maps.npz`, `records.done.json`, `diag.done.json`, `run_meta.json` |
+| split | `evaluation`, sha `7fdf5f9f2ace98ef…` — the sha `LOCKED_ANALYSIS` §11 records, identical on every run |
+| rows | **510,000** records, **1,210,000** diag — exactly 5x calibration, as 10,000 vs 2,000 images requires |
+| `state_restored` | `True` on all 19 |
+| storage policy | `records.parquet` / `diag.parquet` correctly absent (git-ignored, on the cluster); every `run_meta.json` carries their sha256 and byte size |
+| primary pack | `figures_data/frozen/I2_evaluation_primary.npz`, 13.9 MB (predicted ~15 MB from the 3.0 MB calibration measurement) |
+
+### The D1 consistency check (§7 run once, reported, NOT acted on)
+
+`analysis/i2_decision.decide()` on the evaluation tables, voting cell
+`vit_small|mixup`, 4 pairs, 10,000 images:
+
+**Branch 3 -> D1 = `s11_out`. The same branch as calibration.** The same two
+diagnostics fail the bypass test, at survivals identical to three decimals.
+
+| diagnostic | survival cal | survival eval | Δ | survival_s11 cal | survival_s11 eval | Δ |
+|---|---|---|---|---|---|---|
+| `cos_all` | 0.680 | 0.680 | +0.000 | 0.088 | 0.088 | +0.000 |
+| `cos_nosink_mad` | 0.694 | 0.694 | +0.000 | 0.195 | 0.193 | −0.002 |
+| `eff_rank` | 0.877 | 0.877 | −0.000 | 0.734 | 0.731 | −0.003 |
+| `count_fixed_cal` | 0.914 | 0.914 | −0.001 | 0.976 | 0.968 | −0.007 |
+| `count_mad` | 0.909 | 0.941 | +0.032 | 0.978 | 0.969 | −0.008 |
+
+Both non-voting cells also reproduce their calibration branch
+(`vit_base|mixup` 1 -> 1, `vit_small|nomix` 3 -> 3). **D1 was signed on
+calibration by design; evaluation corroborates it and nothing is re-decided.**
+This is a sensitivity fact for the handoff, not an action.
+
+### Why C2 is not finished: the B2 block omitted the table build
+
+The printed B2 block ran the sweep, packed the primary diagnostics and
+committed — **it never said to run `analysis/build_I2_tables.py`**. The raw
+`records.parquet` / `diag.parquet` are correctly on the cluster only, so
+locally:
+
+- `T_I2c_gaps.csv`, `T_I2d_maps.csv` — **complete**. The gaps come from the
+  committed primary pack and the maps from the committed `maps.npz`.
+- `T_I2b_sweep.csv`, `T_I2e_registers.csv` — **primary five only**; the other
+  seven diagnostics are the literal MISSING.
+- `T_I2a_invariance.csv` — **0 rows**. It is about logits, NLL and top-1
+  agreement, which live in `records.parquet` and in no committed file.
+
+So the evaluation architectural measurements — the max abs logit difference,
+top-1 agreement and `native` ≡ `term_0.50` — do not exist yet, and they are
+exactly what §5 of the handoff must state. `build_meta.json` records
+`runs_with_records: []` and `runs_from_primary_pack: [all 19]`, so the
+partial state is visible in the artifact rather than only here.
+
+**The fix is one login-node command** (no GPU, no data staging — it reads
+parquet that is already on the cluster), printed for the human. It
+regenerates all five tables completely and they are then committed and
+pushed.
+
+### Code added
+
+`analysis/build_I2_tables.py` can now read
+`figures_data/frozen/I2_<split>_primary.npz` for any run whose raw diag file
+stayed on the cluster (`--primary-pack`). This is what makes "every reported
+number regenerates from the repo" true rather than aspirational: the gaps are
+re-derived by the SAME `_paired_deltas` / `paired_bootstrap` code, not a
+second implementation. A test proves it — building `T_I2c` from the
+calibration parquet and from a pack built out of the same parquet gives
+EXACTLY equal gaps for the five primary diagnostics, and MISSING for the
+other seven. The records file has no such fallback, by design.
+
+`pytest -q`: **816 passed, 30 skipped**.
+
+### Still to do in C2, once the complete tables land
+
+Final `T_I2a`–`T_I2e`; `figures_data/frozen/F5A_terminal.npz` (diagnostic vs
+terminal constant, per pair, both stages, with the zero-logit-difference
+line — which needs `T_I2a`); `analysis/build_I2_handoff.py` ->
+`docs/I2_HANDOFF.md` carrying the signed D1 sentence copied from
+`LOCKED_ANALYSIS`, the §5 architectural measurements ON EVALUATION, the
+calibration-vs-evaluation survival comparison above, the `s12_post_norm`
+zero-mass note and the τ table; and the C2 log entry.
+
+### Pending from HPC
+
+**One login-node command**: build the evaluation tables and push them. No
+GPU. Nothing else is outstanding.

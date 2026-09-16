@@ -1382,6 +1382,58 @@ def test_run_meta_records_the_digest_of_every_file_the_run_wrote():
     assert records_path(run, "diag").name in got
 
 
+def test_a_table_built_from_the_primary_pack_matches_one_built_from_parquet():
+    """The pack is only worth committing if it reproduces the numbers.
+
+    The calibration sweep has BOTH its raw diag files and (for this test) a
+    pack built from them, so the two paths can be compared directly: the
+    paired gaps must agree exactly for the five primary diagnostics, because
+    the same `_paired_deltas` and `paired_bootstrap` run over the same
+    per-image values. Every other diagnostic must be MISSING on the pack
+    side — the pack does not carry it, and a plausible number would be worse
+    than no number.
+    """
+    from analysis.build_I2_tables import (DIAGNOSTICS, build_c, load_run,
+                                          load_primary_pack)
+    from analysis.i2_decision import PRIMARY_DIAGNOSTICS
+    from tools.frozen_I2_pack_primary import pack as build_pack
+    src = RESULTS / "calibration"
+    if not (src / "e2r_vits_mixup_saga_s1").exists():     # pragma: no cover
+        pytest.skip("the calibration sweep is not in this checkout")
+
+    cohort = frunner.eligible_cohort(MANIFEST)
+    arrays, ids, _meta = build_pack(src, MANIFEST)
+    fake = {"runs": {}, "primary": list(PRIMARY_DIAGNOSTICS)}
+    for key, arr in arrays.items():
+        run_id, cond, stage, diag = key.split("|")
+        fake["runs"].setdefault(run_id, {}).setdefault(
+            (cond, stage), {})[diag] = np.asarray(arr, dtype=np.float64)
+
+    prov = {f: "x" for f in ("work_package", "split_name", "split_sha256",
+                             "git_sha")}
+    from_parquet = {r["run_id"]: load_run(src, r["run_id"]) for r in cohort}
+    from_pack = {r["run_id"]: (None, _grouped(fake, ids, r["run_id"]))
+                 for r in cohort}
+
+    a = {(r["cell"], r["setting"], r["diagnostic"]): r["gap_mean"]
+         for r in build_c(cohort, from_parquet, prov, resamples=200)}
+    b = {(r["cell"], r["setting"], r["diagnostic"]): r["gap_mean"]
+         for r in build_c(cohort, from_pack, prov, resamples=200)}
+    assert set(a) == set(b)
+    for key, want in a.items():
+        got = b[key]
+        if key[2] in PRIMARY_DIAGNOSTICS:
+            assert got == want, key
+        else:
+            assert got == MISSING, key
+    assert set(DIAGNOSTICS) - set(PRIMARY_DIAGNOSTICS)
+
+
+def _grouped(pack, ids, run_id):
+    from analysis.build_I2_tables import _grouped_from_pack
+    return _grouped_from_pack(pack, ids, run_id)
+
+
 def test_the_primary_pack_covers_every_run_condition_stage(tmp_path):
     """figures_data/frozen/I2_evaluation_primary.npz is what makes an
     evaluation number regenerable once the raw parquet stays on the HPC."""
