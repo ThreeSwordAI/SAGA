@@ -1,0 +1,1 @@
+work_package,split_name,split_sha256,git_sha,run_id,arch,recipe_actual,variant,provenance_tag,ckpt_sha256,condition_id,n_images,max_abs_logit_diff_vs_native,mean_abs_logit_diff_vs_native,top1_agreement,mean_abs_delta_nll,max_abs_delta_nll,max_abs_cos_all_diff_hist,phi_L_zero_bit_identical

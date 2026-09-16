@@ -133,17 +133,75 @@ def _num(v):
         return MISSING
 
 
-def load_run(results_root: Path, run_id: str):
+def load_primary_pack(path):
+    """`figures_data/frozen/I2_*_primary.npz` as
+    `{run_id: {(condition, stage): {diagnostic: float32[n]}}}` + image ids.
+
+    The evaluation sweep's raw `diag.parquet` stays on the cluster (19 runs x
+    10,000 images is ~90 MB that nothing reads twice), so the repository
+    commits this pack instead: the five PRIMARY diagnostics per image, which
+    is what the image-level bootstrap resamples. Reading it here means the
+    paired gaps are re-derived by the SAME `_paired_deltas` /
+    `paired_bootstrap` code that built them from the parquet, not by a second
+    implementation that could disagree.
+
+    It carries the primary five and nothing else, so every other diagnostic
+    is the literal MISSING in a table built from it — which is the honest
+    statement, not a gap silently filled.
+    """
+    path = Path(path)
+    if not path.exists():
+        return None, None
+    with np.load(path, allow_pickle=False) as z:
+        ids = np.asarray(z["__image_ids"])
+        primary = [str(d) for d in np.asarray(z["__diagnostics"])]
+        out = {}
+        for key in z.files:
+            if key.startswith("__"):
+                continue
+            run_id, cond, stage, diag = key.split("|")
+            out.setdefault(run_id, {}).setdefault((cond, stage), {})[diag] = \
+                np.asarray(z[key], dtype=np.float64)
+    return {"runs": out, "primary": primary}, ids
+
+
+def _grouped_from_pack(pack, ids, run_id):
+    """One run's `grouped` structure, primary diagnostics only."""
+    by_key = pack["runs"].get(run_id)
+    if not by_key:
+        return None
+    order = np.argsort(ids)
+    grouped = {}
+    for key, vals in by_key.items():
+        grouped[key] = {
+            "image_ids": ids[order],
+            "values": {d: (vals[d][order] if d in vals else MISSING)
+                       for d in DIAGNOSTICS},
+        }
+    return grouped
+
+
+def load_run(results_root: Path, run_id: str, pack=None, pack_ids=None):
     """(records rows, {(condition, stage): {"image_ids": [...], diag: array}}).
 
     Returns (None, None) for a run whose sweep has not landed yet — a run
     that has not been computed is an ABSENCE, reported as such, never a zero.
+
+    When the raw diag file is absent but `pack` carries this run, the
+    diagnostics come from the committed primary pack and every non-primary
+    column is MISSING. The records file has no such fallback: `T_I2a` is
+    about logits and NLL, which the pack does not hold.
     """
     run_dir = Path(results_root) / run_id
-    if not run_dir.exists():
-        return None, None
     rec_path = records_path(run_dir, "records")
     diag_path = records_path(run_dir, "diag")
+    if not diag_path.exists() and pack is not None:
+        grouped = _grouped_from_pack(pack, pack_ids, run_id)
+        if grouped:
+            records = read_rows(rec_path) if rec_path.exists() else None
+            return records, grouped
+    if not run_dir.exists():
+        return None, None
     if not rec_path.exists() or not diag_path.exists():
         return None, None
 
@@ -631,20 +689,39 @@ FIELDS_E = PROV_FIELDS + (
 
 
 def build_all(results_root, out_dir, *, manifest, git_sha_value,
-              seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES) -> dict:
+              seed=BOOTSTRAP_SEED, resamples=BOOTSTRAP_RESAMPLES,
+              primary_pack=None) -> dict:
     results_root, out_dir = Path(results_root), Path(out_dir)
     cohort = eligible_cohort(manifest)
-    loaded = {r["run_id"]: load_run(results_root, r["run_id"]) for r in cohort}
-    present = [r["run_id"] for r in cohort if loaded[r["run_id"]][0]]
+    pack, pack_ids = load_primary_pack(primary_pack) if primary_pack \
+        else (None, None)
+    loaded = {r["run_id"]: load_run(results_root, r["run_id"], pack, pack_ids)
+              for r in cohort}
+    # a run counts as present if EITHER file landed: the diagnostics can come
+    # from the committed primary pack while the records stay on the cluster
+    present = [r["run_id"] for r in cohort
+               if loaded[r["run_id"]][0] or loaded[r["run_id"]][1]]
+    with_records = [rid for rid in present if loaded[rid][0]]
     if not present:
         raise TableError(
             f"no sweep results under {results_root} — run the HPC array "
             f"first; nothing here computes a diagnostic")
 
-    split_names = {r.get("split_name") for rid in present
-                   for r in loaded[rid][0][:1]}
-    split_shas = {r.get("split_sha256") for rid in present
-                  for r in loaded[rid][0][:1]}
+    if with_records:
+        split_names = {r.get("split_name") for rid in with_records
+                       for r in loaded[rid][0][:1]}
+        split_shas = {r.get("split_sha256") for rid in with_records
+                      for r in loaded[rid][0][:1]}
+    else:
+        # no records file anywhere: take the split from the completion
+        # markers, which are committed for every run
+        split_names, split_shas = set(), set()
+        for rid in present:
+            marker = results_root / rid / "diag.done.json"
+            if marker.exists():
+                doc = json.loads(marker.read_text(encoding="utf-8"))
+                split_names.add(doc.get("split_name"))
+                split_shas.add(doc.get("split_sha256"))
     if len(split_shas) != 1:
         raise TableError(
             f"the runs under {results_root} carry {len(split_shas)} different "
@@ -667,6 +744,8 @@ def build_all(results_root, out_dir, *, manifest, git_sha_value,
         write_csv(out_dir / name, fields, rows)
         written[name] = len(rows)
     return {"prov": prov, "written": written, "present": present,
+            "with_records": with_records,
+            "diagnostics_from_pack": sorted(set(present) - set(with_records)),
             "absent": [r["run_id"] for r in cohort
                        if r["run_id"] not in present]}
 
@@ -686,17 +765,27 @@ def main():
     p.add_argument("--seed", type=int, default=BOOTSTRAP_SEED,
                    help="bootstrap seed (LOCKED_ANALYSIS D6; default 0)")
     p.add_argument("--resamples", type=int, default=BOOTSTRAP_RESAMPLES)
+    p.add_argument("--primary-pack", default=None,
+                   help="figures_data/frozen/I2_<split>_primary.npz — the "
+                        "committed per-image primary diagnostics, used for "
+                        "any run whose raw diag file stayed on the cluster")
     args = p.parse_args()
 
     out_dir = Path(args.out or (Path(args.results) / "tables"))
     summary = build_all(args.results, out_dir, manifest=args.manifest,
                         git_sha_value=git_sha(), seed=args.seed,
-                        resamples=args.resamples)
+                        resamples=args.resamples,
+                        primary_pack=args.primary_pack)
     for name, n in summary["written"].items():
         print(f"wrote {out_dir / name}: {n} rows")
     print(f"split: {summary['prov']['split_name']} "
           f"({summary['prov']['split_sha256'][:16]}…)")
-    print(f"runs present: {len(summary['present'])}")
+    print(f"runs present: {len(summary['present'])} "
+          f"({len(summary['with_records'])} with a records file)")
+    if summary["diagnostics_from_pack"]:
+        print(f"diagnostics from the primary pack (raw diag on the cluster): "
+              f"{len(summary['diagnostics_from_pack'])} run(s); every "
+              f"non-primary diagnostic is MISSING in these tables")
     if summary["absent"]:
         print(f"runs ABSENT (not computed, never a zero): "
               f"{summary['absent']}")
@@ -707,6 +796,9 @@ def main():
                     "bootstrap_seed": args.seed,
                     "bootstrap_resamples": args.resamples,
                     "bootstrap_chunk": BOOTSTRAP_CHUNK,
+                    "primary_pack": args.primary_pack,
+                    "runs_with_records": summary["with_records"],
+                    "runs_from_primary_pack": summary["diagnostics_from_pack"],
                     **summary["prov"],
                     "rows": summary["written"],
                     "runs_present": summary["present"],
