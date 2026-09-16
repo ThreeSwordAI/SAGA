@@ -96,14 +96,27 @@ STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
 #: docstring for both numbering conventions.
 BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8}
 
-#: Every stage name this module accepts. `resolve_stage` validates against
-#: THIS, so a conditions YAML may spell any of the six; `STAGES` keeps its
-#: I0 meaning for everything that enumerates the terminal four.
-ALL_STAGES = STAGES + tuple(BLOCK_INPUT_STAGES)
-
 #: Which real stage the historical diagnostics used. See the module docstring
 #: for the code citation; a test pins it.
 HIST_STAGE = "s12_pre_norm"
+
+#: External-model ANALOG stages (TASK A / I6), as {name: the stage it
+#: aliases}. They are the same two block outputs `s11_out` and
+#: `s12_pre_norm` name, captured by the same code, under DIFFERENT NAMES.
+#:
+#: The separate names are the point. A public checkpoint differs from this
+#: project's cohort in training data, augmentation recipe, input resolution
+#: and patch size; DINOv2 is natively a 518-pixel model on a 14-pixel patch
+#: and is run here at 224 with its position embedding interpolated. Two
+#: numbers that both said `s11_out` would invite a reader to compare them as
+#: if they were the same measurement. `ext_s11_out` says "the second-to-last
+#: block of some other model", which is all I6 claims.
+EXTERNAL_STAGES = {"ext_s11_out": "s11_out", "ext_hist": HIST_STAGE}
+
+#: Every stage name this module accepts. `resolve_stage` validates against
+#: THIS, so a conditions YAML may spell any of the eight; `STAGES` keeps its
+#: I0 meaning for everything that enumerates the terminal four.
+ALL_STAGES = (STAGES + tuple(BLOCK_INPUT_STAGES) + tuple(EXTERNAL_STAGES))
 
 HIST_STAGE_CITATION = (
     "saga/metrics.py:287-291 (forward hooks on model.blocks[i], storing the "
@@ -127,9 +140,16 @@ class StageError(ValueError):
 
 
 def resolve_stage(stage: str) -> str:
-    """Map `hist` onto the real stage it aliases; validate every other name."""
+    """Map an alias onto the real stage it names; validate every other name.
+
+    `hist` -> HIST_STAGE, and the two external analogs onto the two block
+    outputs they are (see EXTERNAL_STAGES for why they have their own names
+    at all).
+    """
     if stage == "hist":
         return HIST_STAGE
+    if stage in EXTERNAL_STAGES:
+        return EXTERNAL_STAGES[stage]
     if stage not in ALL_STAGES:
         raise StageError(
             f"unknown stage {stage!r}; expected one of {ALL_STAGES}")

@@ -1,0 +1,259 @@
+# configs/frozen/I6_models.yaml — TASK A / I6's external public checkpoints,
+# and THE PRE-REGISTERED PREDICTION
+# =============================================================================
+# I6 asks whether public models we did not train show the same spatial
+# structure, and whether its presence follows the training recipe the way our
+# own controlled cell suggests.
+#
+# THE PREDICTION BELOW WAS WRITTEN BEFORE ANY EXTERNAL FORWARD PASS. That is
+# the whole point of this file: it is committed, in git, with a date, before
+# the download tool has fetched a single weight. `prediction` is copied
+# VERBATIM out of docs/TASK_A_I1_I6.md §9 — tests/test_I6_external.py asserts
+# the two strings are equal character for character, so it cannot be edited
+# after the fact to match an outcome.
+#
+# EITHER OUTCOME IS REPORTED. `analysis/frozen_I6_external.py` computes
+# `prediction_outcome` per model BY CODE from the registered `group` and the
+# measured ring profile. No human types "met" into a table.
+
+work_package: I6_external
+registered_at: "2026-09-17"
+prediction_source: "docs/TASK_A_I1_I6.md §9"
+
+# Copied verbatim. Note the non-breaking hyphens (U+2011); they are part of
+# the string the test compares.
+prediction: >-
+  Supervised ImageNet‑1k models whose recipe includes MixUp and CutMix
+  (DeiT‑S, DeiT3‑S, DeiT3‑B, AugReg ViT‑B/16) will show, at the
+  second‑to‑last block output and at the last block output, a prevalence map
+  with positive concentration excess and a ring profile peaking at ring 1
+  rather than ring 0. Models trained without mixing (DINOv2‑S/B, OpenCLIP
+  ViT‑B/16, MAE ViT‑B/16 encoder) will not show a ring‑1 peak, whatever other
+  structure they show. Register variants (DINOv2 reg4) are exploratory and
+  make no prediction. Either outcome is reported.
+
+# ── How the prediction is scored, declared with it ───────────────────────────
+# `ring_1_peak` is true when the 7- or 8-ring border profile of the map
+# attains its maximum at ring 1. `concentration_excess_positive` is true when
+# the Gini excess over the finite-sample null at that map's own mass is > 0.
+#
+#   supervised_mixing       met     <=> ring_1_peak AND concentration excess > 0
+#   no_mixing               met     <=> NOT ring_1_peak
+#   registers_exploratory   always  "not applicable" — no prediction was made
+#
+# A model is scored at BOTH analog stages and the two outcomes are reported
+# separately; nothing is pooled across models or across groups.
+outcome_rule:
+  supervised_mixing: "met if ring_1_peak and gini_excess > 0"
+  no_mixing: "met if not ring_1_peak"
+  registers_exploratory: "not applicable — exploratory, no prediction"
+
+# ── Run configuration ────────────────────────────────────────────────────────
+# 224 for every model, so the grids are 14x14 (patch 16) or 16x16 (patch 14)
+# and the ring geometry is defined. THIS IS A DEVIATION for the three DINOv2
+# models, whose pretrained input size is 518: timm interpolates the position
+# embedding down to a 16x16 grid. It is recorded per model as
+# `native_input_size` and it is stated in the note — a DINOv2 result here is
+# a result about DINOv2 at 224, not about DINOv2 as published.
+input_size: 224
+precision: fp32
+
+# Normalization is NEVER hard-coded: it comes from timm's own data config for
+# the specific pretrained tag and is recorded per model in the output. The
+# four recipes in this registry disagree (ImageNet mean/std, 0.5/0.5, CLIP's
+# own, and crop_pct 1.0 for DINOv2), and applying our cohort's transform to a
+# CLIP checkpoint would measure the mismatch rather than the model.
+normalization: from_timm_data_config
+
+# Where the weights are cached on the cluster. The download tool sets HF_HOME
+# and TORCH_HOME to this before importing timm, so nothing lands in $HOME
+# (which is the small quota — How to Run.md §3). Override with SAGA_HF_HOME.
+#
+# The ROOT /home/woody/iwi5/iwi5359h/SAGA is the repo's documented bulk path
+# (How to Run.md §3; scripts/jobs/*.sbatch use ckpt_root, dense_ckpt,
+# probe_attn under it). `hf_cache` follows that naming.
+hf_home: /home/woody/iwi5/iwi5359h/SAGA/hf_cache
+
+# Thresholds: the canon recipe (median over images of the per-image
+# median + 5*MAD) run per model and per stage on the CALIBRATION split, then
+# APPLIED to the evaluation split.
+#
+# This differs from I1/I2 on purpose and the difference is recorded in the
+# file itself. There, tau_cal belongs to the split it was calibrated on,
+# because it comes from a cell's designated BASELINE and is applied to that
+# cell's other members on the same split. Here a public checkpoint is its own
+# reference — there is no baseline to borrow a threshold from — so calibrating
+# on `calibration` and reporting on `evaluation` is what keeps the threshold
+# and the reported map off the same images.
+thresholds_cal: results/frozen/I6_external/thresholds_cal.json
+threshold_split: calibration
+reporting_split: evaluation
+mad_k: 5.0
+
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── The nine models ──────────────────────────────────────────────────────────
+# `mixing` is QUOTED: bare yes/no are booleans in YAML and this is a recipe
+# label that gets printed into a table.
+#
+# A name that does not resolve in the installed timm is recorded UNAVAILABLE
+# with the timm version and is NEVER substituted with a different checkpoint
+# (TASK A §12). `weight_sha256: PENDING` is filled in by
+# tools/frozen_I6_download.py on the login node, before any job runs.
+models:
+  # ── supervised, recipe includes MixUp and CutMix ──
+  - model_id: deit_small_patch16_224
+    timm_name: deit_small_patch16_224.fb_in1k
+    hub_id: timm/deit_small_patch16_224.fb_in1k
+    arch_note: DeiT-S/16
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "yes"
+    group: supervised_mixing
+    citation: >-
+      Touvron et al., "Training data-efficient image transformers &
+      distillation through attention", ICML 2021 — Mixup 0.8, CutMix 1.0.
+    weight_sha256: PENDING
+
+  - model_id: deit3_small_patch16_224
+    timm_name: deit3_small_patch16_224.fb_in1k
+    hub_id: timm/deit3_small_patch16_224.fb_in1k
+    arch_note: DeiT III-S/16
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "yes"
+    group: supervised_mixing
+    citation: >-
+      Touvron et al., "DeiT III: Revenge of the ViT", ECCV 2022 — 3-Augment
+      with Mixup 0.8 and CutMix 1.0.
+    weight_sha256: PENDING
+
+  - model_id: deit3_base_patch16_224
+    timm_name: deit3_base_patch16_224.fb_in1k
+    hub_id: timm/deit3_base_patch16_224.fb_in1k
+    arch_note: DeiT III-B/16
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "yes"
+    group: supervised_mixing
+    citation: >-
+      Touvron et al., "DeiT III: Revenge of the ViT", ECCV 2022 — 3-Augment
+      with Mixup 0.8 and CutMix 1.0.
+    weight_sha256: PENDING
+
+  - model_id: vit_base_patch16_224_augreg
+    timm_name: vit_base_patch16_224.augreg_in1k
+    hub_id: timm/vit_base_patch16_224.augreg_in1k
+    arch_note: AugReg ViT-B/16, ImageNet-1k only
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "yes"
+    group: supervised_mixing
+    citation: >-
+      Steiner et al., "How to train your ViT? Data, Augmentation, and
+      Regularization in Vision Transformers", TMLR 2022 — AugReg includes
+      Mixup.
+    weight_sha256: PENDING
+
+  # ── trained without mixing ──
+  - model_id: vit_small_patch14_dinov2
+    timm_name: vit_small_patch14_dinov2.lvd142m
+    hub_id: timm/vit_small_patch14_dinov2.lvd142m
+    arch_note: DINOv2 ViT-S/14, run at 224 (native 518)
+    patch_size: 14
+    grid_side: 16
+    n_prefix: 1
+    depth: 12
+    native_input_size: 518
+    mixing: "no"
+    group: no_mixing
+    citation: >-
+      Oquab et al., "DINOv2: Learning Robust Visual Features without
+      Supervision", TMLR 2024 — self-supervised; no Mixup or CutMix.
+    weight_sha256: PENDING
+
+  - model_id: vit_base_patch14_dinov2
+    timm_name: vit_base_patch14_dinov2.lvd142m
+    hub_id: timm/vit_base_patch14_dinov2.lvd142m
+    arch_note: DINOv2 ViT-B/14, run at 224 (native 518)
+    patch_size: 14
+    grid_side: 16
+    n_prefix: 1
+    depth: 12
+    native_input_size: 518
+    mixing: "no"
+    group: no_mixing
+    citation: >-
+      Oquab et al., "DINOv2: Learning Robust Visual Features without
+      Supervision", TMLR 2024 — self-supervised; no Mixup or CutMix.
+    weight_sha256: PENDING
+
+  # NOTE ON THE NAME. The task file's prose says "OpenCLIP ViT-B/16"; the
+  # timm name it registers is `vit_base_patch16_clip_224.openai`, which is
+  # the ORIGINAL OpenAI CLIP release, not the LAION OpenCLIP reproduction.
+  # The registered NAME is authoritative and is used unchanged (§12: do not
+  # substitute), and the citation below is the one that matches the weights.
+  - model_id: vit_base_patch16_clip_224_openai
+    timm_name: vit_base_patch16_clip_224.openai
+    hub_id: timm/vit_base_patch16_clip_224.openai
+    arch_note: >-
+      OpenAI CLIP ViT-B/16 image tower. The task file's prose says "OpenCLIP";
+      the registered timm tag is `.openai`, which is the original release.
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "no"
+    group: no_mixing
+    citation: >-
+      Radford et al., "Learning Transferable Visual Models From Natural
+      Language Supervision", ICML 2021 — contrastive image-text; no Mixup or
+      CutMix.
+    weight_sha256: PENDING
+
+  - model_id: vit_base_patch16_224_mae
+    timm_name: vit_base_patch16_224.mae
+    hub_id: timm/vit_base_patch16_224.mae
+    arch_note: MAE ViT-B/16 encoder, pretrained weights only (no fine-tune)
+    patch_size: 16
+    grid_side: 14
+    n_prefix: 1
+    depth: 12
+    native_input_size: 224
+    mixing: "no"
+    group: no_mixing
+    citation: >-
+      He et al., "Masked Autoencoders Are Scalable Vision Learners", CVPR
+      2022 — masked reconstruction; no Mixup or CutMix in pretraining.
+    weight_sha256: PENDING
+
+  # ── exploratory: registers ──
+  - model_id: vit_small_patch14_reg4_dinov2
+    timm_name: vit_small_patch14_reg4_dinov2.lvd142m
+    hub_id: timm/vit_small_patch14_reg4_dinov2.lvd142m
+    arch_note: DINOv2 ViT-S/14 with 4 registers, run at 224 (native 518)
+    patch_size: 14
+    grid_side: 16
+    n_prefix: 5
+    depth: 12
+    native_input_size: 518
+    mixing: "no"
+    group: registers_exploratory
+    citation: >-
+      Darcet et al., "Vision Transformers Need Registers", ICLR 2024 —
+      exploratory here; NO prediction is made for it.
+    weight_sha256: PENDING
