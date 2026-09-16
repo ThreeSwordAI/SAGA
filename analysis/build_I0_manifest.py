@@ -545,6 +545,23 @@ def finetune_rows(runs_root: Path):
     return rows
 
 
+def detection_best_epoch(run_dir: Path):
+    """(best_AP_epoch, last_epoch) for a detection run, or (MISSING, MISSING).
+
+    Detection saves no best checkpoint, so the natural question — asked by
+    the human on 2026-09-16 — is whether `last.pth` happens to BE the best-AP
+    weights. That is answerable from the committed files: `coco_eval_best.json`
+    records the best-AP epoch and `log.csv` the last one. It is answered PER
+    RUN rather than assumed, because the trainer rewrites last.pth every
+    epoch, so a run that peaked earlier would make the two differ.
+    """
+    best = read_json(run_dir / "coco_eval_best.json") or {}
+    epoch = best.get("epoch", best.get("best_epoch"))
+    last = final_log_epoch(run_dir)
+    return (MISSING if epoch is None else int(epoch),
+            MISSING if last is None else int(last))
+
+
 def dense_rows(root: Path, family: str):
     """det_*/seg_*: record what weight files the run ACTUALLY declares.
 
@@ -588,7 +605,36 @@ def dense_rows(root: Path, family: str):
                           f"STRATUM from the classification cohort")
             elif filename is None:
                 status = "superseded"
-                reason = DENSE_NO_BEST_REASON
+                be, le = detection_best_epoch(run_dir)
+                coincide = (be != MISSING and le != MISSING and be == le)
+                if coincide:
+                    # HUMAN'S CALL, 2026-09-16, after the alternative (leave
+                    # the row empty) was put to them: resolve this row to
+                    # last.pth rather than lose a usable checkpoint. It is
+                    # not an assumption — detection_best_epoch READ both
+                    # epochs from this run's own coco_eval_best.json and
+                    # log.csv and they coincide, so last.pth IS the best-AP
+                    # weights for this run. TASK-09's defect was that one
+                    # could not TELL; here it is computed, recorded, and
+                    # re-checked on every build.
+                    path = (f"{ckpt_dir}/last.pth" if ckpt_dir
+                            else run_dir / "ckpt" / "last.pth")
+                reason = DENSE_NO_BEST_REASON + (
+                    f". RESOLVED TO ckpt/last.pth for this run: its best-AP "
+                    f"epoch ({be}) is also its last epoch ({le}), read from "
+                    f"coco_eval_best.json and log.csv, so last.pth carries "
+                    f"the best-AP weights. This row therefore names the SAME "
+                    f"FILE as the `last` row and shares its sha256 — the "
+                    f"`last` row is the eligible one, and any count of "
+                    f"checkpoints must de-duplicate on sha256 "
+                    f"(derived_params.resolves_to_ckpt_kind says so). A run "
+                    f"whose best-AP epoch differed would NOT be resolved this "
+                    f"way"
+                    if coincide else
+                    f". NOT resolvable for this run: its best-AP epoch ({be}) "
+                    f"and last epoch ({le}) DIFFER, so the best-AP weights "
+                    f"were never saved and are not recoverable; only the "
+                    f"best-AP predictions and metrics are")
             else:
                 status = "superseded"
                 reason = ("diagnostics come from the LAST checkpoint "
@@ -624,7 +670,23 @@ def dense_rows(root: Path, family: str):
                     {"task": meta.get("task"),
                      "backbone_source": meta.get("backbone_source"),
                      "n_train_images": meta.get("n_train_images"),
-                     "n_val_images": meta.get("n_val_images")},
+                     "n_val_images": meta.get("n_val_images"),
+                     # detection saves no best checkpoint, so record whether
+                     # last.pth nonetheless holds the best-AP weights, and —
+                     # when it does — that this row deliberately resolves to
+                     # the SAME FILE as the `last` row, so any count of
+                     # checkpoints can de-duplicate on sha256
+                     **(dict(zip(("best_ap_epoch", "last_epoch"),
+                                 detection_best_epoch(run_dir)),
+                             best_weights_are_last_pth=(
+                                 detection_best_epoch(run_dir)[0]
+                                 == detection_best_epoch(run_dir)[1]),
+                             resolves_to_ckpt_kind=(
+                                 "last" if (kind == "best" and filename is None
+                                            and detection_best_epoch(run_dir)[0]
+                                            == detection_best_epoch(run_dir)[1])
+                                 else None))
+                        if family == "dense_det" else {})},
                     sort_keys=True, separators=(",", ":")),
                 status=status, status_reason=reason,
                 git_sha=meta.get("git_sha", MISSING),

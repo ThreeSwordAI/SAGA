@@ -192,19 +192,78 @@ def test_dense_rows_name_the_files_the_trainers_actually_write(rows):
     seg = [r for r in rows if r["family"] == "dense_seg"]
     assert len(det) == 6 and len(seg) == 6
     for r in det:
-        if r["ckpt_kind"] == "best":
-            # the row EXISTS so the absence is accounted for, but it claims
-            # no file
-            assert r["ckpt_path"] == MISSING, r["run_id"]
-            assert r["ckpt_sha256"] == MISSING, r["run_id"]
-            assert "no best checkpoint exists" in r["status_reason"]
-        else:
-            assert r["ckpt_path"].endswith("/ckpt/last.pth"), r["run_id"]
+        # detection writes no best file; its `best` row either resolves to
+        # last.pth (when the epochs coincide) or names nothing at all
+        assert r["ckpt_path"].endswith("/ckpt/last.pth") \
+            or r["ckpt_path"] == MISSING, r["run_id"]
+        assert "no best checkpoint exists" in r["status_reason"] \
+            or r["ckpt_kind"] == "last"
     for r in seg:
         want = "best_model.pth" if r["ckpt_kind"] == "best" else "last.pth"
         assert r["ckpt_path"].endswith(f"/ckpt/{want}"), r["run_id"]
+    # the filename that never existed appears nowhere
     assert not any(r["ckpt_path"].endswith("/ckpt/best.pth")
                    for r in det + seg)
+
+
+def test_detection_best_rows_resolve_to_last_pth_only_when_the_epochs_agree(
+        rows):
+    """Detection saves no best checkpoint. The human's call (2026-09-16) is
+    that a `best` row RESOLVES to `ckpt/last.pth` rather than staying empty —
+    but only where the run's own files prove that is the same thing.
+
+    The proof is per run and re-derived on every build: `coco_eval_best.json`
+    gives the best-AP epoch and `log.csv` the last one. Where they coincide,
+    last.pth IS the best-AP weights. Where they would not, the row must NOT
+    resolve — the best weights were genuinely never saved. TASK-09's defect
+    was that one could not tell which case applied; here it is computed.
+
+    The cost of resolving is a shared sha256 across two ckpt_kinds, so the
+    row declares `resolves_to_ckpt_kind` and any count must de-duplicate.
+    """
+    det_best = [r for r in rows
+                if r["family"] == "dense_det" and r["ckpt_kind"] == "best"]
+    det_last = {r["run_id"]: r for r in rows
+                if r["family"] == "dense_det" and r["ckpt_kind"] == "last"}
+    assert len(det_best) == 3 and len(det_last) == 3
+
+    for r in det_best:
+        p = json.loads(r["derived_params"])
+        run = REPO / "results" / "detection" / r["run_id"]
+        best = json.loads((run / "coco_eval_best.json").read_text(
+            encoding="utf-8"))
+        with open(run / "log.csv", newline="", encoding="utf-8") as f:
+            last_ep = max(int(x["epoch"]) for x in csv.DictReader(f)
+                          if x.get("AP"))
+        # the epochs are READ from the run's own files, never typed
+        assert p["best_ap_epoch"] == best.get("epoch", best.get("best_epoch"))
+        assert p["last_epoch"] == last_ep
+        assert p["best_weights_are_last_pth"] == (p["best_ap_epoch"] == last_ep)
+        assert str(p["best_ap_epoch"]) in r["status_reason"]
+
+        sibling = det_last[r["run_id"]]
+        if p["best_weights_are_last_pth"]:
+            # resolved: SAME file, SAME sha, and it says so
+            assert p["resolves_to_ckpt_kind"] == "last", r["run_id"]
+            assert r["ckpt_path"] == sibling["ckpt_path"], r["run_id"]
+            assert r["ckpt_sha256"] == sibling["ckpt_sha256"], r["run_id"]
+            assert len(r["ckpt_sha256"]) == 64, r["run_id"]
+            assert "RESOLVED TO ckpt/last.pth" in r["status_reason"]
+            assert "de-duplicate on sha256" in r["status_reason"]
+        else:
+            # not resolvable: the best weights were never written
+            assert p["resolves_to_ckpt_kind"] is None, r["run_id"]
+            assert r["ckpt_path"] == MISSING, r["run_id"]
+            assert r["ckpt_sha256"] == MISSING, r["run_id"]
+            assert "were never saved" in r["status_reason"]
+
+    # only ONE of the two rows is eligible, so a count of eligible dense
+    # checkpoints cannot double-count a run
+    for r in det_best:
+        assert r["status"] == "superseded", r["run_id"]
+    for r in det_last.values():
+        assert r["status"] == "eligible", r["run_id"]
+    assert len({r["ckpt_sha256"] for r in det_last.values()}) == 3
 
 
 def test_dense_rows_record_their_backbone(rows):
@@ -530,23 +589,24 @@ def test_every_remaining_missing_hash_is_accounted_for(rows):
     """
     if not HASHES.exists():
         pytest.skip("ckpt_hashes.json not present (Phase B not run)")
-    derived, no_file, pending, unexplained = [], [], [], []
+    derived, no_file, unexplained = [], [], []
     for r in rows:
         if r["ckpt_sha256"] != MISSING:
             continue
         if r["ckpt_kind"] == "derived":
             derived.append(r["run_id"])
         elif r["ckpt_path"] == MISSING:
-            no_file.append(r["run_id"])       # detection saves no best
-        elif r["family"] == "dense_seg" and r["ckpt_kind"] == "best":
-            pending.append(r["run_id"])
+            # a checkpoint kind this family never writes AND could not be
+            # resolved to another row's file
+            no_file.append(r["run_id"])
         else:
             unexplained.append((r["run_id"], r["ckpt_kind"], r["ckpt_path"]))
 
     assert not unexplained, unexplained
-    assert len(derived) == 4                  # the TTR edits
-    assert len(no_file) == 3                  # det_* `best`
-    assert len(pending) <= 3                  # seg_* `best_model.pth`
+    assert len(derived) == 4                  # the four TTR edits
+    # every detection `best` row resolved to last.pth, so nothing is left
+    assert no_file == [], no_file
+    assert len(derived) + len(no_file) == 4
 
     # and every EVALUABLE row — anything an intervention could actually be
     # run on — is fully identified
