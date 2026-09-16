@@ -4273,3 +4273,136 @@ open and still only matters at B2.
 ### Pending from HPC
 
 **Nothing.** C1 needed no GPU.
+
+---
+
+## 2026-09-16 — D1 SIGNED, D2/D3/D4/D6/D7 CLOSED, B2 prepared
+
+Worktree `../SAGA-I2`, branch `task/I2`, off `main` at `a120f4f`. Local only.
+Seven of the eight `LOCKED_ANALYSIS` decisions are now closed; **D5 is the
+one that remains, and it still blocks I4.**
+
+### D1 — signed at `s11_out`, with the §3(b) wording
+
+`docs/LOCKED_ANALYSIS.md` §1 carries the ALTERNATIVE sentence from
+`results/frozen/I2_terminal/D1_proposal.md` §3(b), not the rule's branch-3
+boilerplate. The distinction matters and is recorded in §1 itself:
+
+- **The verdict is the rule's, unchanged.** `analysis/i2_decision.decide()`
+  returned branch 3 because 2 of the 5 primary diagnostics fall below the
+  conventional 0.70 survival cutoff under the terminal-gate bypass
+  (`cos_all` 0.680, `cos_nosink_mad` 0.694). The cutoff was not moved and the
+  rule was not edited after the numbers existed.
+- **What was rejected is one explanatory clause.** The boilerplate's
+  "substantially a terminal-gate effect" is contradicted by the same table:
+  the bypass retains 0.68–0.91 of every gap with every sign preserved, while
+  the one-block stage change removes 80–91% of the cosine gaps and leaves
+  rank and counts at 0.73–0.98.
+
+The signature lives in `LOCKED_ANALYSIS` §1 and nowhere else.
+`D1_proposal.md` is GENERATED, so it holds no signature of its own:
+`analysis/build_D1_proposal.read_signature()` reads the line back out of §1,
+which is why the note can say SIGNED and still pass its byte-identity test.
+
+### The other closures
+
+| # | closed at | how |
+|---|---|---|
+| D2 | all 8 elements of `DIHEDRAL_OPS` | written default, **accepted** |
+| D3 | `configs/frozen/permutations_14x14.json` | **generated and committed** — sha256 (LF) `75149f36329e480e192e23a25ac39c88b9a77d6b230ad40938d043525ddfa460` |
+| D4 | `canon` basis for the I4 prevalence mask | written default, **accepted** |
+| D6 | bootstrap seed `0` | written default, **accepted** |
+| D7 | no multiplicity correction, three contrasts named in advance | written default, **accepted** |
+
+Each carries the same signature line. §12 is now a resolution table with
+seven of eight struck through, in the convention D8 already used. **The
+document is still a DRAFT** — its three header signature lines stay
+`PENDING`, because closing a decision and freezing the document are separate
+acts and D5 is open.
+
+### D3 — the permutation lists (`[I3-prep]`, one commit, config + test only)
+
+`gate_edit` REFUSES to draw a permutation, which meant I3 could not run at
+all until the lists existed. They do now:
+
+- **position**: `RandomState(s).permutation(196)`, `s = 0..9`
+- **within_ring**: `s = 100..109`; the identity, then the flat indices INSIDE
+  each Chebyshev ring permuted among themselves, rings `k = 0..6` from
+  `analysis.address_analysis.ring_indices` — THE ring definition, imported.
+
+The recipe lives in `tests/test_I3_permutations.py`, which is therefore also
+the generator; a byte-identity test regenerates the document from the seeds
+and compares it to what is committed, so neither can drift. 12 tests:
+bijection, twenty pairwise-distinct draws, exact ring preservation for the
+within-ring family (ring 1 keeps its 44 members) against genuine ring
+crossing for the position family, `build_edited_gate_map` accepting every
+list with each head's value multiset bit-identical, a position list REFUSED
+by the ring-preserving mode, `gate_edit` still refusing to invent one, and
+the sha256 recorded in `LOCKED_ANALYSIS`.
+
+### The B2 collision, found before B2 was submitted
+
+`out_dir` was `<out_root>/<work_package>/<run_id>` — **no split in the
+path** — and the completion marker keys on the CHECKPOINT sha, not the split.
+So the evaluation sweep would have either exited 0 for all 19 runs having
+done nothing (`--skip-if-done` seeing the calibration marker for the same
+checkpoint), or appended 10,000 evaluation images into the calibration
+`records.parquet`. Neither failure is loud; the table builder would have
+caught the second only after the GPU time was spent.
+
+- a sweep now writes to `<out_root>/<wp>/<split_name>/<run_id>/`
+- `thresholds_cal` in the YAML is a TEMPLATE containing `{split_name}`, and
+  `thresholds_cal_path()` REFUSES a fixed path — a tau calibrated on one
+  split applied to another is an undeclared threshold with the same key and a
+  different meaning
+- the committed calibration sweep, its thresholds and its tables moved to
+  `results/frozen/I2_terminal/calibration/` (`git mv`, no content change)
+
+### B2 storage policy (the human's ruling)
+
+B2 runs on `evaluation.json` (10,000 images), not `sub2k`: the locked
+evaluation split is the protocol every other work package reports on, and two
+evaluation bases inside one paper is exactly what this project is trying not
+to create.
+
+- the raw `records.parquet` / `diag.parquet` for the 19 evaluation runs stay
+  on the HPC beside `results/**/*_norms.npz`; `.gitignore` covers them, and
+  ONLY them — calibration stays fully committed
+- `run_meta.json` (committed) now records the **sha256 and byte size of every
+  file the run wrote**, so a file living outside git is still identified
+- `tools/frozen_I2_pack_primary.py` writes
+  `figures_data/frozen/I2_evaluation_primary.npz`: the five primary
+  diagnostics per image, float32, on one shared image order. **Measured on
+  the calibration data: 605 series x 2,000 images = 3.0 MB**, so evaluation
+  is ~15 MB. That file is what the image-level bootstrap and Figure 5A read,
+  and what makes every evaluation number regenerable from the repository.
+
+### Two consequences elsewhere, neither a weakening
+
+- **`docs/I0_HANDOFF.md` is generated from `LOCKED_ANALYSIS`** and is
+  regenerated here. Its fixed prose said "N closed in Phase C", which would
+  now have claimed I0 Phase C closed seven decisions it never touched. It
+  states the count, points at `LOCKED_ANALYSIS` for who closed what, and says
+  Phase C itself closed only D8.
+- **`tests/test_I0_phasec.py::test_only_d8_is_closed_and_d5_still_blocks`**
+  asserted a SNAPSHOT that later work packages exist to change. It now pins
+  the closed set BY NAME — so a future silent closure still fails — and still
+  asserts all eight rows are present and D5 is open.
+
+### One tension the human may want to settle
+
+`docs/I0_HANDOFF.md` §7 still reads "until the human fills them in, nothing
+in it is locked and **no I3/I4 Phase-B job may run**", keyed to FREEZING the
+document. The human has released I2 B2 and the I1/I3/I4/I5 Phase-B runs by
+signing D1 while deliberately leaving the document a DRAFT. That sentence is
+I0's fixed prose about a different gate; it was left alone rather than
+rewritten here, because changing a gate rule is not this task's call. D5
+independently still blocks I4 either way.
+
+`pytest -q`: **815 passed, 30 skipped**.
+
+### Pending from HPC
+
+**Phase B2** — the sweep on `results/frozen/splits/evaluation.json`. Until it
+comes back there are no evaluation tables, no `F5A_terminal.npz` and no
+`docs/I2_HANDOFF.md`. C2 is the next session.
