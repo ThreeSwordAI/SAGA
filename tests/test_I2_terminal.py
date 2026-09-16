@@ -1285,6 +1285,8 @@ def test_the_job_file_is_resubmit_safe():
 # ─────────────────────────────────────────────────────────────────────────────
 
 I2_FILES = [
+    REPO / "analysis" / "build_F5A_terminal.py",
+    REPO / "analysis" / "build_I2_handoff.py",
     REPO / "saga" / "frozen" / "diag.py",
     REPO / "tools" / "frozen_I2_thresholds.py",
     REPO / "analysis" / "build_I2_tables.py",
@@ -1300,7 +1302,7 @@ def test_no_optimizer_or_training_import_in_the_new_I2_files():
     banned_modules = ("torch.optim", "torch.optim.lr_scheduler")
     banned_names = {"AdamW", "Adam", "SGD", "backward", "step",
                     "LabelSmoothingCrossEntropy", "Mixup"}
-    assert len(I2_FILES) == 5
+    assert len(I2_FILES) == 7
     for path in I2_FILES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
@@ -1592,6 +1594,128 @@ def test_the_committed_tables_are_from_one_split_and_the_whole_cohort():
     assert meta["bootstrap_resamples"] == 10000 and meta["bootstrap_seed"] == 0
     assert not meta["runs_absent"], meta["runs_absent"]
     assert len(meta["runs_present"]) == 19
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase C2 — the evaluation tables, Figure 5A, and the handoff
+# ─────────────────────────────────────────────────────────────────────────────
+
+EVALUATION = RESULTS / "evaluation"
+EV_TABLES = EVALUATION / "tables"
+F5A = REPO / "figures_data" / "frozen" / "F5A_terminal.npz"
+HANDOFF = REPO / "docs" / "I2_HANDOFF.md"
+
+needs_evaluation = pytest.mark.skipif(
+    not (EV_TABLES / "T_I2a_invariance.csv").exists(),
+    reason="the I2 evaluation tables are not present in this checkout")
+
+
+@needs_evaluation
+def test_the_evaluation_tables_are_complete_and_from_the_raw_records():
+    """T_I2a is about logits and NLL, which live only in `records.parquet`.
+    A table built from the primary pack alone has zero rows there — this
+    asserts the committed tables came from the full records."""
+    import csv as _csv
+    meta = json.loads((EV_TABLES / "build_meta.json").read_text("utf-8"))
+    assert meta["split_name"] == "evaluation"
+    assert len(meta["runs_with_records"]) == 19
+    assert not meta["runs_from_primary_pack"]
+    assert not meta["runs_absent"]
+    with open(EV_TABLES / "T_I2a_invariance.csv", newline="",
+              encoding="utf-8") as f:
+        inv = list(_csv.DictReader(f))
+    assert len(inv) == 32                     # 8 SAGA x 4 constants
+    assert {r["n_images"] for r in inv} == {"10000"}
+
+
+@needs_evaluation
+def test_proposition_2_holds_exactly_on_the_evaluation_split():
+    """The claim the panel rests on, asserted against the committed table:
+    the classifier does not move at ANY declared constant."""
+    import csv as _csv
+    with open(EV_TABLES / "T_I2a_invariance.csv", newline="",
+              encoding="utf-8") as f:
+        inv = list(_csv.DictReader(f))
+    assert max(float(r["max_abs_logit_diff_vs_native"]) for r in inv) == 0.0
+    assert min(float(r["top1_agreement"]) for r in inv) == 1.0
+    assert max(float(r["mean_abs_delta_nll"]) for r in inv) == 0.0
+    half = [r for r in inv if r["condition_id"] == "term_0.50"]
+    assert len(half) == 8
+    assert all(r["phi_L_zero_bit_identical"] == "1" for r in half)
+    # ... while the patch rows DO move, so the equality is not vacuous
+    assert max(float(r["max_abs_cos_all_diff_hist"]) for r in inv
+               if r["condition_id"] == "term_1.00") > 0.1
+
+
+@needs_evaluation
+def test_figure_5A_carries_the_zero_line_and_both_stages():
+    from analysis.build_F5A_terminal import CONDITIONS, STAGES
+    assert F5A.exists(), "figures_data/frozen/F5A_terminal.npz is missing"
+    with np.load(F5A, allow_pickle=False) as z:
+        assert list(z["__conditions"]) == list(CONDITIONS)
+        meta = json.loads(str(z["__meta_json"]))
+        assert meta["split_name"] == "evaluation"
+        assert len(meta["pairs"]) == 8
+        stages = {k.split("|")[4] for k in z.files if k.startswith("value|")}
+        assert stages == set(STAGES)
+        # the zero line: the classifier does not move at any constant, on
+        # any SAGA checkpoint
+        lines = [z[k] for k in z.files if k.startswith("logit_diff|")]
+        assert len(lines) == 8
+        for line in lines:
+            assert line.shape == (len(CONDITIONS),)
+            assert np.all(line == 0.0)
+        for k in (k for k in z.files if k.startswith("top1_agree|")):
+            assert np.all(z[k] == 1.0)
+        # ... and a diagnostic that does move, with term_0.50 == native
+        cos = z["value|vit_small|mixup|s1|hist|cos_all"]
+        assert cos[CONDITIONS.index("term_0.50")] == cos[
+            CONDITIONS.index("native")]
+        assert cos[CONDITIONS.index("term_1.00")] != cos[
+            CONDITIONS.index("native")]
+
+
+@needs_evaluation
+def test_the_handoff_regenerates_byte_identically_and_copies_the_signed_D1():
+    """The D1 sentence in the handoff must be COPIED from LOCKED_ANALYSIS,
+    not restated — a handoff that quoted a decision the locked document does
+    not carry would be the worst kind of drift."""
+    from analysis.build_I2_handoff import build, d1_from_locked
+    once = build(RESULTS, REPO / "docs" / "LOCKED_ANALYSIS.md")
+    assert once == build(RESULTS, REPO / "docs" / "LOCKED_ANALYSIS.md")
+    assert HANDOFF.read_text(encoding="utf-8") == once, (
+        "docs/I2_HANDOFF.md differs from what analysis/build_I2_handoff.py "
+        "produces — regenerate it, never edit it by hand")
+    sentence, signature, stage = d1_from_locked(
+        REPO / "docs" / "LOCKED_ANALYSIS.md")
+    assert "> " + sentence in once
+    assert "> " + signature in once
+    assert stage == "s11_out"
+    # the consistency check is REPORTED, never acted on
+    assert "reported, not acted on" in once
+    assert "D1 is signed on calibration by design" in once
+    # and the things the handoff was asked to carry
+    assert "tau_canon" in once and "tau_cal[hist]" in once
+    assert "s12_post_norm` is not a candidate reporting stage" in once
+    assert "survival eval" in once
+    assert "still blocks I4" in once
+
+
+@needs_evaluation
+def test_no_generated_handoff_table_row_contains_an_unescaped_pipe():
+    text = HANDOFF.read_text(encoding="utf-8")
+    widths, block, prev = {}, 0, False
+    for line in text.splitlines():
+        is_row = line.startswith("|") and line.rstrip().endswith("|")
+        if is_row and not prev:
+            block += 1
+        prev = is_row
+        if is_row:
+            widths.setdefault(block, []).append(
+                (line.replace("\\|", "\x00").count("|"), line))
+    assert widths
+    for cols in widths.values():
+        assert len({n for n, _ in cols}) == 1, cols
 
 
 def test_the_new_framework_file_is_inside_the_I0_ast_tests_glob():
