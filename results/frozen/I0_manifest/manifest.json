@@ -1,6 +1,6 @@
 {
   "generated_by": "analysis/build_I0_manifest.py",
-  "generated_at": "2026-09-16T11:18:47.943088+00:00",
+  "generated_at": "2026-09-16T11:38:13.738590+00:00",
   "hist_stage": "s12_pre_norm",
   "hist_stage_citation": "saga/metrics.py:287-291 (forward hooks on model.blocks[i], storing the block's own output), saga/metrics.py:324-325 (feats[L-1][:, P:, :]), saga/vit.py:238-241 (SAGAViT.forward applies self.norm AFTER the block loop), tools/diagnose.py:89-95 (the historical driver)",
   "columns": [
