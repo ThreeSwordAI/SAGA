@@ -52,7 +52,14 @@ GATE_EDIT_MODES = ("original", "mean", "mean_plus_alpha_delta", "permute",
                    "permute_within_ring", "dihedral")
 
 #: The 8 elements of the dihedral group of a square grid, as (k_rot90, flip).
+#: Index 0 is (0, False) — THE IDENTITY. TASK B §3 requires `dihedral0` to be
+#: bit-identical to `original`, so the ordering of this tuple is a contract
+#: and not a convenience; `tests/test_I3_gate_edits.py` pins it.
 DIHEDRAL_OPS = tuple((k, f) for k in range(4) for f in (False, True))
+
+#: Human-readable name per DIHEDRAL_OPS index, for tables and notes.
+DIHEDRAL_NAMES = ("identity", "flip_lr", "rot90", "rot90_flip_lr",
+                  "rot180", "rot180_flip_lr", "rot270", "rot270_flip_lr")
 
 
 class EditError(ValueError):
@@ -212,6 +219,38 @@ def check_permutation(perm, n_patches: int) -> np.ndarray:
         raise EditError(
             "permutation is not a bijection over the patch coordinates")
     return perm.astype(np.int64)
+
+
+def dihedral_permutation(t: int, n_patches: int) -> np.ndarray:
+    """The position permutation of dihedral transform `t` on a square grid.
+
+    ONE definition of the 8 symmetries, shared by `build_edited_gate_map`
+    (which applies them to a gate map) and by TASK B's I3 conditions (which
+    name them and test them as ring-preserving bijections). A second
+    derivation in the conditions file or the analysis layer could drift from
+    this one, and the drift would be invisible: `dihedral{t}` would still be
+    *a* symmetry, just not the one the tables say it is.
+
+    Returns `idx` such that `g[:, idx]` is the transformed map, i.e. the
+    value that lands at position p comes from position `idx[p]`. t = 0 is the
+    identity and returns `arange(n_patches)` exactly.
+    """
+    if not isinstance(t, (int, np.integer)) or isinstance(t, bool):
+        raise EditError(f"dihedral index must be an int, got {t!r}")
+    t = int(t)
+    if not 0 <= t < len(DIHEDRAL_OPS):
+        raise EditError(
+            f"dihedral index {t} out of range 0..{len(DIHEDRAL_OPS) - 1}")
+    side = int(round(n_patches ** 0.5))
+    if side * side != n_patches:
+        raise EditError(
+            f"{n_patches} patches is not a square grid — the dihedral group "
+            f"is undefined")
+    rot, flip = DIHEDRAL_OPS[t]
+    grid = np.rot90(np.arange(n_patches).reshape(side, side), rot)
+    if flip:
+        grid = np.fliplr(grid)
+    return np.ascontiguousarray(grid.reshape(-1))
 
 
 def ring_of(n_patches: int) -> np.ndarray:
@@ -383,20 +422,7 @@ def build_edited_gate_map(g: torch.Tensor, mode: str, *, alpha=None,
             "mode 'dihedral' requires `perm` = the index of the transform in "
             f"DIHEDRAL_OPS (0..{len(DIHEDRAL_OPS) - 1})")
     k = int(np.asarray(perm).reshape(-1)[0]) if np.ndim(perm) else int(perm)
-    if not 0 <= k < len(DIHEDRAL_OPS):
-        raise EditError(
-            f"dihedral index {k} out of range 0..{len(DIHEDRAL_OPS) - 1}")
-    side = int(round(n_patches ** 0.5))
-    if side * side != n_patches:
-        raise EditError(
-            f"{n_patches} patches is not a square grid — the dihedral group "
-            f"is undefined")
-    rot, flip = DIHEDRAL_OPS[k]
-    base = np.arange(n_patches).reshape(side, side)
-    grid = np.rot90(base, rot)
-    if flip:
-        grid = np.fliplr(grid)
-    idx = torch.as_tensor(grid.reshape(-1).copy(), device=g.device)
+    idx = torch.as_tensor(dihedral_permutation(k, n_patches), device=g.device)
     return g[:, idx].contiguous()
 
 
