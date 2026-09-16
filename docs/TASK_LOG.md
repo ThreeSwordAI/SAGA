@@ -4843,3 +4843,89 @@ so I6's two names do not break a test about I1's addition).
 
 Phase B — the human runs the HPC block below. Nothing else in Track A can
 proceed until `maps_*.npz` and the two `thresholds_cal.json` come back.
+
+---
+
+## 2026-09-17 — TASK A — PHASE B, ATTEMPT 1 FAILED (two preflight bugs, both mine; nothing written)
+
+Jobs `4262675` (I1, `--array=0-18`) and `4262896` (I6, `--array=0-8`) both
+failed before producing a single file. No partial state to clean up; the
+resubmission is a plain rerun. Fixed in `95ec79b` on `task/A`.
+
+### Failure 1 — `scripts/jobs/frozen_I1.sbatch` was not valid bash
+
+```
+slurm_script: line 243: unexpected EOF while looking for matching `"'
+slurm_script: line 245: syntax error: unexpected end of file
+```
+
+`FAILED 2:0`, 14 seconds per task, all 19.
+
+The usage message said **`discovery for D5's masks`**. Inside `${var:?word}`
+bash RE-PARSES `word`, and a single quote there opens a quoted section even
+within double quotes — so the apostrophe swallowed the rest of the file.
+Reproduced in isolation:
+
+```bash
+X="${1:?a message with D5's apostrophe}"   # unexpected EOF
+X="${1:?a message with D5 apostrophe}"     # fine
+```
+
+The expensive part is WHEN this is discovered: an sbatch script is submitted,
+queued, allocated a GPU and only THEN parsed, so a syntax error costs a full
+scheduling round trip per array task. `bash -n` would have caught it in
+milliseconds.
+
+### Failure 2 — the HF cache was pointed at woody too late to matter
+
+```
+saga.frozen.external.ExternalError: deit_small_patch16_224: no cached weight
+file for 'timm/deit_small_patch16_224.fb_in1k'.
+```
+
+`FAILED 1:0`, all 9, after staging ImageNet.
+
+`huggingface_hub` resolves its cache directory into **module constants at
+import time**. `tools/frozen_I6_download.py` imported
+`saga.frozen.external` → `timm` → `huggingface_hub` at module level and only
+then called `set_cache_env()` inside `main()`. By then the constant was
+already `~/.cache/huggingface/hub`, so the login-node download ignored the
+registry entirely and wrote to **`$HOME` on /home/hpc — a 104.9 G soft quota
+that the job statistics show sitting at 119.9 G**. The compute nodes DO get
+`HF_HOME` from the job file's exports, looked on woody, and found nothing.
+
+The download itself succeeded and the nine shas in
+`configs/frozen/I6_models.yaml` are correct — they are hashes of file
+CONTENT, so they stay valid once the files are moved. **The weights are moved,
+not re-downloaded.**
+
+### Fixes
+
+1. The apostrophe is gone from the usage message, with a comment saying why.
+2. `preset_cache_env()` runs at module import in the download tool, ABOVE the
+   `saga.*` imports, reading `hf_home` from the registry with `yaml` alone
+   (which pulls in nothing that reads the cache). `--registry` is scanned off
+   `sys.argv` because argparse cannot run that early.
+3. The tool now reads `huggingface_hub.constants.HF_HUB_CACHE` back and
+   **refuses to download** when it does not sit under the registry's
+   `hf_home`, rather than silently writing to the wrong filesystem.
+4. `verify_weight_sha` prints where it looked, `HF_HOME` and `SAGA_HF_HOME`.
+
+### Tests added (all three would have caught one of these)
+
+- `bash -n` over every `scripts/jobs/frozen_*.sbatch`. Skipped where no
+  usable bash exists — `shutil.which("bash")` finds WSL's stub on the
+  Windows box and that stub cannot start, so the helper PROBES each candidate
+  and falls back to Git Bash.
+- a portable regex check for an apostrophe inside `${...:?...}`, for machines
+  with no bash at all.
+- an AST check that `preset_cache_env()` runs before the first `saga.*`
+  import in the download tool.
+
+`pytest -q`: **938 passed, 30 skipped**.
+
+### Pending
+
+Phase B, attempt 2. The HPC has one unpushed commit (`4917b11`, the weight
+shas) which must be pushed BEFORE the local merge, or the merge will not see
+it.

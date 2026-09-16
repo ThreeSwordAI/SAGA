@@ -27,6 +27,9 @@ never wrapped in SAGAViT.
 """
 
 import json
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -706,6 +709,66 @@ def test_the_job_file_takes_the_split_as_an_argument_with_no_default():
     text = JOB_FILE.read_text(encoding="utf-8")
     assert 'SPLIT="${1:?' in text, "the split must have no default"
     assert "val_diag_split.json" in text and "evaluation.json" in text
+
+
+JOB_FILES = sorted((REPO / "scripts" / "jobs").glob("frozen_*.sbatch"))
+
+
+def _working_bash():
+    """A bash that can actually run, or None.
+
+    `shutil.which("bash")` on Windows finds WSL's stub first, which on this
+    machine cannot start at all (`execvpe(/bin/bash) failed`). Git Bash is
+    the one that works. Probe rather than trust the PATH, so the test skips
+    where there is no usable bash instead of failing on a broken one.
+    """
+    candidates = [shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe",
+                  "/bin/bash", "/usr/bin/bash"]
+    for candidate in candidates:
+        if not candidate or not Path(candidate).exists():
+            continue
+        try:
+            probe = subprocess.run([candidate, "-c", "exit 0"],
+                                   capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if probe.returncode == 0:
+            return candidate
+    return None
+
+
+BASH = _working_bash()
+
+
+@pytest.mark.skipif(BASH is None, reason="no usable bash on this machine")
+@pytest.mark.parametrize("job", JOB_FILES, ids=lambda p: p.name)
+def test_every_frozen_job_file_is_valid_bash(job):
+    """`bash -n` on every job file.
+
+    An sbatch script is submitted, queued, allocated a GPU and only THEN
+    parsed. A syntax error costs a full scheduling round trip per array task
+    and shows up as a 14-second FAILED with nothing written — which is
+    exactly what happened to job 4262675 on 2026-09-16.
+    """
+    result = subprocess.run([BASH, "-n", str(job)], capture_output=True,
+                            text=True, timeout=120)
+    assert result.returncode == 0, \
+        f"{job.name} is not valid bash:\n{result.stderr}"
+
+
+@pytest.mark.parametrize("job", JOB_FILES, ids=lambda p: p.name)
+def test_no_apostrophe_inside_a_parameter_default_message(job):
+    """The portable half of the test above, for a machine without bash.
+
+    Inside `${var:?word}` bash RE-PARSES `word`, so a single quote there
+    opens a quoted section even within double quotes. "D5's masks" in a
+    usage message turned a whole job file into a syntax error at EOF.
+    """
+    text = job.read_text(encoding="utf-8")
+    for match in re.finditer(r"\$\{\w+:[?-]((?:[^{}]|\n)*?)\}", text):
+        assert "'" not in match.group(1), (
+            f"{job.name}: an apostrophe inside ${{...:?...}} makes the file "
+            f"a syntax error:\n  {match.group(1)[:120]}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

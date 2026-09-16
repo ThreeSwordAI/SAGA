@@ -69,10 +69,15 @@
 # calibrated for this split. Resubmit the whole array; it adds what is
 # missing and rewrites nothing.
 
+# NO APOSTROPHE BELOW. Inside ${1:?word} bash re-parses `word`, and a single
+# quote there opens a quoted section even inside double quotes — "D5's masks"
+# made this whole file a syntax error at EOF, and every array task died in 14
+# seconds before running a line of it (job 4262675, 2026-09-16).
+# tests/test_I1_spatial.py runs `bash -n` over every job file now.
 SPLIT="${1:?usage: sbatch [--array=0-18] scripts/jobs/frozen_I1.sbatch <split.json>
        discovery:  sbatch scripts/jobs/frozen_I1.sbatch results/diagsplit/val_diag_split.json
        evaluation: sbatch scripts/jobs/frozen_I1.sbatch results/frozen/splits/evaluation.json
-       Both are needed: discovery for D5's masks, evaluation for every table.}"
+       Both are needed: discovery for the D5 masks, evaluation for every table.}"
 
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/scripts/env_alex.sh
 # TASK-11's committed val-only stager. stage_imagenet.sh would also pull the

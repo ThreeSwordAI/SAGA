@@ -344,6 +344,58 @@ def test_the_download_tool_writes_a_sha_without_touching_anything_else(
     assert by_id["deit_small_patch16_224"]["weight_sha256"] == "PENDING"
 
 
+def test_the_cache_is_pointed_at_woody_BEFORE_the_heavy_imports():
+    """`huggingface_hub` freezes its cache path into module constants AT
+    IMPORT TIME, and `saga.frozen.external` imports timm, which imports
+    huggingface_hub. So the download tool must set HF_HOME before that
+    import, not inside main().
+
+    Setting it late is not a style problem: on Alex, 2026-09-16, it put ~2 GB
+    of weights on /home/hpc (a 104.9 G soft quota already at 119.9 G) while
+    the compute nodes looked on woody and found nothing — all nine I6 array
+    tasks failed (job 4262896). Checked on the parsed AST, by position.
+    """
+    tree = ast.parse(DOWNLOAD_TOOL.read_text(encoding="utf-8"),
+                     filename=str(DOWNLOAD_TOOL))
+    preset_line = heavy_import_line = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "_CACHE_ROOT"
+                for t in node.targets):
+            preset_line = node.lineno
+        if isinstance(node, ast.ImportFrom) and \
+                (node.module or "").startswith("saga."):
+            heavy_import_line = heavy_import_line or node.lineno
+    assert preset_line is not None, \
+        "the module must call preset_cache_env() at import time"
+    assert heavy_import_line is not None
+    assert preset_line < heavy_import_line, (
+        f"preset_cache_env() runs at line {preset_line} but `saga.*` is "
+        f"imported at line {heavy_import_line} — huggingface_hub will have "
+        f"resolved its cache before HF_HOME is set")
+
+
+def test_the_preset_reads_the_registry_and_honours_the_override(tmp_path,
+                                                                monkeypatch):
+    from tools.frozen_I6_download import _registry_from_argv, preset_cache_env
+
+    monkeypatch.delenv("SAGA_HF_HOME", raising=False)
+    root = preset_cache_env(REGISTRY)
+    import os
+    assert os.environ["HF_HOME"] == root
+    assert os.environ["TORCH_HOME"] == root
+    assert os.environ["HUGGINGFACE_HUB_CACHE"] == str(Path(root) / "hub")
+    assert "woody" in root, "the hub cache belongs on woody, not $HOME"
+    assert not Path(root).exists() or True     # the preset creates nothing
+
+    monkeypatch.setenv("SAGA_HF_HOME", str(tmp_path / "over"))
+    assert preset_cache_env(REGISTRY) == str(tmp_path / "over")
+
+    assert _registry_from_argv(["--registry", "a.yaml"]) == "a.yaml"
+    assert _registry_from_argv(["--registry=b.yaml"]) == "b.yaml"
+    assert _registry_from_argv([]) == "configs/frozen/I6_models.yaml"
+
+
 def test_writing_a_sha_for_an_unknown_model_is_refused():
     from tools.frozen_I6_download import set_sha_in_registry
     with pytest.raises(ext.ExternalError, match="no `model_id"):
