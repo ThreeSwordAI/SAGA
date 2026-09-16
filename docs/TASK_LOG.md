@@ -4748,3 +4748,98 @@ I0 tests that the first `STAGES` edit broke are passing again, unmodified).
 
 Phase A′ (I6) has not started. Phase B has not been printed yet — the I6 job
 block goes in the same HPC handoff, so both are printed at the end of A′.
+
+---
+
+## 2026-09-16 — TASK A — I6 PHASE A (registry, pre-registered prediction, adapter, download tool, job)
+
+Worktree `../SAGA-A`, branch `task/A`, tag `[I6]`. Three commits, `4cad43f`,
+`097b0bc`, `72c3498`. No push. Nothing ran on the HPC and **no external
+weight has been downloaded**.
+
+### The point of this phase
+
+`configs/frozen/I6_models.yaml` is committed BEFORE
+`tools/frozen_I6_download.py` has fetched a single byte. The prediction, the
+rule that scores it, the nine names and the citation behind every recipe flag
+are in git with a date, and `analysis/frozen_I6_external.py` — the code that
+decides *met / not met / not applicable* — is committed in the same phase.
+The first look at any outcome therefore comes strictly after the commit that
+registers the claim. Two tests hold that ordering in place: the prediction
+string is compared to `docs/TASK_A_I1_I6.md` §9 character for character
+(non-breaking hyphens included), and the download tool's inability to run
+inference is checked on the parsed AST — it imports neither `timm` nor
+`torch` and reaches no `create_model` / `forward` / `eval`.
+
+### The nine names under the installed timm (1.0.28) — all nine resolve
+
+| model_id | timm name | group | grid | prefix | depth |
+|---|---|---|---|---|---|
+| `deit_small_patch16_224` | `deit_small_patch16_224.fb_in1k` | supervised_mixing | 14×14 | 1 | 12 |
+| `deit3_small_patch16_224` | `deit3_small_patch16_224.fb_in1k` | supervised_mixing | 14×14 | 1 | 12 |
+| `deit3_base_patch16_224` | `deit3_base_patch16_224.fb_in1k` | supervised_mixing | 14×14 | 1 | 12 |
+| `vit_base_patch16_224_augreg` | `vit_base_patch16_224.augreg_in1k` | supervised_mixing | 14×14 | 1 | 12 |
+| `vit_small_patch14_dinov2` | `vit_small_patch14_dinov2.lvd142m` | no_mixing | 16×16 | 1 | 12 |
+| `vit_base_patch14_dinov2` | `vit_base_patch14_dinov2.lvd142m` | no_mixing | 16×16 | 1 | 12 |
+| `vit_base_patch16_clip_224_openai` | `vit_base_patch16_clip_224.openai` | no_mixing | 14×14 | 1 | 12 |
+| `vit_base_patch16_224_mae` | `vit_base_patch16_224.mae` | no_mixing | 14×14 | 1 | 12 |
+| `vit_small_patch14_reg4_dinov2` | `vit_small_patch14_reg4_dinov2.lvd142m` | registers_exploratory | 16×16 | **5** | 12 |
+
+Nothing is `UNAVAILABLE`. The grid and prefix columns are the values the
+ADAPTER reads back from each model and cross-checks against the registry; the
+table above is the registry's declaration, and a disagreement is a hard
+failure at load, not a warning.
+
+### Three things worth flagging
+
+1. **DINOv2 is a 518-pixel model, run here at 224.** All three DINOv2
+   checkpoints (`lvd142m`) have `input_size` 518 and `crop_pct` 1.0 in timm.
+   The task file §9 fixes 224 for every model so the grids are 14×14 or 16×16
+   and the ring geometry is defined, so timm interpolates the position
+   embedding down to 16×16. This is a real deviation: it is recorded per
+   model as `native_input_size`, carried into every output row as
+   `resolution_deviation`, and it goes in the note. **A DINOv2 result here is
+   a result about DINOv2 at 224, not about DINOv2 as published.**
+
+2. **"OpenCLIP" vs the registered name.** The task file's prose says
+   "OpenCLIP ViT‑B/16"; the timm name it registers is
+   `vit_base_patch16_clip_224.openai`, which is the ORIGINAL OpenAI release,
+   not the LAION OpenCLIP reproduction. §12 forbids substituting, so the
+   registered NAME is used unchanged and the citation is the one that matches
+   those weights (Radford et al. 2021). Recorded in the registry's
+   `arch_note`.
+
+3. **I6's threshold split differs from I1/I2's, deliberately.** There,
+   `tau_cal` belongs to the split it was calibrated on because it comes from
+   a cell's designated BASELINE. A public checkpoint has no baseline to
+   borrow from, so I6 calibrates on `calibration` and applies to
+   `evaluation` — which is what keeps the threshold off the images it is
+   reported on. `results/frozen/I6_external/thresholds_cal.json` records BOTH
+   shas, and `saga/frozen/external.py::load_thresholds` checks the
+   calibration one only, so this file can never be read as an I1/I2-style
+   same-split tau.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| A8 | `configs/frozen/I6_models.yaml` (registry + prediction + outcome rule), `saga/frozen/external.py`, `tools/frozen_I6_download.py`, `configs/frozen/I6_external.yaml`, `tools/frozen_I6_maps.py`, `scripts/jobs/frozen_I6.sbatch` |
+| A9 | `analysis/frozen_I6_external.py` → `results/frozen/I6_external/tables/T_I6a_external.csv` — written NOW, run in Phase C |
+| A11 | `tests/test_I6_external.py` — 47 tests |
+| — | `saga/frozen/stages.py`: `ext_s11_out`, `ext_hist` (aliases, additive) |
+
+`tools/frozen_I6_maps.py` reuses `saga/frozen/norms.py`'s accumulator and
+packbits writer, so I6's maps carry per-image indicators from the start —
+unlike I1's pre-Phase-B tables, `T_I6a_external`'s bootstrap CIs and
+split-half ρ are real numbers, not `PENDING B`.
+
+### Tests
+
+`pytest -q`: **928 passed, 30 skipped** (was 880 + 30; +47 I6 tests, and one
+I1 assertion relaxed from an exact `ALL_STAGES` tuple comparison to a slice
+so I6's two names do not break a test about I1's addition).
+
+### Pending
+
+Phase B — the human runs the HPC block below. Nothing else in Track A can
+proceed until `maps_*.npz` and the two `thresholds_cal.json` come back.
