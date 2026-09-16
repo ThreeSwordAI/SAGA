@@ -1,0 +1,87 @@
+{
+  "branch": 3,
+  "branch_name": "I2 is a main finding",
+  "cell": "vit_small|mixup",
+  "cutoff": 0.7,
+  "d1_stage": "s11_out",
+  "failing_diagnostics_s11": [
+    "cos_all",
+    "cos_nosink_mad"
+  ],
+  "failing_diagnostics_term": [
+    "cos_all",
+    "cos_nosink_mad"
+  ],
+  "gap_native": {
+    "cos_all": -0.1288443842,
+    "cos_nosink_mad": -0.1368321514,
+    "count_fixed_cal": -8.155375,
+    "count_mad": -1.85675,
+    "eff_rank": 14.08619091
+  },
+  "gap_s11": {
+    "cos_all": -0.0113683559,
+    "cos_nosink_mad": -0.02673244556,
+    "count_fixed_cal": -7.956625,
+    "count_mad": -1.815125,
+    "eff_rank": 10.34354041
+  },
+  "gap_term": {
+    "cos_all": -0.08757038906,
+    "cos_nosink_mad": -0.09491082387,
+    "count_fixed_cal": -7.458,
+    "count_mad": -1.688,
+    "eff_rank": 12.3546925
+  },
+  "n_pairs": 4,
+  "passes_s11": {
+    "cos_all": false,
+    "cos_nosink_mad": false,
+    "count_fixed_cal": true,
+    "count_mad": true,
+    "eff_rank": true
+  },
+  "passes_term": {
+    "cos_all": false,
+    "cos_nosink_mad": false,
+    "count_fixed_cal": true,
+    "count_mad": true,
+    "eff_rank": true
+  },
+  "primary_diagnostics": [
+    "cos_all",
+    "cos_nosink_mad",
+    "eff_rank",
+    "count_fixed_cal",
+    "count_mad"
+  ],
+  "sentence": "D1 = `s11_out`, and I2 is a main finding: on the calibration split, in the vit_small|mixup cell (n = 4 pairs), neither the terminal-gate bypass (cos_all, cos_nosink_mad below the conventional 0.70 or sign-flipped; survival: cos_all 0.680, cos_nosink_mad 0.694, eff_rank 0.877, count_fixed_cal 0.914, count_mad 0.909) nor the second-to-last block (cos_all, cos_nosink_mad; survival_s11: cos_all 0.088, cos_nosink_mad 0.195, eff_rank 0.734, count_fixed_cal 0.976, count_mad 0.978) preserves the native SAGA-vs-baseline gap, so the historical final-block diagnostic distinction was substantially a terminal-gate effect and the claim ladder narrows accordingly.",
+  "sign_match": {
+    "cos_all": true,
+    "cos_nosink_mad": true,
+    "count_fixed_cal": true,
+    "count_mad": true,
+    "eff_rank": true
+  },
+  "sign_match_s11": {
+    "cos_all": true,
+    "cos_nosink_mad": true,
+    "count_fixed_cal": true,
+    "count_mad": true,
+    "eff_rank": true
+  },
+  "survival": {
+    "cos_all": 0.6796601156016857,
+    "cos_nosink_mad": 0.69362955196508,
+    "count_fixed_cal": 0.9144889106877367,
+    "count_mad": 0.9091153897939949,
+    "eff_rank": 0.8770783087448586
+  },
+  "survival_s11": {
+    "cos_all": 0.08823322778549164,
+    "cos_nosink_mad": 0.19536669771312243,
+    "count_fixed_cal": 0.9756295694557271,
+    "count_mad": 0.9775817961491855,
+    "eff_rank": 0.7343035797319035
+  }
+}

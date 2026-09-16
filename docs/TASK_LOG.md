@@ -4113,3 +4113,163 @@ concentration_null` (400 Binomial simulations per distinct mass), so the
 ### Pending from HPC
 
 **Nothing.** B1 is complete and verified. Everything remaining in I2 is local.
+
+---
+
+## 2026-09-16 — TASK I2, PHASE C1 (tables, the D1 decision, the proposal note)
+
+Worktree `../SAGA-I2`, branch `task/I2`, fast-forwarded onto `main` at
+`cdf63ca`. Local only — no HPC time, a pure re-derivation from the committed
+B1 results. **D1 is PROPOSED, not signed.** `docs/LOCKED_ANALYSIS.md` is
+untouched and §1 still reads `DECISION NEEDED`.
+
+### What was produced
+
+| file | rows |
+|---|---|
+| `results/frozen/I2_terminal/tables/T_I2a_invariance.csv` | 32 |
+| `results/frozen/I2_terminal/tables/T_I2b_sweep.csv` | 121 |
+| `results/frozen/I2_terminal/tables/T_I2c_gaps.csv` | 108 |
+| `results/frozen/I2_terminal/tables/T_I2d_maps.csv` | 176 |
+| `results/frozen/I2_terminal/tables/T_I2e_registers.csv` | 48 |
+| `results/frozen/I2_terminal/tables/build_meta.json` | — |
+| `results/frozen/I2_terminal/D1_verdict.json` | the rule's output, machine-readable |
+| `results/frozen/I2_terminal/D1_proposal.md` | **D5**, generated, unsigned |
+
+All 19 runs present, one split (`calibration`, sha `6b707eb3…`), no run
+absent. The whole build takes ~74 s.
+
+### The architectural half — Proposition 2, measured
+
+Across **8 SAGA checkpoints x 4 constants**, 2,000 images each:
+
+| | |
+|---|---|
+| max abs logit difference vs native | **0** (exactly) |
+| min top-1 agreement with native | **1** |
+| max mean abs ΔNLL | **0** |
+| `native` ≡ `term_0.50` (φ_L = 0) | **8 of 8** checkpoints bit-identical, including the patch tensors and every diagnostic computed from them |
+| max abs Δ`cos_all` at `hist` under `term_1.00` | 0.1841 |
+
+A CLS-only readout cannot see the terminal patch gate — not approximately,
+exactly — and φ_L = 0 is the weight-decay fixed point it was predicted to be
+on every trained SAGA checkpoint in the cohort. The patch diagnostics at the
+same stage move while the classifier does not. That is the I2 panel.
+
+### The decision (`analysis/i2_decision.py`, run on the table, not read off it)
+
+**Branch 3 — D1 = `s11_out`**, on the voting cell `vit_small|mixup`
+(4 pairs, 2,000 images):
+
+| diagnostic | gap @ hist/native | gap @ hist/term_1.00 | survival | gap @ s11_out | survival_s11 |
+|---|---|---|---|---|---|
+| `cos_all` | -0.1288 | -0.0876 | **0.680** | -0.0114 | **0.088** |
+| `cos_nosink_mad` | -0.1368 | -0.0949 | **0.694** | -0.0267 | **0.195** |
+| `eff_rank` | 14.0862 | 12.3547 | 0.877 | 10.3435 | 0.734 |
+| `count_fixed_cal` | -8.1554 | -7.4580 | 0.914 | -7.9566 | 0.976 |
+| `count_mad` | -1.8567 | -1.6880 | 0.909 | -1.8151 | 0.978 |
+
+Signs are preserved 5 of 5 under both comparisons; only the retained
+MAGNITUDE decides. Branch 1 failed because `cos_all` and `cos_nosink_mad`
+missed the conventional 0.70 cutoff by **0.020** and **0.006**; branch 2
+failed because the same two retain only 0.088 and 0.195 at `s11_out`.
+
+**The cutoff was not moved and the rule was not touched.** `decide()` is the
+function committed in Phase A, its three branches are unit-tested on
+synthetic gaps, and it returned branch 3 on this table.
+
+### Two disclosures the proposal note carries, and why they are there
+
+1. **The branch turned on 0.006.** Any cutoff at or below 0.67 would have
+   returned branch 1. The note states this so the reader can see how much of
+   the verdict rests on a conventional constant.
+2. **The branch-3 boilerplate overstates this evidence.** Task file §7
+   attaches the wording "the historical SAGA-vs-baseline diagnostic
+   distinction was substantially a terminal-gate effect" to branch 3, and the
+   rule emits it verbatim. These numbers do not support it: bypassing the
+   gate retains **0.68–0.91** of every native gap, while moving back one
+   block leaves the two cosine diagnostics at **0.09** and **0.20** and the
+   other three at 0.73–0.98. On this evidence it is the STAGE, not the gate,
+   that carries most of the cosine difference. The verdict `D1 = s11_out` is
+   unaffected; the clause explaining WHY is the one that would be quoted in
+   the paper, so the note prints the rule's sentence verbatim AND an
+   alternative wording the same table supports, and the human signs one of
+   them. The rule was not edited after seeing the result.
+
+### The non-voting cells (n = 2, they do not vote — task §7)
+
+| cell | branch it would give | note |
+|---|---|---|
+| `vit_base\|mixup` | **1** — D1 = `hist` | every survival 0.75–0.98 |
+| `vit_small\|nomix` | **3** — D1 = `s11_out` | only via `count_mad` survival −1.72, a SIGN FLIP on a native gap of −0.1435 whose CI is [−0.2535, −0.0330]; the other four survivals are 1.02–1.23 |
+
+So one non-voting cell points the other way and the second reaches branch 3
+through an unstable ratio on a near-zero denominator. The voting cell was
+fixed in advance precisely so that this disagreement cannot be resolved after
+the fact by choosing a cell.
+
+### Two facts from the tables worth carrying forward
+
+**`s12_post_norm` is not a candidate reporting stage.** 44 of 176 rows of
+`T_I2d_maps.csv` carry `MISSING` for every spatial statistic, all at that
+stage, because the exceedance map there has ZERO mass. After the final
+LayerNorm the patch norms are near-uniform — for `e2r_vits_mixup_baseline_s1`
+the median is 15.835 and the max 16.957, against 14.275 and 95.063 at `hist`
+— so nothing exceeds either threshold and a map with no mass has no spatial
+arrangement to correlate. That is a property of the stage, not a gap in the
+results.
+
+**The calibrated thresholds reproduce the canon recipe.** `tau_cal[hist]` vs
+`tau_canon`: 20.90086 vs 20.8515625 (`vit_small|mixup`), 127.81152 vs
+127.3125 (`vit_base|mixup`), 22.77754 vs 22.859375 (`vit_small|nomix`). Same
+recipe, different split.
+
+### Code added, and two test fixes
+
+- `analysis/build_D1_proposal.py` — **D5**'s generator. Every number is read
+  from the tables and from `decide()`; the note is regenerated, never hand
+  edited, and a byte-identity test compares the committed file against what
+  the generator produces.
+- The generator escapes `|` inside every markdown table cell. Every cell name
+  in this project is `<arch>|<recipe_actual>`, and an unescaped one silently
+  breaks its row — TASK I0 Phase C hit this twice. A test now checks every
+  table block in the note has a constant column count.
+- **`pip install pyarrow` locally flipped `saga/frozen/records.py` from CSV to
+  parquet**, which exposed a latent environment assumption:
+  `tests/test_I0_frozen.py::test_run_work_package_writes_traceable_rows_and_restores_state`
+  read the runner's output with `csv.DictReader` unconditionally, so it
+  passed only where pyarrow was ABSENT and died with a `UnicodeDecodeError`
+  anywhere it was present — including the cluster, from the moment I2
+  required pyarrow. Fixed by reading through whichever format
+  `records_path()` reports. **Not one assertion was changed, removed or
+  loosened**; the test now makes the same statement about the runner instead
+  of an accidental statement about the environment. The same fix was applied
+  to this task's own helpers.
+
+`pytest -q`: **797 passed, 30 skipped** (792 + 30 after Phase A; +5 C1 tests).
+
+### Deviation from the task file
+
+**No Figure 5A draft.** §8 Phase C1 asks for one from calibration data,
+labelled draft. The human instructed in this session that no tables or
+figures were to be produced and then asked for C1; the tables are required
+inputs to D1 and were built, the figure is not, and `F5A_terminal.npz` is a
+C2 deliverable from evaluation data in any case. Everything it would be drawn
+from is committed.
+
+### What is blocked, and on whom
+
+**D1 is PROPOSED and NOT SIGNED.** `results/frozen/I2_terminal/D1_proposal.md`
+carries an empty signature block. Until the human fills it in and copies a
+sentence into `docs/LOCKED_ANALYSIS.md` §1:
+
+- I2 Phase B2 (the same sweep on the evaluation split) must not run;
+- the Phase-B runs of I1, I3, I4 and I5 must not run.
+
+The B2 split question from the Phase A entry — §9 names `evaluation.json`
+(10,000 images) while §2/§8 budget 2,000, and `sub2k.json` exists — is still
+open and still only matters at B2.
+
+### Pending from HPC
+
+**Nothing.** C1 needed no GPU.
