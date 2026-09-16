@@ -129,7 +129,14 @@ def main():
     dataset = FrozenSplitDataset(args.data, items,
                                  transform=build_val_transform(224))
 
-    out_dir = (Path(args.out_root) / conditions["work_package"] / args.run_id)
+    # THE SPLIT IS PART OF THE PATH. Without it a second split's sweep would
+    # write into the first one's directory: `append_rows` would add the new
+    # split's images beside the old ones in one file, and `--skip-if-done`
+    # would see the previous marker for the SAME checkpoint and exit 0 having
+    # done nothing. Neither failure is loud. Measured on the I2 calibration
+    # results before B2 was submitted.
+    out_dir = (Path(args.out_root) / conditions["work_package"] / split_name
+               / args.run_id)
     multistage = is_multistage(conditions)
     print(f"frozen_eval: {args.run_id}/{args.ckpt_kind} "
           f"{row['arch']}/{row['variant']} gate_mode={row.get('gate_mode')}")
@@ -147,11 +154,12 @@ def main():
 
     if multistage:
         from saga.frozen import diag as fdiag
-        tau_cal_doc = fdiag.load_thresholds_cal(conditions["thresholds_cal"],
+        tau_path = fdiag.thresholds_cal_path(conditions["thresholds_cal"],
+                                             split_name)
+        tau_cal_doc = fdiag.load_thresholds_cal(tau_path,
                                                 split_sha256=split_sha)
         canon_doc = fdiag.load_canon_thresholds(conditions["thresholds_canon"])
-        print(f"             multi-stage: tau_cal from "
-              f"{conditions['thresholds_cal']} "
+        print(f"             multi-stage: tau_cal from {tau_path} "
               f"(split {tau_cal_doc['split_sha256'][:16]}…)")
         summary = run_work_package_stages(
             row=row, conditions=conditions, dataset=dataset, out_dir=out_dir,
@@ -182,10 +190,32 @@ def main():
                     "conditions_file": args.conditions,
                     "split": args.split, "split_sha256": split_sha,
                     "git_sha": git_sha(), "seed": args.seed,
-                    "device": str(device), **summary},
+                    "device": str(device),
+                    "outputs": output_digests(out_dir), **summary},
                    indent=2, sort_keys=True, default=str) + "\n",
         encoding="utf-8", newline="\n")
     return 0
+
+
+def output_digests(out_dir) -> dict:
+    """`{filename: {sha256, bytes}}` for everything the run wrote.
+
+    A records file that is too large to commit still has to be identifiable:
+    the I2 evaluation sweep leaves `records.parquet` / `diag.parquet` on the
+    cluster beside the norm dumps, and `run_meta.json` — which IS committed —
+    is then the only record that says which bytes produced the tables. Every
+    number this project reports must be traceable to a file; this is how a
+    file that lives outside git stays traceable.
+    """
+    from saga.run_registry import file_sha256
+
+    out = {}
+    for path in sorted(Path(out_dir).iterdir()):
+        if not path.is_file() or path.name == "run_meta.json":
+            continue
+        out[path.name] = {"sha256": file_sha256(path),
+                          "bytes": path.stat().st_size}
+    return out
 
 
 if __name__ == "__main__":

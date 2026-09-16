@@ -5,8 +5,14 @@ analysis/build_I2_tables.py
 TASK I2 D4 — the five tables of §6, from the records the HPC sweep wrote.
 
     python analysis/build_I2_tables.py \
-        [--results results/frozen/I2_terminal] \
-        [--out results/frozen/I2_terminal/tables]
+        [--results results/frozen/I2_terminal/<split_name>] \
+        [--out    results/frozen/I2_terminal/<split_name>/tables]
+
+`--results` names ONE split's sweep directory. A sweep writes under
+`results/frozen/I2_terminal/<split_name>/<run_id>/`, so calibration and
+evaluation can never share a records file, a completion marker or a
+threshold; `build_all` additionally refuses a directory whose runs do not
+all carry the same split sha.
 
 | table | content |
 |---|---|
@@ -669,7 +675,10 @@ def main():
     from saga.run_registry import git_sha
 
     p = argparse.ArgumentParser(description="Build TASK I2's five tables.")
-    p.add_argument("--results", default=f"results/frozen/{WORK_PACKAGE}")
+    p.add_argument("--results",
+                   default=f"results/frozen/{WORK_PACKAGE}/calibration",
+                   help="the sweep directory for ONE split; B2/C2 pass "
+                        f"results/frozen/{WORK_PACKAGE}/evaluation")
     p.add_argument("--out", default=None,
                    help="default: <results>/tables")
     p.add_argument("--manifest",

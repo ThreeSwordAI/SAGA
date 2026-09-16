@@ -12,8 +12,10 @@
 > parameter, and a change is a new dated section, never an edit in place.
 
 Drafted for TASK I0 D3 from `docs/SAGA_ICLR2027_FINAL_PLAN.md` §5.5, §6.2 and
-§6.6-§6.8. Values the plan leaves open are marked **`DECISION NEEDED`** and
-are listed together in §11 so the human can settle them in one pass.
+§6.6-§6.8. Values the plan left open were marked `DECISION NEEDED` and listed
+together in §12 so they could be settled in one pass. **Seven of the eight are
+now closed** — each says so where it is defined, and §12 records how. **D5 is
+the one that remains, and it blocks I4.**
 
 Why this file exists: I3 and I4 are the only experiments in the project that
 could be tuned into a result. Fixing the layers, the masks, the ε, the
@@ -28,9 +30,25 @@ one.
 
 | | |
 |---|---|
-| Value | **`DECISION NEEDED` — decided by I2** |
+| Value | **`s11_out`** — **CLOSED by I2** |
 | Candidates | `s11_out`, `s12_pre_norm`, `s12_post_norm`, `hist` |
-| Default if I2 is inconclusive | `hist` |
+| Default if I2 is inconclusive | `hist` (not used; I2 reported) |
+
+> D1 = `s11_out`: on the calibration split, in the `vit_small|mixup` cell (n = 4 pairs), the SAGA-vs-baseline gap at the historical stage survives a terminal-gate bypass at 0.68–0.91 of its native size with every sign preserved, so the untrained terminal constant is a contributor but not the main one; the cosine diagnostics, however, retain only 0.09–0.20 of that gap one block earlier. The final-block patch diagnostics are therefore a mixture of what training did and what a readout-invisible constant does, and they are reported with the `term_1.00` and `s11_out` controls beside them, never alone.
+>
+> Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. Decided by `analysis/i2_decision.decide()` on the calibration split;
+> the rule was committed before any result existed.
+
+The wording above is the alternative offered in §3(b) of
+`results/frozen/I2_terminal/D1_proposal.md`, chosen over the rule's own
+branch-3 boilerplate. The VERDICT follows the pre-declared rule exactly — 2
+of the 5 primary diagnostics fall below the conventional 0.70 survival cutoff
+under the terminal-gate bypass, and the cutoff was not moved. What was
+rejected is only the boilerplate's explanatory clause, "substantially a
+terminal-gate effect", which the same table contradicts: the bypass retains
+0.68–0.91 of every gap with every sign preserved, while the one-block stage
+change removes 80–91% of the cosine gaps and leaves rank and counts at
+0.73–0.98.
 
 `hist` is an **alias**, resolved once in `saga/frozen/stages.py`, for the
 stage the historical diagnostics used: **`s12_pre_norm`**, the output of the
@@ -70,11 +88,9 @@ inspecting an evaluation loss (plan §6.6).
 3. `mean_plus_alpha_delta` with **α = 0.5** — μ_h + 0.5·δ_h(p)
 4. **10 fixed position permutations**, shared across heads
 5. **10 fixed within-ring permutations**, shared across heads
-6. **dihedral set** — `DECISION NEEDED`: all 8 elements of `DIHEDRAL_OPS`, or
-   the 3 non-identity rotations plus the horizontal flip? The plan says "a
-   small prespecified set of grid rotations/reflections" without fixing the
-   size. Default if unanswered: **all 8** (it is 8 forward passes and avoids
-   a second selection).
+6. **dihedral set** — **CLOSED: all 8 elements of `DIHEDRAL_OPS`.** The
+   written default, ACCEPTED rather than defaulted into: it is 8 forward
+   passes and it avoids a second selection. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f.
 7. **energy-matched edit** (plan §5.5) — the spatial-component control:
    `Y^{π,energy} = Y^μ + (‖D^id‖_F / ‖D^π‖_F) · D^π`, single-layer so the
    incoming activations are identical. A zero denominator is handled
@@ -87,9 +103,15 @@ inspecting an evaluation loss (plan §6.6).
 
 | | |
 |---|---|
-| Value | **`DECISION NEEDED` — the fixed index lists are not yet generated** |
+| Value | **CLOSED — the lists are generated and committed** |
+| File | `configs/frozen/permutations_14x14.json`, sha256 (LF-normalised) `75149f36329e480e192e23a25ac39c88b9a77d6b230ad40938d043525ddfa460` |
 | Rule | one list per (grid, kind), generated once, committed, shared across every checkpoint on the same grid |
-| Proposed generator | `numpy.random.RandomState(s).permutation(196)` for `s = 0..9`; within-ring: the same ten `s`, permuting inside each ring of `analysis.address_analysis.border_distance_map` |
+| Position family | `numpy.random.RandomState(s).permutation(196)` for `s = 0..9` |
+| Within-ring family | `s = 100..109`; the identity, then the flat indices INSIDE each Chebyshev ring permuted among themselves, rings `k = 0..6` from `analysis.address_analysis.ring_indices` |
+
+Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. Generated and pinned by `tests/test_I3_permutations.py`, which is also
+the generator: it regenerates the document from the seeds and asserts byte
+identity with what is committed, so neither can drift from the other.
 
 Permutation draws are **repeated interventions on a checkpoint, never new
 model seeds** (plan §6.6). They are an axis of the condition list, not an
@@ -108,7 +130,7 @@ checkpoint. The lists must be generated and committed by I3 Phase A, to
 | Controls | **10 fixed random masks**, ring-matched: the same number of selected coordinates in each boundary ring |
 | Cross-method rule | the **baseline-derived** coordinate mask is the primary cross-method comparison on the same grid; each method's own map is a clearly labelled secondary question |
 | Overlap | random masks MAY overlap the high-prevalence mask. The overlap is REPORTED; draws are never rejected to amplify contrast |
-| Map basis | **`DECISION NEEDED`** — `canon` (fixed τ per `(arch, recipe_actual)`, `results/diagsplit/fixed_thresholds_canon.json`) or `mad` (per-image median+5·MAD)? Both exist in `results/tables/sink_address.csv`. Default if unanswered: **`canon`**, the project's primary basis since TASK-06B |
+| Map basis | **CLOSED: `canon`** (fixed τ per `(arch, recipe_actual)`, `results/diagsplit/fixed_thresholds_canon.json`) — the written default, ACCEPTED rather than defaulted into; it has been the project's primary basis since TASK-06B, and `mad` remains available in `results/tables/sink_address.csv` as the clearly labelled secondary. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | Which discovery map | **`DECISION NEEDED`** — the existing `*_addr.json` maps are computed at the LAST block, but I4 needs prevalence at the INPUT TO BLOCK 7/8 (plan §6.7 "temporal alignment"). These maps do not exist yet and must be produced by I1 before I4 Phase B |
 
 Rings come from `analysis.address_analysis.border_distance_map` — THE ring
@@ -154,9 +176,10 @@ mediator.
 | permutation draws | **repeated interventions on one checkpoint** | never treated as seeds, never as replication |
 | ring controls (R = 10) | repeated interventions | averaged within image before the contrast |
 
-Bootstrap seed: **`DECISION NEEDED`** — propose `0`, recorded in every output
-JSON alongside the git sha and checkpoint sha256, as every other seeded tool
-in this repo does.
+Bootstrap seed: **CLOSED: `0`** — the written default, ACCEPTED rather than
+defaulted into. Recorded in every output JSON alongside the git sha and
+checkpoint sha256, as every other seeded tool in this repo does, and already
+carried on every row of `T_I2c_gaps.csv` and `T_I2e_registers.csv`. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f.
 
 ## 9. Multiplicity
 
@@ -171,9 +194,10 @@ Declared **primary contrasts only**:
 Everything else — every other layer, ε, architecture, recipe, the legacy
 repeats, the dihedral set, the energy-matched variants — is labelled
 **exploratory** and reported as such. Correction across the primary set:
-**`DECISION NEEDED`** (propose: none, with the three contrasts named in
-advance and each reported with its interval, rather than a Bonferroni factor
-over a set that would then be tempting to shrink).
+**CLOSED: none** — the written default, ACCEPTED rather than defaulted into.
+The three contrasts are named in advance, above, and each is reported with
+its interval, rather than a Bonferroni factor over a set that would then be
+tempting to shrink. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f.
 
 ## 10. Decision rule
 
@@ -219,19 +243,25 @@ set and not a retrospectively preregistered study.
 
 ---
 
-## 12. Every `DECISION NEEDED`, in one list
+## 12. Every decision, and where it stands
 
-| # | §  | Question | Default if unanswered |
+| # | §  | Question | Resolution |
 |---|---|---|---|
-| D1 | 1 | Which stage for all new patch diagnostics? | `hist` (= `s12_pre_norm`), pending I2 |
-| D2 | 3 | Which dihedral subset — all 8, or a smaller prespecified set? | all 8 |
-| D3 | 4 | The ten fixed permutation index lists are not yet generated or committed | `RandomState(0..9).permutation(196)`, committed by I3 Phase A to `configs/frozen/permutations_14x14.json` |
-| D4 | 5 | Map basis for the I4 prevalence mask: `canon` or `mad`? | `canon` |
-| D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | blocks I4; no default |
-| D6 | 8 | Bootstrap seed | `0` |
-| D7 | 9 | Multiplicity correction across the three primary contrasts | none, with all three named in advance |
+| ~~D1~~ | 1 | ~~Which stage for all new patch diagnostics?~~ | **CLOSED — `s11_out`**, decided by I2's pre-declared rule on the calibration split. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
+| ~~D2~~ | 3 | ~~Which dihedral subset — all 8, or a smaller prespecified set?~~ | **CLOSED — all 8**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
+| ~~D3~~ | 4 | ~~The ten fixed permutation index lists are not yet generated or committed~~ | **CLOSED** — `configs/frozen/permutations_14x14.json`, sha256 `75149f36329e480e192e23a25ac39c88b9a77d6b230ad40938d043525ddfa460`. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
+| ~~D4~~ | 5 | ~~Map basis for the I4 prevalence mask: `canon` or `mad`?~~ | **CLOSED — `canon`**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
+| D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | **OPEN** — blocks I4; no default. I1 owns it |
+| ~~D6~~ | 8 | ~~Bootstrap seed~~ | **CLOSED — `0`**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
+| ~~D7~~ | 9 | ~~Multiplicity correction across the three primary contrasts~~ | **CLOSED — none**, all three named in advance; default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | ~~D8~~ | 11 | ~~The five split shas~~ | **CLOSED** — filled in from the Phase-B build, 2026-09-16 |
 
-Seven remain open. D5 is the only one that BLOCKS a work package. The rest can be defaulted; the
-defaults are stated above so that defaulting is a visible decision rather
-than a silent one.
+**One remains open: D5**, and it is the one that BLOCKS a work package — I4
+cannot run until I1 produces the prevalence map at the INPUT to block 7/8.
+D2, D4, D6 and D7 were closed at their WRITTEN DEFAULTS, recorded above as
+"default accepted" rather than allowed to pass silently; D1 was decided by
+I2's pre-declared rule, and D3 by generating and committing the lists.
+
+**This document is still a DRAFT.** Closing a decision and freezing the
+document are separate acts: the three signature lines in the header stay
+`PENDING` while D5 is open.

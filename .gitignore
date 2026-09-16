@@ -30,3 +30,15 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 wandb/
+# [TASK-I2] B2: the EVALUATION sweep's raw per-image records stay on the HPC,
+# beside results/**/*_norms.npz. 19 runs x 10 000 images x up to 11
+# (condition, stage) pairs is ~90 MB of parquet that nothing downstream reads
+# twice: the tables, maps.npz and figures_data/frozen/I2_evaluation_primary.npz
+# are committed and every reported number regenerates from them. Each run's
+# run_meta.json IS committed and records the sha256 and byte size of the files
+# left behind, so a number still traces to an identified file.
+# The CALIBRATION sweep is small and stays fully committed.
+results/frozen/I2_terminal/evaluation/*/records.parquet
+results/frozen/I2_terminal/evaluation/*/diag.parquet
+results/frozen/I2_terminal/evaluation/*/records.csv
+results/frozen/I2_terminal/evaluation/*/diag.csv

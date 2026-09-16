@@ -364,8 +364,23 @@ def calibrate_tau(per_image_thresholds) -> float:
                                          dtype=np.float64))
 
 
-def thresholds_cal_path(out_root="results/frozen", work_package="I2_terminal"):
-    return Path(out_root) / work_package / "thresholds_cal.json"
+def thresholds_cal_path(template, split_name: str) -> Path:
+    """The calibrated-thresholds path for one split.
+
+    The conditions YAML declares a TEMPLATE containing `{split_name}` rather
+    than a fixed path, because tau_cal is a property of the split it was
+    calibrated on: `load_thresholds_cal` refuses a file whose split sha does
+    not match, so one shared path would make the second split's sweep either
+    fail or — worse, if the guard were ever relaxed — silently reuse the
+    first split's thresholds.
+    """
+    text = str(template)
+    if "{split_name}" not in text:
+        raise DiagError(
+            f"thresholds_cal path {text!r} does not contain '{{split_name}}'. "
+            f"A calibrated threshold belongs to exactly one split; a fixed "
+            f"path would let two splits share one file.")
+    return Path(text.format(split_name=split_name))
 
 
 def load_thresholds_cal(path, *, split_sha256=None) -> dict:

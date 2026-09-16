@@ -485,16 +485,25 @@ def build(git_sha: str) -> str:
     A(f"`docs/LOCKED_ANALYSIS.md` is a **DRAFT**. It carries three `PENDING` "
       f"lines (signed by / date frozen / git sha at freeze); until the human "
       f"fills them in, nothing in it is locked and **no I3/I4 Phase-B job may "
-      f"run**. {len(open_ds)} of {len(ds)} decisions are open.\n")
-    A("| # | § | question | default if unanswered |")
+      f"run**. {len(open_ds)} of {len(ds)} decisions "
+      f"{'is' if len(open_ds) == 1 else 'are'} still open.\n")
+    A("| # | § | question | resolution / default if unanswered |")
     A("|---|---|---|---|")
     for d in ds:
         A(f"| {d['id']} | {d['section']} | {d['q']} | {d['default']} |")
     A("")
     if closed_ds:
-        A(f"{len(closed_ds)} closed in Phase C ("
-          f"{', '.join(d['id'].strip('~') for d in closed_ds)}): the split "
-          f"shas in §11 are filled in from the Phase-B build.\n")
+        # NOT "closed in Phase C": I0 Phase C closed D8 and nothing else.
+        # Later work packages close the rest (I2 decided D1; I3-prep
+        # generated D3's permutation lists; D2/D4/D6/D7 were closed at their
+        # written defaults), and this document regenerates against whatever
+        # LOCKED_ANALYSIS says today — so it must not attribute their
+        # closure to the phase that happened to write this generator.
+        A(f"{len(closed_ds)} of the {len(ds)} are now closed ("
+          f"{', '.join(d['id'].strip('~') for d in closed_ds)}); "
+          f"`docs/LOCKED_ANALYSIS.md` records who closed each one and when. "
+          f"I0 Phase C itself closed only D8, by filling the split shas in "
+          f"§11 from the Phase-B build.\n")
     # "blocking" is however LOCKED_ANALYSIS marks it — in the question text
     # or in the default column. Matching only one of the two silently dropped
     # this paragraph once.
