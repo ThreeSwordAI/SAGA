@@ -35,9 +35,11 @@ import torch
 import torch.nn.functional as F
 
 from saga.frozen import records as rec
-from saga.frozen.edits import (EditError, gate_edit, receiver_perturbation,
-                               state_hash, terminal_gate_override)
-from saga.frozen.stages import HIST_STAGE, capture_stages, resolve_stage
+from saga.frozen.edits import (TERMINAL_GATE_VALUES, EditError, gate_edit,
+                               receiver_perturbation, state_hash,
+                               terminal_gate_override)
+from saga.frozen.stages import (HIST_STAGE, STAGES, capture_stages,
+                                resolve_stage)
 from saga.metrics import (effective_rank, infer_num_prefix_tokens,
                           oversmoothing_pairwise, oversmoothing_pairwise_nosink,
                           sink_counts_fixed, sink_counts_mad, token_norms)
@@ -52,6 +54,10 @@ EDIT_TYPES = {
     "gate_edit": gate_edit,
     "receiver_perturbation": receiver_perturbation,
 }
+
+#: Model variants a condition may declare itself applicable to. A condition
+#: with no `applies_to` applies to all three.
+VARIANTS = ("baseline", "registers", "saga")
 
 
 class RunnerError(RuntimeError):
@@ -76,6 +82,44 @@ def load_manifest_row(manifest_json, run_id: str, ckpt_kind: str = "last"):
             f"{len(rows)} manifest rows for run_id={run_id!r} "
             f"ckpt_kind={ckpt_kind!r} — the manifest key is not unique")
     return rows[0]
+
+
+#: The 300-epoch cohort a frozen work package sweeps (I0 handoff §2): one row
+#: per condition, `last` checkpoints only, ablation / fine-tuned / dense / TTR
+#: rows excluded by family.
+COHORT_FAMILIES = ("e2r_300ep", "legacy_300ep")
+COHORT_STATUSES = ("eligible", "eligible_legacy")
+
+
+def eligible_cohort(manifest_json, *, families=COHORT_FAMILIES,
+                    statuses=COHORT_STATUSES, ckpt_kind="last") -> list:
+    """The eligible 300-epoch cohort rows, in ONE deterministic order.
+
+    BASELINES FIRST, then registers and saga, each block sorted by
+    (arch, recipe_actual, variant, provenance_tag, run_id). The order is a
+    contract: a job array indexes into it, so it must not depend on the
+    manifest's row order, on a dict iteration, or on a filesystem listing.
+    Baselines lead because they are what the per-stage thresholds are
+    calibrated from, so a partial array (`--array=0-7`) already covers every
+    calibration source.
+    """
+    doc = json.loads(Path(manifest_json).read_text(encoding="utf-8"))
+    rows = [r for r in doc["rows"]
+            if r.get("family") in families and r.get("status") in statuses
+            and r.get("ckpt_kind") == ckpt_kind]
+    if not rows:
+        raise RunnerError(
+            f"{manifest_json} has no rows with family in {list(families)}, "
+            f"status in {list(statuses)} and ckpt_kind={ckpt_kind!r}")
+    return sorted(rows, key=lambda r: (
+        0 if r["variant"] == "baseline" else 1, r["arch"],
+        r["recipe_actual"], r["variant"], str(r.get("provenance_tag", "")),
+        r["run_id"]))
+
+
+def eligible_run_ids(manifest_json, **kw) -> list:
+    """The cohort's run_ids in the array order `eligible_cohort` defines."""
+    return [r["run_id"] for r in eligible_cohort(manifest_json, **kw)]
 
 
 def verify_checkpoint(row: dict, ckpt_path=None) -> str:
@@ -148,6 +192,16 @@ def load_conditions(conditions_yaml):
           - id: terminal_gate_0.50
             edit_type: terminal_gate_override
             params: {value: 0.5}
+
+    A condition may additionally declare (TASK I2 §3):
+
+        applies_to: [saga]                 # default: every variant
+        stages: [s11_out, hist]            # default: the document's `stage`
+
+    Both are validated HERE, on the login node, so a misspelt variant or an
+    unknown stage costs a parse and not a staged dataset. A work package is
+    either single-stage throughout or multi-stage throughout: a half-declared
+    document would write two different row shapes into one file.
     """
     import yaml
     doc = yaml.safe_load(Path(conditions_yaml).read_text(encoding="utf-8"))
@@ -169,8 +223,86 @@ def load_conditions(conditions_yaml):
             raise RunnerError(
                 f"{conditions_yaml}: duplicate condition id {c['id']!r}")
         seen.add(c["id"])
+        _check_applies_to(conditions_yaml, c)
+        _check_stages(conditions_yaml, c)
+        if c["edit_type"] == "terminal_gate_override":
+            value = float((c.get("params") or {}).get("value", float("nan")))
+            if value not in TERMINAL_GATE_VALUES:
+                raise RunnerError(
+                    f"{conditions_yaml}: condition {c['id']!r} asks for "
+                    f"terminal gate value {value!r}, which is not one of the "
+                    f"declared constants {TERMINAL_GATE_VALUES}")
+    declared = [("stages" in c) for c in doc["conditions"]]
+    if any(declared) and not all(declared):
+        raise RunnerError(
+            f"{conditions_yaml}: {sum(declared)} of {len(declared)} conditions "
+            f"declare `stages`. A work package is single-stage or multi-stage "
+            f"throughout — mixing them would write two row shapes into one "
+            f"diag file")
     doc.setdefault("precision", "fp32")
     return doc
+
+
+def _check_applies_to(conditions_yaml, c: dict):
+    applies = c.get("applies_to")
+    if applies is None:
+        return
+    if not isinstance(applies, list) or not applies:
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} has applies_to="
+            f"{applies!r}; expected a non-empty list of {list(VARIANTS)}")
+    unknown = [v for v in applies if v not in VARIANTS]
+    if unknown:
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} applies_to names "
+            f"{unknown}, which are not model variants; expected a subset of "
+            f"{list(VARIANTS)}")
+
+
+def _check_stages(conditions_yaml, c: dict):
+    stages = c.get("stages")
+    if stages is None:
+        return
+    if not isinstance(stages, list) or not stages:
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} has stages={stages!r}; "
+            f"expected a non-empty list of {list(STAGES)}")
+    if len(set(stages)) != len(stages):
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} repeats a stage in "
+            f"{stages}")
+    real = [resolve_stage(s) for s in stages]        # raises on an unknown one
+    if len(set(real)) != len(real):
+        raise RunnerError(
+            f"{conditions_yaml}: condition {c['id']!r} declares {stages}, but "
+            f"two of those names resolve to the same stage ({real}) — one "
+            f"capture would be written as two rows")
+
+
+def condition_stages(conditions: dict, c: dict) -> tuple:
+    """The stages one condition is captured at: its own list, or the
+    document's single `stage`."""
+    return tuple(c.get("stages") or (conditions["stage"],))
+
+
+def conditions_for(conditions: dict, variant: str) -> list:
+    """The DECLARED conditions that apply to `variant`, in file order.
+
+    The only source of conditions is the YAML: this returns a subset of it
+    and can never return anything that is not in it (TASK I0 handoff §1, the
+    conditions contract).
+    """
+    if variant not in VARIANTS:
+        raise RunnerError(
+            f"unknown model variant {variant!r}; expected one of "
+            f"{list(VARIANTS)}")
+    out = [c for c in conditions["conditions"]
+           if variant in (c.get("applies_to") or VARIANTS)]
+    if not out:
+        raise RunnerError(
+            f"no declared condition applies to variant {variant!r} in "
+            f"{conditions.get('work_package')!r}")
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +414,42 @@ def run_condition(model, images, targets, condition, stage, *,
                          else [MISSING] * norms.shape[0]),
         }
     return resp, diag, (dict(info) if isinstance(info, dict) else {}), logits
+
+
+@torch.no_grad()
+def run_condition_multistage(model, images, targets, condition, stages, *,
+                             native_logits=None):
+    """(response dict, {stage: patch tensor}, edit info, logits) — ONE forward.
+
+    Every declared stage is captured in the SAME forward pass under the SAME
+    edit, so `s11_out` and `s12_pre_norm` for one condition are two readouts
+    of one computation and not two runs that could differ. `capture_stages`
+    stores a tensor under both the declared name and the stage it resolves
+    to, so `hist` and `s12_pre_norm` both index the same captured tensor.
+
+    The functional response is identical to `run_condition`'s: it does not
+    depend on the stage, because the classification logits are the model's
+    own head output.
+    """
+    wanted = tuple(stages)
+    ctx, _params = _edit_context(model, condition)
+    with ctx as info, capture_stages(model, wanted) as store:
+        logits = model(images).float()
+        captured = {s: store[s] for s in wanted}
+
+    nll = F.cross_entropy(logits, targets, reduction="none").double()
+    top1 = logits.argmax(dim=1)
+    resp = {
+        "nll": nll.tolist(),
+        "top1": top1.tolist(),
+        "correct": (top1 == targets).int().tolist(),
+        "label": targets.tolist(),
+        "max_abs_logit_diff_vs_native": (
+            (logits - native_logits).abs().amax(dim=1).tolist()
+            if native_logits is not None else [0.0] * logits.shape[0]),
+    }
+    return resp, captured, (dict(info) if isinstance(info, dict) else {}), \
+        logits
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -405,5 +573,184 @@ def run_work_package(*, row, conditions, dataset, out_dir, device="cpu",
         rec.mark_done(out_dir, "diag", dict(marker,
                                             n_records_appended=n_diag,
                                             n_records_skipped=skip_diag))
+    summary.update(n_records=n_rec, n_diag=n_diag, out_dir=str(out_dir))
+    return summary
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The multi-stage loop (TASK I2) — one forward per (condition, batch),
+# every declared stage measured from it
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _tau_table(conditions, cell, tau_cal_doc, canon_doc):
+    """{declared stage: tau_cal} and tau_canon for one cell, or a refusal.
+
+    Every stage any condition declares must be calibrated for this cell. An
+    uncalibrated stage is a configuration error — not a MISSING value — and
+    is refused here rather than written as half a column.
+    """
+    from saga.frozen import diag as fdiag
+
+    stages = sorted({s for c in conditions["conditions"]
+                     for s in condition_stages(conditions, c)})
+    tau_cal = {s: fdiag.tau_cal_for(tau_cal_doc, cell, s) for s in stages}
+    missing = [s for s, v in tau_cal.items() if not isinstance(v, float)]
+    if missing:
+        raise RunnerError(
+            f"cell {cell!r} has no calibrated tau at stage(s) {missing}. Run "
+            f"tools/frozen_I2_thresholds.py for this split first — a stage "
+            f"with no threshold cannot record count_fixed_cal.")
+    return tau_cal, fdiag.canon_tau_for(cell, canon_doc)
+
+
+def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
+                            batch_size=32, split_name, split_sha, git_sha,
+                            git_dirty, patch_file=MISSING, ckpt_path=None,
+                            max_images=None, tau_cal_doc=None, canon_doc=None):
+    """Run every DECLARED condition that applies to this row's variant, at
+    every stage that condition declares, and write records / diag / maps.
+
+    The multi-stage sibling of `run_work_package`: same inputs, same
+    provenance, same append-safe writers, same state-restoration proof. What
+    differs is that a diag row is keyed by (condition, STAGE, image) and
+    carries the TASK I2 §4 diagnostics, and that the per-position exceedance
+    maps are aggregated into `maps.npz`.
+
+    Conditions come only from `conditions`; which of them apply to this
+    checkpoint comes only from the row's `variant`.
+    """
+    from torch.utils.data import DataLoader
+
+    from saga.frozen import diag as fdiag
+
+    model = build_from_row(row, ckpt_path=ckpt_path, device=device)
+    n_prefix = infer_num_prefix_tokens(model)
+    hash_before = state_hash(model)
+    report_stage = conditions["stage"]
+
+    cell = fdiag.cell_key(row["arch"], row["recipe_actual"])
+    tau_cal, tau_canon = _tau_table(conditions, cell, tau_cal_doc or {},
+                                    canon_doc or {})
+
+    declared = conditions_for(conditions, row["variant"])
+    if declared[0]["edit_type"] != "native":
+        raise RunnerError(
+            f"the first condition applying to variant {row['variant']!r} is "
+            f"{declared[0]['id']!r} ({declared[0]['edit_type']}). "
+            f"`max_abs_logit_diff_vs_native` is measured against the native "
+            f"pass, which must therefore be declared first.")
+
+    items = list(dataset.items)
+    if max_images is not None:
+        items = items[:max_images]
+    ids = [image_id_for(p) for p, _ in items]
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                        num_workers=0)
+
+    base = rec.provenance(
+        run_id=row["run_id"], arch=row["arch"],
+        recipe_actual=row["recipe_actual"], variant=row["variant"],
+        ckpt_kind=row["ckpt_kind"], ckpt_sha256=row["ckpt_sha256"],
+        n_prefix=n_prefix, stage=report_stage, split_name=split_name,
+        split_sha256=split_sha, precision=conditions.get("precision", "fp32"),
+        git_sha=git_sha, git_dirty=git_dirty, patch_file=patch_file)
+
+    record_rows, diag_rows = [], []
+    maps = fdiag.MapAccumulator()
+    native_by_batch = {}
+    summary = {"conditions": {}, "state_hash_before": hash_before,
+               "cell": cell, "tau_cal": tau_cal, "tau_canon": tau_canon,
+               "skipped_conditions": sorted(
+                   {c["id"] for c in conditions["conditions"]}
+                   - {c["id"] for c in declared})}
+
+    for cond in declared:
+        stages = condition_stages(conditions, cond)
+        cursor = 0
+        edit_info = {}
+        for b, (images, targets) in enumerate(loader):
+            if max_images is not None and cursor >= max_images:
+                break
+            images = images.to(device)
+            targets = targets.to(device)
+            if max_images is not None and cursor + images.shape[0] > max_images:
+                keep = max_images - cursor
+                images, targets = images[:keep], targets[:keep]
+
+            resp, captured, info, logits = run_condition_multistage(
+                model, images, targets, cond, stages,
+                native_logits=native_by_batch.get(b))
+            if cond["edit_type"] == "native":
+                native_by_batch[b] = logits
+            edit_info = info or edit_info
+
+            n = images.shape[0]
+            params = dict(cond.get("params") or {})
+            for i in range(n):
+                record_rows.append(dict(
+                    base, image_id=ids[cursor + i], condition_id=cond["id"],
+                    edit_type=cond["edit_type"],
+                    edit_params=json.dumps(params, sort_keys=True,
+                                           separators=(",", ":"), default=str),
+                    layer=params.get("layer", MISSING),
+                    epsilon=params.get("epsilon", MISSING),
+                    measured_perturbation_norm=MISSING,
+                    **{k: v[i] for k, v in resp.items()}))
+
+            for stage in stages:
+                patches = captured[stage]
+                canon_tau = (tau_canon if fdiag.canon_defines_stage(stage)
+                             else MISSING)
+                values, stage_maps = fdiag.patch_diagnostics(
+                    patches, tau_cal=tau_cal[stage], tau_canon=canon_tau)
+                maps.add(cond["id"], stage, stage_maps)
+                for i in range(n):
+                    diag_rows.append(dict(
+                        base, image_id=ids[cursor + i],
+                        condition_id=cond["id"], stage=stage,
+                        stage_resolved=resolve_stage(stage),
+                        edit_type=cond["edit_type"],
+                        n_patches=int(patches.shape[1]),
+                        tau_cal_value=tau_cal[stage],
+                        tau_canon_value=(str(canon_tau)
+                                         if isinstance(canon_tau, float)
+                                         else MISSING),
+                        **{k: v[i] for k, v in values.items()}))
+            cursor += n
+        summary["conditions"][cond["id"]] = {
+            "edit_type": cond["edit_type"], "n_images": cursor,
+            "stages": list(stages),
+            "edit_info": {k: v for k, v in edit_info.items()
+                          if not isinstance(v, (list, tuple)) or len(v) <= 16},
+        }
+
+    hash_after = state_hash(model)
+    summary["state_hash_after"] = hash_after
+    summary["state_restored"] = bool(hash_before == hash_after)
+    if not summary["state_restored"]:
+        raise EditError(
+            f"{row['run_id']}: model state changed across the condition "
+            f"sweep ({hash_before[:12]} -> {hash_after[:12]})")
+
+    out_dir = Path(out_dir)
+    n_rec, skip_rec = rec.append_rows(out_dir, "records", record_rows)
+    n_diag, skip_diag = rec.append_rows(
+        out_dir, "diag", diag_rows, key=rec.DIAG_STAGE_KEY,
+        columns=rec.DIAG_STAGE_COLUMNS)
+
+    marker = {
+        "run_id": row["run_id"], "ckpt_sha256": row["ckpt_sha256"],
+        "work_package": conditions["work_package"], "stage": report_stage,
+        "hist_stage": HIST_STAGE, "split_name": split_name,
+        "split_sha256": split_sha, "n_conditions": len(declared),
+        "n_records_appended": n_rec, "n_records_skipped": skip_rec,
+        "cell": cell, "tau_cal": tau_cal, "tau_canon": tau_canon,
+        "git_sha": git_sha,
+    }
+    fdiag.write_maps_npz(out_dir, maps, dict(marker, kind="maps"))
+    rec.mark_done(out_dir, "records", marker)
+    rec.mark_done(out_dir, "diag", dict(marker, n_records_appended=n_diag,
+                                        n_records_skipped=skip_diag))
     summary.update(n_records=n_rec, n_diag=n_diag, out_dir=str(out_dir))
     return summary

@@ -14,3 +14,9 @@ pandas>=2.0.0
 # it (the legacy e3 runs used it) — pinned here because it was never
 # declared. Prebuilt wheels exist for cp312 on both Linux and Windows.
 pycocotools>=2.0.7
+# [TASK-I2] columnar records. saga/frozen/records.py writes parquet when
+# pyarrow is importable and CSV otherwise, with the same schema either way.
+# The I2 diag file is one row per image x condition x stage with the full
+# provenance columns on each: a few MB as parquet, well over a hundred MB as
+# CSV. scripts/jobs/frozen_I2.sbatch refuses to run without it.
+pyarrow>=14.0.0
