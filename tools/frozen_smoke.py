@@ -74,6 +74,13 @@ TOL_LOGIT_INVARIANCE = 1e-3
 TOL_TOP1_VS_RECORDED = 25.0
 #: relative tolerance on the achieved injected Frobenius norm
 TOL_ENERGY_REL = 1e-4
+#: A permutation preserves a head's gate values EXACTLY (the multiset check
+#: below has no tolerance), but the per-head MEAN is a sum over 196 fp32
+#: values in a different order, and fp32 addition is not associative. One ULP
+#: at magnitude 1 is 2^-24 = 5.96e-08; 8 ULP leaves room for the 196-term
+#: reduction without admitting a real change. Measured on the Phase-B
+#: ViT-S/mixup SAGA checkpoint: 5.96e-08, i.e. exactly one ULP.
+TOL_PERM_MEAN = 8 * 2 ** -24
 
 
 def result(name, status, measured, detail=""):
@@ -263,14 +270,20 @@ def check_permutation_preserves(model):
                           - np.asarray(info["gate_per_head_mean_after"])).max())
     hist_same = bool(torch.equal(before.sort(dim=1).values,
                                  after.sort(dim=1).values))
-    ok = d_mean == 0.0 and hist_same
+    ok = d_mean <= TOL_PERM_MEAN and hist_same
     return result(
         "permutation_preserves", "PASS" if ok else "FAIL",
         {"max_abs_per_head_mean_diff": d_mean,
+         "mean_tolerance": TOL_PERM_MEAN,
          "per_head_sorted_values_identical": hist_same,
          "layer": layer, "n_patches": n_patches},
-        "a position permutation is a relabelling: per-head mean and the "
-        "per-head multiset of gate values must both be exactly preserved")
+        "a position permutation is a relabelling. The per-head MULTISET of "
+        "gate values is checked for BIT equality — that is the invariant, and "
+        "it has no tolerance. The per-head MEAN is a reduction over the "
+        f"permuted vector, so fp32 non-associativity moves it by up to a few "
+        f"ULP ({TOL_PERM_MEAN:g} at gate magnitude ~1); demanding bit "
+        f"equality of the mean would be demanding that float addition "
+        f"commute, which it does not.")
 
 
 def check_ring_permutation(model):
