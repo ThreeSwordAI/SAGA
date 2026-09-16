@@ -3585,3 +3585,116 @@ skips are pre-existing).
 - `results/frozen/I0_manifest/smoke_*.json` (three files)
 
 Phase C cannot start before those land.
+
+---
+
+## 2026-09-16 — TASK I0, PHASE B RETURNED (splits, hashes, smoke) + two fixes
+
+Human ran Phase B on the HPC and pulled; commit `56bf990` on `main`. Phase C
+not started. Verification and fixes on `task/I0` (`a290c94`), not pushed.
+
+### What came back, and how it was checked
+
+**Splits** — all four frozen, all 1000 classes, exact stratification
+(2/class, 10/class), every recorded cross-reference correct:
+
+| split | n | sha256 |
+|---|---|---|
+| discovery (`results/diagsplit/val_diag_split.json`, unchanged) | 10,000 | `0a686340c00846818a857cf4cbf472cbdc035e0a88c20d79483f7d9f463b69b1` |
+| `calibration.json` | 2,000 | `6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003` |
+| `evaluation.json` | 10,000 | `7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014` |
+| `sub1k.json` | 1,000 | `6a38d1000b32f2ca0c5bcfd1187cde86258b2d45a4b1e4b47cfd5580fe088ef3` |
+| `sub2k.json` | 2,000 | `d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117` |
+
+discovery∩calibration = discovery∩evaluation = calibration∩evaluation = 0.
+sub1k and sub2k are both subsets of evaluation (they overlap each other in
+209 images — no constraint, both are drawn from it). Each file's recorded
+`sha256` recomputes, and evaluation's `discovery_sha256` /
+`calibration_sha256` and the subsets' `parent_sha256` all match.
+
+**Checkpoint hashes** — 114 of 120 hashed, 0 remaining, `complete: true`.
+The merge reported **66 filled, 48 already agreed**: every sha the repo had
+already recorded was reproduced by the fresh pass. Two independent
+cross-checks, both green: the three e2r baseline hashes equal
+`fixed_thresholds_canon.json`'s `source_ckpt_sha256` (recorded in TASK-06B),
+and all 24 legacy rows equal `results/legacy/checkpoint_manifest.csv`.
+
+**Smoke, 32 images, fp32, on `evaluation.json`** — 22 of 23 applicable
+checks PASS:
+
+| checkpoint | verdict | P/F/S | notes |
+|---|---|---|---|
+| `e2r_vits_mixup_baseline_s1` | PASS | 5/0/4 | the 4 SKIPs are the gate checks; a baseline has no gate |
+| `e2r_vits_mixup_saga_s1` | FAIL | 8/1/0 | the one FAIL was a bug in my check — see below |
+| `legacy_e2_vit_small_mixupdir_registers` | PASS | 5/0/4 | `n_prefix = 5`, `n_tokens = 201`, patch rows 196 |
+
+Load provenance confirmed on all three: `hist_stage = s12_pre_norm`,
+`split_sha256 = 7fdf5f9f…`, 32-image top-1 93.75 / 87.5 / 84.375 against
+recorded 50k top-1 78.862 / 79.352 / 78.252 (within the stated 25-pt band —
+this is a loader sanity check on 32 images, not an equality).
+
+The scientific checks all held on the real checkpoints:
+- **Proposition 2**: the terminal patch-gate override left the CLS logits
+  changed by **exactly 0.0** at all four constants (0.25/0.5/0.75/1.0).
+- **identity edit**: bit-exact on all 32 images.
+- **prefix rows**: `max_abs_prefix_diff = 0` on all three, including the
+  5-prefix register model, with a non-zero injected norm (2.89 / 2.33 / 4.64)
+  so the PASS cannot come from an edit that did nothing.
+- **energy matching**: max relative error 7.2e-08 / 9.0e-08 / 9.0e-08 against
+  a 1e-4 tolerance, 0 zero-norm images.
+- **state restored** after every edit (6 edits on the SAGA checkpoint).
+
+### Two defects in PHASE A code that Phase B exposed, both now fixed
+
+1. **The dense `best.pth` paths never existed.** The hash pass reported six
+   absent checkpoints, all dense `best.pth`. Reading the trainers:
+   `detection/tools/train.py` saves `ckpt/last.pth` **only** — its docstring
+   (lines 22-23) records that the "new best AP" branch wrote to `last.pth`
+   and never to a best file, and its best-AP state is the JSON pair
+   `coco_eval_best.json` + `detections_val.json`. That is exactly the case
+   §3 anticipated. `segmentation/tools/train.py:438-439` saves
+   `ckpt/best_model.pth`, **not** `best.pth`. The filenames now come from a
+   `DENSE_CKPT_FILENAME` table justified against those lines and pinned by a
+   test that reads the trainers' source. Detection `best` rows keep their row
+   with `ckpt_path = MISSING` and a reason; the three segmentation `best`
+   rows now name `best_model.pth` and are the only outstanding hash work.
+
+2. **Smoke check 5 demanded that float addition commute.**
+   `permutation_preserves` asserted the per-head gate MEAN was bit-identical
+   after a permutation. It cannot be — the mean is a reduction over 196 fp32
+   values in a different order. The measured value was **5.96e-08, exactly
+   one ULP at magnitude 1**, while the per-head value multiset was
+   bit-identical, which is the invariant that actually holds. The multiset
+   check keeps its zero tolerance; the mean now carries a stated 8-ULP one
+   (`TOL_PERM_MEAN`), which `tests/test_I0_frozen.py` imports rather than
+   restates. **Under the fixed check the recorded measurement is a PASS**, so
+   the single FAIL was a false failure of my check, not a defect in the
+   intervention. The smoke JSONs are left exactly as the HPC wrote them.
+
+Neither fix changes a scientific number; no result file was edited; the
+19-condition cohort is unchanged.
+
+### Manifest state
+
+124 rows; `ckpt_sha256` MISSING on 10, every one accounted for and pinned by
+a test that permits no unexplained gap:
+
+- 4 `ttr_edit` rows — derived edits with no checkpoint of their own
+- 3 `dense_det` `best` rows — detection saves no best checkpoint
+- 3 `dense_seg` `best` rows — `best_model.pth`, path corrected after the hash
+  pass ran against the wrong name; **pending one more hash pass**
+
+Every `eligible` / `eligible_legacy` row carries a full 64-char sha.
+
+`pytest -q`: **720 passed, 30 skipped** (114 I0 tests, 3 of them new).
+
+### Outstanding
+
+- one login-node re-run of `tools/frozen_manifest_hashes.py` +
+  `build_I0_manifest.py --hashes` to pick up the three segmentation
+  `best_model.pth` files (resume-safe; it re-reads nothing already hashed);
+- optionally one re-run of `frozen_smoke.sbatch` to rewrite
+  `smoke_e2r_vits_mixup_saga_s1.json` with the corrected PASS verdict — the
+  measurement is already recorded and unchanged by the fix;
+- `docs/LOCKED_ANALYSIS.md` §11 can now be filled in with the four split
+  shas above (D8 closed); D1-D7 remain open, D5 still blocking I4.
