@@ -208,8 +208,9 @@ def test_the_shipped_I2_conditions_file_is_valid_and_complete():
         assert c["stages"] == ["hist", "s12_post_norm"], c["id"]
 
     assert doc["thresholds_canon"] == fdiag.CANON_THRESHOLDS
+    # a TEMPLATE, not a path: tau_cal belongs to exactly one split
     assert doc["thresholds_cal"] == \
-        "results/frozen/I2_terminal/thresholds_cal.json"
+        "results/frozen/I2_terminal/{split_name}/thresholds_cal.json"
     assert doc["calibration_stages"] == ["s11_out", "hist", "s12_post_norm"]
     # LOCKED_ANALYSIS §8 / D6 (default 0): declared, not implied
     assert doc["bootstrap_resamples"] == 10000
@@ -1320,11 +1321,94 @@ def test_no_optimizer_or_training_import_in_the_new_I2_files():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# One split, one directory — the B2 collision that nearly happened
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_a_sweeps_output_directory_names_its_split():
+    """Two splits must not share a run directory.
+
+    They did until B2 was about to be submitted: `out_dir` was
+    `<out_root>/<work_package>/<run_id>`, so an evaluation sweep would have
+    appended its images into the calibration `records.parquet`, and
+    `--skip-if-done` — which keys the completion marker on the CHECKPOINT
+    sha, not the split — would have exited 0 for all 19 runs having done
+    nothing at all. Neither failure is loud.
+    """
+    src = (REPO / "tools" / "frozen_eval.py").read_text(encoding="utf-8")
+    assert ('out_dir = (Path(args.out_root) / conditions["work_package"] '
+            "/ split_name" in src)
+    # and the committed calibration results already live under that layout
+    assert (RESULTS / "calibration").is_dir()
+    assert not any(p.is_dir() and p.name not in ("calibration", "evaluation")
+                   for p in RESULTS.iterdir())
+
+
+def test_the_thresholds_path_is_per_split_and_refuses_a_fixed_one():
+    got = fdiag.thresholds_cal_path(
+        "results/frozen/I2_terminal/{split_name}/thresholds_cal.json",
+        "evaluation")
+    assert got == Path(
+        "results/frozen/I2_terminal/evaluation/thresholds_cal.json")
+    with pytest.raises(fdiag.DiagError, match="split_name"):
+        fdiag.thresholds_cal_path("results/frozen/I2_terminal/t.json", "x")
+
+
+def test_the_evaluation_records_are_git_ignored_and_calibration_is_not():
+    """B2's raw per-image records stay on the cluster; B1's stay in git."""
+    ignore = (REPO / ".gitignore").read_text(encoding="utf-8")
+    for pat in ("results/frozen/I2_terminal/evaluation/*/records.parquet",
+                "results/frozen/I2_terminal/evaluation/*/diag.parquet"):
+        assert pat in ignore, pat
+    assert "results/frozen/I2_terminal/calibration/" not in ignore
+    # ... and what IS committed for evaluation must not be ignored by accident
+    for keep in ("maps.npz", "run_meta.json", "records.done.json",
+                 "thresholds_cal.json"):
+        assert f"evaluation/*/{keep}" not in ignore, keep
+
+
+def test_run_meta_records_the_digest_of_every_file_the_run_wrote():
+    """A records file too large to commit must still be identifiable: the
+    committed run_meta.json is then the only thing that says which bytes
+    produced the tables."""
+    from tools.frozen_eval import output_digests
+    run = RESULTS / "calibration" / "e2r_vits_mixup_saga_s1"
+    got = output_digests(run)
+    assert "run_meta.json" not in got
+    for name in ("maps.npz", "records.done.json", "diag.done.json"):
+        assert name in got, name
+        assert len(got[name]["sha256"]) == 64
+        assert got[name]["bytes"] > 0
+    from saga.frozen.records import records_path
+    assert records_path(run, "diag").name in got
+
+
+def test_the_primary_pack_covers_every_run_condition_stage(tmp_path):
+    """figures_data/frozen/I2_evaluation_primary.npz is what makes an
+    evaluation number regenerable once the raw parquet stays on the HPC."""
+    from analysis.i2_decision import PRIMARY_DIAGNOSTICS
+    from tools.frozen_I2_pack_primary import pack
+    src = RESULTS / "calibration"
+    if not (src / "e2r_vits_mixup_saga_s1").exists():     # pragma: no cover
+        pytest.skip("the calibration sweep is not in this checkout")
+    arrays, ids, meta = pack(src, MANIFEST)
+    # 8 SAGA runs x 11 (condition, stage) + 11 others x 3, times 5 diagnostics
+    assert len(arrays) == (8 * 11 + 11 * 3) * len(PRIMARY_DIAGNOSTICS) == 605
+    assert len(meta) == 19
+    for key, arr in arrays.items():
+        run_id, cond, stage, diag = key.split("|")
+        assert diag in PRIMARY_DIAGNOSTICS
+        assert arr.dtype == np.float32
+        assert arr.shape == ids.shape
+    assert np.array_equal(ids, np.sort(ids))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Phase C1 — the committed tables and the generated D1 proposal
 # ─────────────────────────────────────────────────────────────────────────────
 
 RESULTS = REPO / "results" / "frozen" / "I2_terminal"
-TABLE_DIR = RESULTS / "tables"
+CALIBRATION = RESULTS / "calibration"
+TABLE_DIR = CALIBRATION / "tables"
 PROPOSAL = RESULTS / "D1_proposal.md"
 
 needs_results = pytest.mark.skipif(
@@ -1338,8 +1422,8 @@ def test_the_committed_proposal_is_what_the_generator_produces():
     (I0 handoff §8.6). Two builds must agree with each other AND with what
     is committed — so a hand edit to the note shows up here as a failure."""
     from analysis.build_D1_proposal import build
-    once = build(TABLE_DIR, RESULTS / "thresholds_cal.json")
-    twice = build(TABLE_DIR, RESULTS / "thresholds_cal.json")
+    once = build(TABLE_DIR, CALIBRATION / "thresholds_cal.json")
+    twice = build(TABLE_DIR, CALIBRATION / "thresholds_cal.json")
     assert once == twice, "the generator is not deterministic"
     assert PROPOSAL.read_text(encoding="utf-8") == once, (
         "results/frozen/I2_terminal/D1_proposal.md differs from what "
@@ -1378,34 +1462,64 @@ def test_no_generated_markdown_table_row_contains_an_unescaped_pipe():
 
 
 @needs_results
-def test_the_proposal_is_unsigned_and_quotes_the_rule_verbatim():
-    """The module proposes; the human signs. The note must carry an EMPTY
-    signature block and the rule's own sentence, unedited."""
+def test_the_proposal_quotes_the_rule_verbatim_whatever_was_signed():
+    """The signed wording is the §3(b) alternative, but the RULE's own
+    sentence must still appear in the note unedited — the verdict is the
+    rule's, and a reader has to be able to see what it actually said."""
     from analysis.i2_decision import DECISION_CELL, decide, load_gaps
     text = PROPOSAL.read_text(encoding="utf-8")
-    assert "**PROPOSED — NOT SIGNED**" in text
-    assert text.count("`PENDING`") == 2          # date, git sha
-    assert "(the human — nobody else)" in text
-
     gaps, n_pairs = load_gaps(TABLE_DIR / "T_I2c_gaps.csv")[DECISION_CELL]
     v = decide(gaps, cell=DECISION_CELL, n_pairs=n_pairs)
     assert "> " + v["sentence"] in text, \
         "the note must quote the rule's sentence verbatim, not a paraphrase"
     assert f"D1 = `{v['d1_stage']}`" in text
-    # and it must still say what the cutoff is and that it is conventional
     assert "conventional" in text
     assert f"{v['cutoff']:.2f}" in text
+    # the disclosure that the signed wording departs from the boilerplate
+    assert "overstates what these numbers show" in text
 
 
 @needs_results
-def test_LOCKED_ANALYSIS_D1_is_still_open():
-    """C1 proposes D1; it does not sign it. Until the human does, §1 stays
-    `DECISION NEEDED` and no B2 or I1/I3/I4/I5 Phase-B run may start."""
+def test_the_signature_lives_in_LOCKED_ANALYSIS_and_the_note_reads_it_back():
+    """The note is GENERATED, so it cannot hold a signature of its own: a
+    hand-edited status block would be overwritten by the next build and the
+    byte-identity test would fail. §1 of LOCKED_ANALYSIS is where the
+    signature lives, and `read_signature` is how the note gets it."""
+    from analysis.build_D1_proposal import read_signature
+    sig = read_signature(REPO / "docs" / "LOCKED_ANALYSIS.md")
+    assert sig is not None, "D1 has no signature line in LOCKED_ANALYSIS §1"
+    text = PROPOSAL.read_text(encoding="utf-8")
+    assert "**SIGNED**" in text
+    assert sig["name"] in text and sig["date"] in text
+    assert f"`{sig['sha']}`" in text
+    assert "`PENDING`" not in text
+
+
+@needs_results
+def test_D1_is_closed_and_the_document_is_still_a_draft():
+    """Closing a decision and freezing the document are separate acts: D1
+    (and D2/D3/D4/D6/D7) are closed, D5 is open, and the header's three
+    signature lines stay PENDING while it is."""
     locked = (REPO / "docs" / "LOCKED_ANALYSIS.md").read_text(encoding="utf-8")
     section = locked.split("## 1. Feature stage")[1].split("## 2.")[0]
-    assert "DECISION NEEDED" in section
+    assert "DECISION NEEDED" not in section
+    assert "**`s11_out`**" in section
+    # the closed set, struck through in §12 the way D8 already was
+    for closed in ("~~D1~~", "~~D2~~", "~~D3~~", "~~D4~~", "~~D6~~",
+                   "~~D7~~", "~~D8~~"):
+        assert closed in locked, closed
+    assert "~~D5~~" not in locked, "D5 is NOT closed — I1 owns it"
+    assert "| D5 | 5 |" in locked
+    # EXACTLY ONE decision still carries the marker, and it is D5's own
+    # row in section 5. Every closed decision says so where it is defined.
+    body = locked.split("## 1. Feature stage", 1)[1]
+    marked = [l for l in body.splitlines() if "DECISION NEEDED" in l]
+    assert len(marked) == 1, marked
+    assert "Which discovery map" in marked[0]
+    # the document itself is NOT frozen
     assert "STATUS: **DRAFT — NOT YET FROZEN**" in locked
-    assert locked.count("`PENDING`") >= 2
+    header = locked.split("## 1. Feature stage")[0]
+    assert header.count("`PENDING`") == 2
 
 
 @needs_results

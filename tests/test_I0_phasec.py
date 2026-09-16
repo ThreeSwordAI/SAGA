@@ -235,12 +235,25 @@ def test_locked_analysis_is_still_unsigned():
     assert "Signed and dated by: *(the human — nobody else)*" in locked
 
 
-def test_only_d8_is_closed_and_d5_still_blocks():
+def test_every_decision_is_still_listed_and_d5_still_blocks():
+    """All eight decisions stay in the table, and D5 stays open.
+
+    This asserted "exactly one closed (D8)" when I0 wrote it. That was a
+    SNAPSHOT of a state later work packages exist to change: I2 closed D1 by
+    measurement, I3-prep closed D3 by generating the permutation lists, and
+    D2/D4/D6/D7 were closed at their written defaults. What the test actually
+    guards — no decision silently vanishes from the table, and D5 is not
+    quietly closed while I1 still owes the map it needs — is unchanged, and
+    the closed set is now pinned BY NAME so a future silent closure still
+    fails here.
+    """
     locked = LOCKED.read_text(encoding="utf-8")
     rows = [ln for ln in locked.splitlines()
             if re.match(r"^\| ~*D\d+~*", ln)]
     assert len(rows) == 8
-    closed = [ln for ln in rows if ln.startswith("| ~~")]
-    assert len(closed) == 1 and "D8" in closed[0]
+    closed = {re.search(r"D\d+", ln).group()
+              for ln in rows if ln.startswith("| ~~")}
+    assert closed == {"D1", "D2", "D3", "D4", "D6", "D7", "D8"}
     d5 = next(ln for ln in rows if ln.startswith("| D5"))
     assert "no default" in d5
+    assert "D5" not in closed, "D5 is open until I1 produces the block-input map"
