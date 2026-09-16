@@ -165,7 +165,11 @@ def test_the_block_input_stages_are_additive(plain_model, images, saga_model):
     where a block-input stage does not exist. The new names are reachable
     through `ALL_STAGES`, which is what `resolve_stage` validates against."""
     assert STAGES == ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
-    assert ALL_STAGES == STAGES + ("in_b07", "in_b08")
+    assert ALL_STAGES[:6] == STAGES + ("in_b07", "in_b08")
+    # I6 appends its two external analog names; tests/test_I6_external.py
+    # owns those. Slicing rather than comparing the whole tuple keeps this
+    # test about I1's addition.
+    assert set(ALL_STAGES) >= set(STAGES) | {"in_b07", "in_b08"}
     for model in (plain_model, saga_model):
         with capture_stages(model, ("s11_out", "hist", "in_b07")) as store:
             model(images)
