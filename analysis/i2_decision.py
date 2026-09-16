@@ -269,7 +269,7 @@ def main():
     p = argparse.ArgumentParser(
         description="Apply TASK I2 §7's pre-declared rule and propose D1.")
     p.add_argument("--gaps",
-                   default="results/frozen/I2_terminal/tables/T_I2c_gaps.csv")
+                   default="results/frozen/I2_terminal/calibration/tables/T_I2c_gaps.csv")
     p.add_argument("--cell", default=DECISION_CELL,
                    help="the VOTING cell; the others are reported but do not "
                         "vote (n = 2)")

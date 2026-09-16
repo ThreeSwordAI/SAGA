@@ -48,8 +48,15 @@ precision: fp32
 #                     canon recipe on a different split, so the tables can
 #                     show tau_canon and tau_cal[hist] side by side and the
 #                     split effect stays visible instead of being absorbed.
+#
+# `thresholds_cal` is a TEMPLATE, not a path: `{split_name}` is filled in
+# with the split being run. tau_cal belongs to exactly one split — a tau
+# calibrated on `calibration` applied to `evaluation` rows would be an
+# undeclared threshold with the same key and a different meaning — so the
+# two never share a file. Everything a sweep writes is under
+# `results/frozen/I2_terminal/<split_name>/` for the same reason.
 thresholds_canon: results/diagsplit/fixed_thresholds_canon.json
-thresholds_cal: results/frozen/I2_terminal/thresholds_cal.json
+thresholds_cal: results/frozen/I2_terminal/{split_name}/thresholds_cal.json
 
 # The stages the calibration must cover — every stage any condition below
 # declares. tools/frozen_I2_thresholds.py reads this list; the runner refuses

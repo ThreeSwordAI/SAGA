@@ -174,11 +174,13 @@ def main():
             f"calibrate are declared in the conditions file, never here")
     for s in stages:
         resolve_stage(s)
-    out_path = Path(conditions["thresholds_cal"])
     canon_path = Path(conditions["thresholds_canon"])
 
     split_doc, items, split_sha = load_split(args.split)
     split_name = split_doc.get("name", Path(args.split).stem)
+    # one file per split: the YAML declares a `{split_name}` template
+    out_path = fdiag.thresholds_cal_path(conditions["thresholds_cal"],
+                                         split_name)
 
     canon = fdiag.load_canon_thresholds(canon_path)
     k = float(canon.get("k", fdiag.MAD_K))
