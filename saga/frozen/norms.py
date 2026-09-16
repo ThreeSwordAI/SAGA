@@ -294,6 +294,37 @@ def write_stage_maps_npz(out_dir, accs, meta: dict) -> Path:
     return _atomic_savez(Path(out_dir) / f"maps_{stage}.npz", payload)
 
 
+def split_half_indices(n_images: int, seed: int = 0) -> tuple:
+    """The two FIXED halves of a split's images, as index arrays.
+
+    Deterministic in `seed` (D6 = 0) and in `n_images` alone: the images are
+    shuffled once by `np.random.RandomState(seed)` and cut in half, so the
+    two halves are the same on every machine and every rebuild. An odd count
+    puts the extra image in the FIRST half.
+
+    Not a bootstrap and not a random split per call — a reliability figure
+    that moved between two runs of the table builder would be unreadable.
+    """
+    n = int(n_images)
+    if n < 2:
+        raise NormsError(f"{n} image(s) cannot be split in half")
+    order = np.random.RandomState(int(seed)).permutation(n)
+    cut = (n + 1) // 2
+    return np.sort(order[:cut]), np.sort(order[cut:])
+
+
+def split_half_frequency(indicators, seed: int = 0) -> tuple:
+    """`(freq_first_half, freq_second_half)` from a `[n_images, N]` indicator
+    matrix — the two maps whose Spearman is the split-half reliability."""
+    ind = np.asarray(indicators, dtype=bool)
+    if ind.ndim != 2:
+        raise NormsError(
+            f"expected [n_images, N_patches] indicators, got {ind.shape}")
+    a, b = split_half_indices(ind.shape[0], seed)
+    return (ind[a].mean(axis=0).astype(np.float64),
+            ind[b].mean(axis=0).astype(np.float64))
+
+
 def read_indicators(path, condition_id: str, basis: str) -> np.ndarray:
     """`[n_images, N]` bool out of a committed `maps_<stage>.npz`."""
     with np.load(Path(path), allow_pickle=False) as z:
@@ -395,6 +426,7 @@ def scaled_frequency_map(norms, tau: float, c: float) -> np.ndarray:
 __all__ = [
     "I1_STAGES", "NormsError", "StageAccumulator", "extract_stage_norms",
     "write_norms_npz", "write_stage_maps_npz", "read_indicators",
+    "split_half_indices", "split_half_frequency",
     "fixed_counts", "mad_counts", "mean_fixed_count", "match_scale",
     "scaled_frequency_map",
 ]

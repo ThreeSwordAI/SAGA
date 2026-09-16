@@ -84,17 +84,22 @@ import torch
 
 from saga.metrics import infer_num_prefix_tokens
 
-# The four TASK I0 stage names. `hist` is an alias, resolved by
-# resolve_stage(). `BLOCK_INPUT_STAGES` (TASK A / I1) are appended, not
-# substituted: every I0/I2 caller that spells one of the first four keeps
-# behaving exactly as before.
-STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist",
-          "in_b07", "in_b08")
+# The four TASK I0 stage names for the TERMINAL region. `hist` is an alias,
+# resolved by resolve_stage(). This tuple is UNCHANGED by TASK A: it is the
+# I0 contract, several tests enumerate it and capture every member on a
+# 4-block fake model, and a block-input stage does not exist on a model that
+# shallow. The new names live in BLOCK_INPUT_STAGES and in ALL_STAGES.
+STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
 
-#: The block-input stages, as {name: the 0-based index of the block whose
-#: INPUT this is}. `in_b07` enters blocks[7]; see the module docstring for
-#: both numbering conventions.
+#: The block-input stages (TASK A / I1), as {name: the 0-based index of the
+#: block whose INPUT this is}. `in_b07` enters blocks[7]; see the module
+#: docstring for both numbering conventions.
 BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8}
+
+#: Every stage name this module accepts. `resolve_stage` validates against
+#: THIS, so a conditions YAML may spell any of the six; `STAGES` keeps its
+#: I0 meaning for everything that enumerates the terminal four.
+ALL_STAGES = STAGES + tuple(BLOCK_INPUT_STAGES)
 
 #: Which real stage the historical diagnostics used. See the module docstring
 #: for the code citation; a test pins it.
@@ -125,8 +130,9 @@ def resolve_stage(stage: str) -> str:
     """Map `hist` onto the real stage it aliases; validate every other name."""
     if stage == "hist":
         return HIST_STAGE
-    if stage not in STAGES:
-        raise StageError(f"unknown stage {stage!r}; expected one of {STAGES}")
+    if stage not in ALL_STAGES:
+        raise StageError(
+            f"unknown stage {stage!r}; expected one of {ALL_STAGES}")
     return stage
 
 

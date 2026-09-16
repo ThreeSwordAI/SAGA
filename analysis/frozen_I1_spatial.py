@@ -74,9 +74,12 @@ from saga.run_registry import git_sha  # noqa: E402
 MISSING = "MISSING"
 PENDING = "PENDING B"
 
-#: Where I2's committed maps live, and where I1's land.
+#: Where I2's committed maps live, and where I1's land. Defaults, not
+#: constants a function reaches for: every reader takes its root as an
+#: argument so the tests can build from a tmp directory.
 I2_ROOT = Path("results/frozen/I2_terminal")
 I1_ROOT = Path("results/frozen/I1_spatial")
+PACK_DIR = Path("figures_data/frozen")
 TABLE_DIR = I1_ROOT / "tables"
 
 #: The stages I2 already measured, and the ones I1 adds.
@@ -95,18 +98,22 @@ PROVENANCE = ["work_package", "split_name", "split_sha256", "git_sha",
 # Loading
 # ─────────────────────────────────────────────────────────────────────────────
 
-def load_maps(split_name: str, cohort, *, manifest_rows=None) -> dict:
+def load_maps(split_name: str, cohort, *, i2_root=I2_ROOT,
+              i1_root=I1_ROOT) -> tuple:
     """`{(run_id, condition, stage, basis): PrevalenceMap}` for one split.
 
     I2's `maps.npz` first, then I1's `maps_<stage>.npz` where it exists. A
-    stage present in both is loaded from BOTH and the two are cross-checked
-    by `agreement_rows` rather than one silently winning.
+    stage present in BOTH is loaded twice, under keys that differ by a
+    trailing `"I1"`, so Phase C can compare the two rather than let one
+    silently win: I1 recaptures `s11_out` and `hist` in the same forward
+    passes that produce `in_b07` / `in_b08`, and its counts there must
+    reproduce I2's.
     """
     out, sources = {}, {}
     for row in cohort:
         run_id = row["run_id"]
         n_prefix = int(row.get("n_prefix", 1))
-        i2 = I2_ROOT / split_name / run_id / "maps.npz"
+        i2 = Path(i2_root) / split_name / run_id / "maps.npz"
         if i2.exists():
             with np.load(i2, allow_pickle=False) as z:
                 triples = P.i2_map_keys(z)
@@ -122,7 +129,7 @@ def load_maps(split_name: str, cohort, *, manifest_rows=None) -> dict:
                     n_prefix=n_prefix)
                 sources[key] = str(i2)
         for stage in ALL_STAGES:
-            i1 = I1_ROOT / split_name / run_id / f"maps_{stage}.npz"
+            i1 = Path(i1_root) / split_name / run_id / f"maps_{stage}.npz"
             if not i1.exists():
                 continue
             for cond, basis, pm in _read_i1_maps(i1, n_prefix):
@@ -154,7 +161,7 @@ def _read_i1_maps(path, n_prefix):
                 n_prefix=n_prefix, git_sha=meta["git_sha"])
 
 
-def load_p_any(split_name: str) -> dict:
+def load_p_any(split_name: str, *, pack_dir=PACK_DIR) -> dict:
     """`{(run_id, condition, stage, basis): fraction of images with >= 1
     exceedance}` from I2's committed per-image primary pack.
 
@@ -163,7 +170,7 @@ def load_p_any(split_name: str) -> dict:
     B: the pack carries each image's exceedance COUNT but not WHICH
     positions, so it gives `p_any` and no indicator matrix.
     """
-    pack = Path("figures_data/frozen") / f"I2_{split_name}_primary.npz"
+    pack = Path(pack_dir) / f"I2_{split_name}_primary.npz"
     if not pack.exists():
         return {}
     out = {}
@@ -662,25 +669,36 @@ def pending_table(head, table: str, needs: str, note: str) -> list:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build(split_name: str, *, manifest="results/frozen/I0_manifest/manifest.json",
-          out_dir=None) -> dict:
+          out_dir=None, git_sha_value=None, i2_root=I2_ROOT, i1_root=I1_ROOT,
+          pack_dir=PACK_DIR) -> dict:
+    """Build every table for one split.
+
+    `git_sha_value` is a PARAMETER and not a call, so two builds from the
+    same inputs produce the same bytes — a byte-identity test would
+    otherwise fail on the next commit, which is a property of the repository
+    and not of the table builder. Same reason the three roots are arguments:
+    the test builds from fake results in a tmp directory.
+    """
+    i2_root, i1_root = Path(i2_root), Path(i1_root)
     cohort = eligible_cohort(manifest)
     rows_by_run = {r["run_id"]: r for r in cohort}
-    maps, sources = load_maps(split_name, cohort)
+    maps, sources = load_maps(split_name, cohort, i2_root=i2_root,
+                              i1_root=i1_root)
     if not maps:
         raise SystemExit(
-            f"no maps found for split {split_name!r} under {I2_ROOT} or "
-            f"{I1_ROOT} — nothing to tabulate")
-    p_any = load_p_any(split_name)
+            f"no maps found for split {split_name!r} under {i2_root} or "
+            f"{i1_root} — nothing to tabulate")
+    p_any = load_p_any(split_name, pack_dir=pack_dir)
     split_sha = sorted({pm.split_sha for pm in maps.values()})
     if len(split_sha) != 1:
         raise SystemExit(
             f"maps from {len(split_sha)} different splits in one table: "
             f"{split_sha}")
     head = {"work_package": "I1_spatial", "split_name": split_name,
-            "split_sha256": split_sha[0], "git_sha": git_sha(),
+            "split_sha256": split_sha[0],
+            "git_sha": git_sha_value if git_sha_value else git_sha(),
             "generated_by": "analysis/frozen_I1_spatial.py"}
-    have_indicators = any(
-        (I1_ROOT / split_name).glob("*/maps_*.npz"))
+    have_indicators = any((i1_root / split_name).glob("*/maps_*.npz"))
     out_dir = Path(out_dir) if out_dir else TABLE_DIR
 
     written = {}

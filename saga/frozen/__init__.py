@@ -21,7 +21,7 @@ from saga.frozen.diag import (DIAG_KEYS, MAD_K, MapAccumulator,
                               patch_diagnostics)
 from saga.frozen.edits import (frozen_state, gate_edit, receiver_perturbation,
                                state_hash, terminal_gate_override)
-from saga.frozen.stages import (BLOCK_INPUT_STAGES, HIST_STAGE,
+from saga.frozen.stages import (ALL_STAGES, BLOCK_INPUT_STAGES, HIST_STAGE,
                                 HIST_STAGE_CITATION, STAGES, capture_stages,
                                 forward_with_stages, stage_block_index)
 
@@ -32,7 +32,8 @@ from saga.frozen.stages import (BLOCK_INPUT_STAGES, HIST_STAGE,
 #     from saga.frozen import prevalence, norms
 
 __all__ = [
-    "STAGES", "HIST_STAGE", "HIST_STAGE_CITATION", "BLOCK_INPUT_STAGES",
+    "STAGES", "ALL_STAGES", "HIST_STAGE", "HIST_STAGE_CITATION",
+    "BLOCK_INPUT_STAGES",
     "capture_stages", "forward_with_stages", "stage_block_index",
     "state_hash", "frozen_state", "terminal_gate_override", "gate_edit",
     "receiver_perturbation",
