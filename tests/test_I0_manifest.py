@@ -555,6 +555,67 @@ def test_every_remaining_missing_hash_is_accounted_for(rows):
             assert len(r["ckpt_sha256"]) == 64, (r["run_id"], r["ckpt_kind"])
 
 
+def test_a_renamed_path_does_not_keep_reading_as_a_missing_checkpoint(
+        tmp_path):
+    """A manifest correction that renames a checkpoint path must not leave
+    the old path reported as an absent checkpoint for ever.
+
+    This is the situation the dense `best.pth` -> `best_model.pth` correction
+    created: the first hash pass recorded six absent `best.pth` paths, and
+    after the correction the tool still printed all six, so a run in which
+    every target hashed successfully read as "6 are missing". Absences are
+    now scoped to paths the manifest currently names; the rest move to
+    `no_longer_in_manifest`.
+    """
+    import subprocess as sp
+
+    cols = ["run_id", "ckpt_kind", "ckpt_path", "ckpt_sha256"]
+    real = tmp_path / "last.pth"
+    real.write_bytes(b"weights")
+    man = tmp_path / "manifest.csv"
+    out = tmp_path / "ckpt_hashes.json"
+
+    def write_manifest(best_name):
+        with open(man, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=cols, lineterminator="\n")
+            w.writeheader()
+            w.writerows([
+                {"run_id": "seg_a", "ckpt_kind": "last",
+                 "ckpt_path": str(real), "ckpt_sha256": MISSING},
+                {"run_id": "seg_a", "ckpt_kind": "best",
+                 "ckpt_path": str(tmp_path / best_name),
+                 "ckpt_sha256": MISSING}])
+
+    def run():
+        rc = sp.run([sys.executable,
+                     str(REPO / "tools" / "frozen_manifest_hashes.py"),
+                     "--manifest", str(man), "--out", str(out)],
+                    cwd=REPO, capture_output=True, text=True)
+        assert rc.returncode == 0, rc.stderr
+        return json.loads(out.read_text(encoding="utf-8")), rc.stdout
+
+    # pass 1: the manifest names a best.pth that does not exist
+    write_manifest("best.pth")
+    doc, _ = run()
+    assert doc["n_absent"] == 1
+
+    # pass 2: the manifest is corrected to the file that really exists
+    (tmp_path / "best_model.pth").write_bytes(b"best weights")
+    write_manifest("best_model.pth")
+    doc, stdout = run()
+
+    assert doc["n_absent"] == 0, "the corrected path must not read as absent"
+    assert doc["n_remaining"] == 0
+    assert doc["complete"] is True
+    assert doc["n_hashed"] == 2
+    assert list(doc["no_longer_in_manifest"]) == [str(tmp_path / "best.pth")]
+    # the stale path is out of the hash map too, so a consumer cannot resolve
+    # a sha for a path the manifest no longer names
+    assert str(tmp_path / "best.pth") not in doc["sha256_by_path"]
+    assert "0 absent" in stdout
+    assert "NOT missing data" in stdout
+
+
 def test_merge_hashes_fills_a_missing_value(tmp_path, rows):
     target = next(r for r in rows if r["ckpt_sha256"] == MISSING
                   and r["ckpt_path"] != MISSING)

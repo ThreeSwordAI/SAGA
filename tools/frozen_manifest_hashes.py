@@ -27,6 +27,12 @@ incident).
 
 A checkpoint the manifest names but the filesystem does not have is recorded
 as MISSING with the reason — never silently skipped, and never guessed at.
+
+An entry for a path the manifest NO LONGER NAMES is a different thing and is
+reported as such, under `no_longer_in_manifest`. It means a manifest
+correction renamed or dropped that path, not that a checkpoint went missing;
+reporting the two together once made a complete run look like six missing
+files.
 """
 
 import argparse
@@ -154,6 +160,19 @@ def main():
             "absent": absent,
         }, out_path)
 
+    # An `absent` entry for a path the manifest NO LONGER NAMES is stale
+    # bookkeeping, not a missing checkpoint: it means a manifest correction
+    # renamed or dropped that path (the dense best.pth correction did exactly
+    # this). Reporting it alongside the live ones reads as "6 checkpoints are
+    # missing" when nothing is. Live entries stay; stale ones move aside with
+    # the reason they went stale, so the history is kept without misstating
+    # the present.
+    target_paths = {p for p, _ in targets}
+    stale = {p: w for p, w in absent.items() if p not in target_paths}
+    absent = {p: w for p, w in absent.items() if p in target_paths}
+    for p in stale:
+        sha_by_path.pop(p, None)
+
     remaining = [p for p, _ in targets
                  if p not in sha_by_path and p not in absent]
     atomic_write_json({
@@ -167,15 +186,22 @@ def main():
         "n_remaining": len(remaining),
         "sha256_by_path": sha_by_path,
         "absent": absent,
+        "no_longer_in_manifest": stale,
     }, out_path)
 
     print(f"\n{len(targets)} checkpoint paths in the manifest")
     print(f"  {n_new} hashed this pass, {n_kept} already recorded, "
-          f"{n_absent} absent")
+          f"{len(absent)} absent, {len(remaining)} still to hash")
     if absent:
-        print(f"ABSENT ({len(absent)}) — recorded as MISSING, never guessed:")
+        print(f"ABSENT ({len(absent)}) — a path the manifest names that this "
+              f"filesystem does not have; recorded as MISSING, never guessed:")
         for path, why in sorted(absent.items()):
             print(f"  {path}: {why}")
+    if stale:
+        print(f"\nnot in the manifest any more ({len(stale)}) — NOT missing "
+              f"data; a manifest correction renamed or dropped these paths:")
+        for path in sorted(stale):
+            print(f"  {path}")
     if remaining:
         print(f"{len(remaining)} still to hash — re-run to continue")
     print(f"wrote {out_path}")

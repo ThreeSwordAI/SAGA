@@ -110,8 +110,13 @@ DENSE_CKPT_FILENAME = {
 DENSE_NO_BEST_REASON = (
     "no best checkpoint exists: the detection trainer saves ckpt/last.pth "
     "only and records its best-AP state as the JSON pair coco_eval_best.json "
-    "+ detections_val.json (detection/tools/train.py:22-23, 346). MISSING is "
-    "the value, not a gap")
+    "+ detections_val.json. Confirmed three independent ways — the trainer's "
+    "OUTPUTS block and its only .pth path (detection/tools/train.py:22-23, "
+    "51, 346), docs/Task09_handsoff.md:97 (listed as a defect that was "
+    "FIXED: a best branch writing to last.pth made best-AP state "
+    "indistinguishable from last state), and a directory listing of "
+    "dense_ckpt/det_*/ckpt on woody, which holds last.pth alone "
+    "(2026-09-16). MISSING is the value, not a gap")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
