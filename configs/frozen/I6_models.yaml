@@ -117,7 +117,7 @@ models:
     citation: >-
       Touvron et al., "Training data-efficient image transformers &
       distillation through attention", ICML 2021 — Mixup 0.8, CutMix 1.0.
-    weight_sha256: PENDING
+    weight_sha256: 1e747b4a8d0df2cfbd3c450e8c97685d867448ab0c2ddbfb34b6885f5cb23e5b
 
   - model_id: deit3_small_patch16_224
     timm_name: deit3_small_patch16_224.fb_in1k
@@ -133,7 +133,7 @@ models:
     citation: >-
       Touvron et al., "DeiT III: Revenge of the ViT", ECCV 2022 — 3-Augment
       with Mixup 0.8 and CutMix 1.0.
-    weight_sha256: PENDING
+    weight_sha256: bd92e16e57f6c81452ab795c9578bbdd2bd31b6df601964d7df697d5dd8fe974
 
   - model_id: deit3_base_patch16_224
     timm_name: deit3_base_patch16_224.fb_in1k
@@ -149,7 +149,7 @@ models:
     citation: >-
       Touvron et al., "DeiT III: Revenge of the ViT", ECCV 2022 — 3-Augment
       with Mixup 0.8 and CutMix 1.0.
-    weight_sha256: PENDING
+    weight_sha256: 9a6f0f93c19c3f6b05836231b9de6b07cc9eca1b002b30c3b5b0b77411687650
 
   - model_id: vit_base_patch16_224_augreg
     timm_name: vit_base_patch16_224.augreg_in1k
@@ -166,7 +166,7 @@ models:
       Steiner et al., "How to train your ViT? Data, Augmentation, and
       Regularization in Vision Transformers", TMLR 2022 — AugReg includes
       Mixup.
-    weight_sha256: PENDING
+    weight_sha256: 678a1ce471be7da9822fe2508497a5bcf6da4c6802053151b232ba88a42c21a2
 
   # ── trained without mixing ──
   - model_id: vit_small_patch14_dinov2
@@ -183,7 +183,7 @@ models:
     citation: >-
       Oquab et al., "DINOv2: Learning Robust Visual Features without
       Supervision", TMLR 2024 — self-supervised; no Mixup or CutMix.
-    weight_sha256: PENDING
+    weight_sha256: 04d27f3400d059fc0cfd7d17dd1909a75bf3ea8fb3eeb48b97cb99e57ee20081
 
   - model_id: vit_base_patch14_dinov2
     timm_name: vit_base_patch14_dinov2.lvd142m
@@ -199,7 +199,7 @@ models:
     citation: >-
       Oquab et al., "DINOv2: Learning Robust Visual Features without
       Supervision", TMLR 2024 — self-supervised; no Mixup or CutMix.
-    weight_sha256: PENDING
+    weight_sha256: 55cbb5d887b336d430e649c277b85a1429e724871f9d02ac16203235886d8c7b
 
   # NOTE ON THE NAME. The task file's prose says "OpenCLIP ViT-B/16"; the
   # timm name it registers is `vit_base_patch16_clip_224.openai`, which is
@@ -223,7 +223,7 @@ models:
       Radford et al., "Learning Transferable Visual Models From Natural
       Language Supervision", ICML 2021 — contrastive image-text; no Mixup or
       CutMix.
-    weight_sha256: PENDING
+    weight_sha256: 53b401837e5baa82115d3b6db60c6fff43cfd1a6412e48ed0193d54a69d2f993
 
   - model_id: vit_base_patch16_224_mae
     timm_name: vit_base_patch16_224.mae
@@ -239,7 +239,7 @@ models:
     citation: >-
       He et al., "Masked Autoencoders Are Scalable Vision Learners", CVPR
       2022 — masked reconstruction; no Mixup or CutMix in pretraining.
-    weight_sha256: PENDING
+    weight_sha256: 78f46071f3e02ef39b9686a54c69b2f36c9d7f2c57f3ea5ca9ffc2d62ce4c3ba
 
   # ── exploratory: registers ──
   - model_id: vit_small_patch14_reg4_dinov2
@@ -256,4 +256,4 @@ models:
     citation: >-
       Darcet et al., "Vision Transformers Need Registers", ICLR 2024 —
       exploratory here; NO prediction is made for it.
-    weight_sha256: PENDING
+    weight_sha256: dca70548ecd7b03ffba6172c4db403014511b5ee6073f9fca72ba9e6e602a25d
