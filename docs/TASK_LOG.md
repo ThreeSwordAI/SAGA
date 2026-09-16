@@ -4929,3 +4929,84 @@ not re-downloaded.**
 Phase B, attempt 2. The HPC has one unpushed commit (`4917b11`, the weight
 shas) which must be pushed BEFORE the local merge, or the merge will not see
 it.
+
+---
+
+## 2026-09-17 — TASK A — PHASE B, ATTEMPT 2: 43 of 47 tasks landed; two more bugs, both mine
+
+Resubmission after the attempt-1 fixes. The arrays ran this time. What
+completed:
+
+| array | job | result |
+|---|---|---|
+| I1 evaluation | 4263128 | **19/19**, 76 maps |
+| I1 discovery | 4263130 | 18/19, 72 maps — task 0 failed |
+| I6 | 4263132 | 6/9, 12 maps — tasks 4, 5, 8 failed |
+
+**The discovery split writes to `results/frozen/I1_spatial/val_diag_split/`,
+not `.../discovery/`.** The output directory is named from the split file's
+own `name` key and `results/diagsplit/val_diag_split.json` has none — its
+keys are `seed`, `n`, `n_per_class`, `items` — so the driver fell back to the
+filename stem, as designed. Cosmetic: everything downstream keys off the
+split SHA, and the selection guard in `saga/frozen/prevalence.py` is an
+allow-list on that sha. Phase C reads `val_diag_split` as the split name.
+
+### Failure 3 — the I6 transform used the PUBLISHED input size
+
+```
+AssertionError: Input height (518) doesn't match model (224).
+```
+
+Tasks 4, 5, 8 are `vit_small_patch14_dinov2`, `vit_base_patch14_dinov2` and
+`vit_small_patch14_reg4_dinov2` — every patch-14 model and nothing else.
+
+`timm.data.resolve_data_config` reports the size the WEIGHTS were published
+at, not the size the model was BUILT at. A DINOv2 model created with
+`img_size=224` still reports `(3, 518, 518)`, so `external_transform` fed
+518-pixel tensors to a 224-pixel model. The traceback got past
+`build_external` and `check_geometry` into the forward pass, so loading the
+pretrained weights at 224 and resampling the position embedding both worked
+— only the transform was wrong.
+
+`external_transform` now takes `input_size` and overrides that one field,
+keeping mean, std, crop_pct and interpolation from timm. **The six completed
+models are natively 224, so their transform was already correct and they are
+not recomputed.**
+
+### Failure 4 — a tmp-file race on the shared thresholds file
+
+```
+FileNotFoundError: 'thresholds_cal.json.tmp' -> 'thresholds_cal.json'
+```
+
+Every task of the array runs `tools/frozen_I2_thresholds.py`, and
+`thresholds_cal.json` is ONE file. `write_thresholds_cal` used a fixed
+`<name>.tmp`: two concurrent tasks wrote the same temp path and the first
+`os.replace` consumed it. Losing exactly one task of 19 is what that looks
+like.
+
+This is latent in I2 as well — the same tool, the same 19-task array — and
+was not hit there by timing alone. Fixed for both:
+
+1. the temp name is per-PID, which is all `os.replace` needs;
+2. `update_thresholds_cal` does read-merge-write under an `O_EXCL` lock,
+   closing the quieter half of the same bug: two tasks could both read, both
+   add a cell, and the later write silently drop the earlier one's.
+   `merge_thresholds_cal` only ever guarded against CONFLICTING values, never
+   against lost ones. A lock older than 30 minutes is broken rather than
+   deadlocking the next submission.
+
+### Tests
+
+Four new: eight threads adding eight cells concurrently must all survive; a
+stale lock is broken; a live lock times out loudly; and the DINOv2 transform
+must yield 224x224 and pass through the model (no weights downloaded — the
+pretrained cfg and the geometry are both available with `pretrained=False`,
+which is exactly why the original bug escaped).
+
+`pytest -q`: **945 passed, 30 skipped**.
+
+### Pending
+
+Five array tasks: `--array=0` on the I1 discovery split, `--array=4,5,8` on
+I6. `--skip-if-done` leaves the 43 that landed untouched.
