@@ -1,0 +1,96 @@
+{
+  "cell": "vit_small|nomix",
+  "ckpt_sha256": "88f72869bae5882f6b8c0791c69ffea51ae55247276106e60d817f27e2a646ce",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 2000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.25": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.25
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.50": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.5
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.75": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.75
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 1.0
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "n_diag": 22000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/e2r_vits_nomix_saga_s1",
+  "run_id": "e2r_vits_nomix_saga_s1",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/calibration.json",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "state_hash_after": "61cc4ae360b4e702f1b707adb643b55f870221b687192ae7ced54e986724619f",
+  "state_hash_before": "61cc4ae360b4e702f1b707adb643b55f870221b687192ae7ced54e986724619f",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 22.777535438537598,
+    "s11_out": 19.93944263458252,
+    "s12_post_norm": 20.780946731567383
+  },
+  "tau_canon": 22.859375
+}

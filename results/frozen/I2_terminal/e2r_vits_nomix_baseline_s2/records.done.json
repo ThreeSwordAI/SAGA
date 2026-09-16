@@ -1,0 +1,20 @@
+{
+  "cell": "vit_small|nomix",
+  "ckpt_sha256": "50acc743467a51828d2bf24e84f241705e33b1cf6a68a8e7f3a46413ed95d086",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 1,
+  "n_records_appended": 2000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vits_nomix_baseline_s2",
+  "split_name": "calibration",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "stage": "hist",
+  "tau_cal": {
+    "hist": 22.777535438537598,
+    "s11_out": 19.93944263458252,
+    "s12_post_norm": 20.780946731567383
+  },
+  "tau_canon": 22.859375,
+  "work_package": "I2_terminal"
+}

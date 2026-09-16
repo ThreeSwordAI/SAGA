@@ -1,0 +1,41 @@
+{
+  "cell": "vit_base|mixup",
+  "ckpt_sha256": "82365a311187250c34965c93a13ab435adf7ac2ad655115c855f7708f6f8ddb1",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 2000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "n_diag": 6000,
+  "n_records": 2000,
+  "out_dir": "results/frozen/I2_terminal/legacy_e2_vit_base_nomixdir_registers",
+  "run_id": "legacy_e2_vit_base_nomixdir_registers",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_0.25",
+    "term_0.50",
+    "term_0.75",
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/calibration.json",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "state_hash_after": "f197c4c3d5aadd3a37de9b5abf3bdbca990a652c752f2cd821b733d3976a955e",
+  "state_hash_before": "f197c4c3d5aadd3a37de9b5abf3bdbca990a652c752f2cd821b733d3976a955e",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 127.8115234375,
+    "s11_out": 95.35531616210938,
+    "s12_post_norm": 14.609077453613281
+  },
+  "tau_canon": 127.3125
+}

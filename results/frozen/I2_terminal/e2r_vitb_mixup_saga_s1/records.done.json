@@ -1,0 +1,20 @@
+{
+  "cell": "vit_base|mixup",
+  "ckpt_sha256": "a4e0e0ccd3b4cd4d40b9f46417d602d8eed4913a29b36f5b3bce78e1dfe77229",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 5,
+  "n_records_appended": 10000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vitb_mixup_saga_s1",
+  "split_name": "calibration",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "stage": "hist",
+  "tau_cal": {
+    "hist": 127.8115234375,
+    "s11_out": 95.35531616210938,
+    "s12_post_norm": 14.609077453613281
+  },
+  "tau_canon": 127.3125,
+  "work_package": "I2_terminal"
+}

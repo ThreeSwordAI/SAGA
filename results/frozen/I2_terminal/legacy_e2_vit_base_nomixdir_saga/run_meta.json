@@ -1,0 +1,96 @@
+{
+  "cell": "vit_base|mixup",
+  "ckpt_sha256": "4a1c5a1fe54692afbffdc25f26b9491c255d826f27aefeec9b74cf775ba43ef2",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 2000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.25": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 12,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.25
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.50": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 12,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.5
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.75": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 12,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.75
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 12,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 1.0
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "n_diag": 22000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/legacy_e2_vit_base_nomixdir_saga",
+  "run_id": "legacy_e2_vit_base_nomixdir_saga",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/calibration.json",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "state_hash_after": "d226656e947d3670362cdb9dc5535222882556b42e6159a7037e6966fb391cb7",
+  "state_hash_before": "d226656e947d3670362cdb9dc5535222882556b42e6159a7037e6966fb391cb7",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 127.8115234375,
+    "s11_out": 95.35531616210938,
+    "s12_post_norm": 14.609077453613281
+  },
+  "tau_canon": 127.3125
+}

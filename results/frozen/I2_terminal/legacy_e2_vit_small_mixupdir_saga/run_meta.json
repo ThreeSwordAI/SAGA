@@ -1,0 +1,96 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "92a03a4716ce07c0460eb132720d8a816aaa2bcde49713b86c57c774fef22995",
+  "conditions": {
+    "native": {
+      "edit_info": {},
+      "edit_type": "native",
+      "n_images": 2000,
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.25": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.25
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.50": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.5
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_0.75": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 0.75
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_info": {
+        "layer": 11,
+        "n_heads": 6,
+        "n_patches": 196,
+        "n_prefix": 1,
+        "value": 1.0
+      },
+      "edit_type": "terminal_gate_override",
+      "n_images": 2000,
+      "stages": [
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I2_terminal.yaml",
+  "device": "cuda",
+  "git_sha": "1e88350f72e8d010cf16b69d76c7c79f92eaaa21",
+  "n_diag": 22000,
+  "n_records": 10000,
+  "out_dir": "results/frozen/I2_terminal/legacy_e2_vit_small_mixupdir_saga",
+  "run_id": "legacy_e2_vit_small_mixupdir_saga",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/calibration.json",
+  "split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "state_hash_after": "e51e86ffaefa6650d1c3122586d4bc5a2b1ea578952fd9bac9bf0be2d67d2ce3",
+  "state_hash_before": "e51e86ffaefa6650d1c3122586d4bc5a2b1ea578952fd9bac9bf0be2d67d2ce3",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.900858879089355,
+    "s11_out": 18.62135124206543,
+    "s12_post_norm": 18.12993335723877
+  },
+  "tau_canon": 20.8515625
+}
