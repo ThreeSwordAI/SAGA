@@ -3749,3 +3749,87 @@ in the manifest is fully identified. A test permits no unexplained gap.
 measurement is unchanged by the tolerance fix, so this is cosmetic); and
 `docs/LOCKED_ANALYSIS.md` §11 to be filled in with the four split shas, which
 closes D8. D1-D7 remain open, D5 still blocking I4.
+
+---
+
+## 2026-09-16 — TASK I0, PHASE C (handoff, split shas, final counts) — **TASK COMPLETE**
+
+Worktree `../SAGA-I0`, branch `task/I0`, commit `8733cd3`. Not pushed.
+
+### Done
+
+**D8 — `analysis/build_I0_handoff.py` → `docs/I0_HANDOFF.md`.** Every number
+read from `results/frozen/I0_manifest/`, `results/frozen/splits/` and
+`results/diagsplit/`; the surrounding prose is fixed text. The generator takes
+`--git-sha` — the only part of the output that is not a function of the
+committed files — so the byte-identity test regenerates the document with the
+sha it records. That is stronger than the number-by-number check
+TASK-07/08/13's handoffs use, and both are kept.
+
+The document carries the 19-condition cohort (per-cell and
+per-family/status tables), the historical stage with its code citation, the
+four split shas with the protocol sentence lifted verbatim from the split
+files, what the smoke MEASURED on the real checkpoints, the
+checkpoint-identity cross-checks, the detection best-row resolution, and the
+seven still-open `DECISION NEEDED` items with the one that blocks I4.
+
+**`docs/LOCKED_ANALYSIS.md` §11** — the five split shas filled in from the
+Phase-B build, each with how it was derived and what was verified. **D8 is
+closed**; seven decisions remain open. The three signature lines
+(`Signed and dated by` / `Date frozen` / `Git sha at freeze`) are UNTOUCHED:
+Phase C fills in facts, and freezing the document is the human's act. A test
+asserts it is still unsigned.
+
+**`eligibility.md`** now distinguishes "not hashed yet" from "there is
+nothing to hash". Its closing sentence read as four outstanding hashes when
+all four are `ttr_edit` rows that will never have a checkpoint of their own.
+
+**Tests** — `tests/test_I0_phasec.py`, 17 functions: byte-identity
+regeneration, markdown table column consistency, every quoted number against
+the file it came from, and that the qualifications a reader needs (I0
+concluded nothing scientific; the recorded FAIL and why it is not a defect;
+`LOCKED_ANALYSIS` is still a DRAFT; the split protocol limit; the conditions
+contract) have not quietly disappeared.
+
+Two defects caught while drafting, now pinned: a literal `|` inside a
+markdown cell silently breaks its table (two occurrences), and the "which
+decision blocks a work package" lookup matched only the question column while
+`LOCKED_ANALYSIS` marks it in the default column — so that paragraph rendered
+as nothing at all.
+
+### Final state of TASK I0
+
+| | |
+|---|---|
+| manifest rows | 124, of which **19** are the completed 300-epoch cohort (8 baseline / 8 SAGA / 3 registers) |
+| `ckpt_sha256` MISSING | **4**, all `ttr_edit` — inference-time edits with no checkpoint of their own by design |
+| splits | 4 frozen + the unchanged discovery split, all shas recorded in `LOCKED_ANALYSIS.md` §11 |
+| smoke | 22 of 23 applicable checks PASS; the one FAIL was a tolerance bug in the check (one fp32 ULP on a reduction), corrected, and is a PASS under the fixed check |
+| tests | 118 I0 test functions (47 frozen, 34 manifest, 20 splits, 17 phase C) |
+| `pytest -q` | **739 passed, 30 skipped** |
+
+### Open, and deliberately not closed by I0
+
+- `docs/LOCKED_ANALYSIS.md` is a **DRAFT**. Until the human signs and dates
+  it, no I3/I4 Phase-B job may run.
+- **D5 BLOCKS I4**: it needs a prevalence map at the INPUT to the edited
+  block, and the committed `*_addr.json` maps are last-block. I1 must produce
+  it first.
+- D1-D4, D6, D7 can be defaulted; the defaults are written down so that
+  defaulting is a visible decision rather than a silent one.
+- **D3** is a small piece of work someone must do before I3 Phase B: the ten
+  fixed permutation index lists are not generated or committed. `gate_edit`
+  REFUSES to draw one, so no code path can quietly sample a fresh permutation
+  per checkpoint — but that also means I3 cannot run until the lists exist at
+  `configs/frozen/permutations_14x14.json`.
+
+### Optional, cosmetic
+
+One re-run of `scripts/jobs/frozen_smoke.sbatch` would rewrite
+`smoke_e2r_vits_mixup_saga_s1.json` with the corrected PASS verdict. The
+measurement itself is unchanged by the tolerance fix and is already recorded,
+so nothing depends on it.
+
+### Pending from HPC
+
+**Nothing.** TASK I0 is complete.

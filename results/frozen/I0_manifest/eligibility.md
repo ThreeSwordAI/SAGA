@@ -81,5 +81,11 @@ Counted from a model built through `tools/model_factory.py` at each run's own re
 
 ## Checkpoint hashes
 
-120 of 124 rows carry a `ckpt_sha256`; **4** are `MISSING` and are filled by `tools/frozen_manifest_hashes.py` on the HPC, where the checkpoints live. `saga/frozen/runner.py` REFUSES to evaluate a row whose `ckpt_sha256` is still MISSING.
+120 of 124 rows carry a `ckpt_sha256`. Hashes are produced by `tools/frozen_manifest_hashes.py` on the HPC, where the checkpoints live, and merged back in with `--hashes` (new values only: a committed sha must AGREE with the hash pass or the merge fails). `saga/frozen/runner.py` REFUSES to evaluate a row whose `ckpt_sha256` is MISSING.
+
+**4** rows are `MISSING`, and every one is accounted for:
+
+- **4** name no checkpoint file at all (`ckpt_path` is also `MISSING`), in `ttr_edit`. These have nothing to hash and never will: a test-time-register row is an inference-time EDIT of a base checkpoint, not a model, and records its base run, neurons-file sha, layer range and `n_neurons` instead.
+
+No row is `MISSING` for an unexplained reason (`tests/test_I0_manifest.py` permits none).
 

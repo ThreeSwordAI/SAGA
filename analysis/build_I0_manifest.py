@@ -942,13 +942,40 @@ def render_eligibility(rows, generated_by: str) -> str:
     A("")
     A("## Checkpoint hashes")
     A("")
-    missing_sha = sum(1 for r in rows if r["ckpt_sha256"] == MISSING)
-    A(f"{len(rows) - missing_sha} of {len(rows)} rows carry a "
-      f"`ckpt_sha256`; **{missing_sha}** are `MISSING` and are filled by "
+    missing = [r for r in rows if r["ckpt_sha256"] == MISSING]
+    A(f"{len(rows) - len(missing)} of {len(rows)} rows carry a "
+      f"`ckpt_sha256`. Hashes are produced by "
       f"`tools/frozen_manifest_hashes.py` on the HPC, where the checkpoints "
-      f"live. `saga/frozen/runner.py` REFUSES to evaluate a row whose "
-      f"`ckpt_sha256` is still MISSING.")
+      f"live, and merged back in with `--hashes` (new values only: a "
+      f"committed sha must AGREE with the hash pass or the merge fails). "
+      f"`saga/frozen/runner.py` REFUSES to evaluate a row whose "
+      f"`ckpt_sha256` is MISSING.")
     A("")
+    if missing:
+        # distinguish "not hashed yet" from "there is nothing to hash" — a
+        # single count reads as outstanding work when it is not
+        no_file = [r for r in missing if r["ckpt_path"] == MISSING]
+        pending = [r for r in missing if r["ckpt_path"] != MISSING]
+        A(f"**{len(missing)}** rows are `MISSING`, and every one is "
+          f"accounted for:")
+        A("")
+        if no_file:
+            fams = sorted({r["family"] for r in no_file})
+            A(f"- **{len(no_file)}** name no checkpoint file at all "
+              f"(`ckpt_path` is also `MISSING`), in "
+              f"`{'`, `'.join(fams)}`. These have nothing to hash and never "
+              f"will: a test-time-register row is an inference-time EDIT of "
+              f"a base checkpoint, not a model, and records its base run, "
+              f"neurons-file sha, layer range and `n_neurons` instead.")
+        if pending:
+            A(f"- **{len(pending)}** name a file that the hash pass has not "
+              f"yet read: "
+              f"{', '.join(sorted(r['run_id'] + '/' + r['ckpt_kind'] for r in pending))}. "
+              f"Re-run the hash tool.")
+        A("")
+        A(f"No row is `MISSING` for an unexplained reason "
+          f"(`tests/test_I0_manifest.py` permits none).")
+        A("")
     return "\n".join(L) + "\n"
 
 

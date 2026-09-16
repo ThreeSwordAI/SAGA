@@ -195,15 +195,22 @@ evidence and I4/I5 carry the paper (plan §6.6).
 
 | split | sha256 | n |
 |---|---|---|
-| discovery (`results/diagsplit/val_diag_split.json`) | `PENDING — Phase B` | 10,000 |
-| `results/frozen/splits/calibration.json` | `PENDING — Phase B` | 2,000 |
-| `results/frozen/splits/evaluation.json` | `PENDING — Phase B` | 10,000 |
-| `results/frozen/splits/sub1k.json` | `PENDING — Phase B` | 1,000 |
-| `results/frozen/splits/sub2k.json` | `PENDING — Phase B` | 2,000 |
+| discovery (`results/diagsplit/val_diag_split.json`) | `0a686340c00846818a857cf4cbf472cbdc035e0a88c20d79483f7d9f463b69b1` | 10,000 |
+| `results/frozen/splits/calibration.json` | `6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003` | 2,000 |
+| `results/frozen/splits/evaluation.json` | `7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014` | 10,000 |
+| `results/frozen/splits/sub1k.json` | `6a38d1000b32f2ca0c5bcfd1187cde86258b2d45a4b1e4b47cfd5580fe088ef3` | 1,000 |
+| `results/frozen/splits/sub2k.json` | `d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117` | 2,000 |
 
-The splits are built by `tools/build_frozen_splits.py` in Phase B (it needs
-an extracted val tree, which on this cluster exists only inside a job). The
-four shas it prints go in this table before the freeze.
+Built by `tools/build_frozen_splits.py` on the HPC, 2026-09-16 (it needs an
+extracted val tree, which on this cluster exists only inside a job — the task
+file put this step on a login node, which is not possible here). Every sha
+above is read from the file it names; `discovery` is the sha256 of the file
+itself, the other four are each split's own recorded `sha256` over its
+canonical serialization, which `tools/build_frozen_splits.py` re-verifies on
+every invocation. All 1,000 classes are present in each; calibration is
+2/class and evaluation 10/class exactly; `discovery`, `calibration` and
+`evaluation` are pairwise disjoint and `sub1k`/`sub2k` are subsets of
+`evaluation`. **D8 is closed.**
 
 **The protocol sentence, which must survive into the paper:** the original
 full-validation accuracies have already been seen, so this is a *locked
@@ -223,8 +230,8 @@ set and not a retrospectively preregistered study.
 | D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | blocks I4; no default |
 | D6 | 8 | Bootstrap seed | `0` |
 | D7 | 9 | Multiplicity correction across the three primary contrasts | none, with all three named in advance |
-| D8 | 11 | The five split shas | filled in Phase B |
+| ~~D8~~ | 11 | ~~The five split shas~~ | **CLOSED** — filled in from the Phase-B build, 2026-09-16 |
 
-D5 is the only one that BLOCKS a work package. The rest can be defaulted; the
+Seven remain open. D5 is the only one that BLOCKS a work package. The rest can be defaulted; the
 defaults are stated above so that defaulting is a visible decision rather
 than a silent one.
