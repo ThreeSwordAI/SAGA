@@ -717,6 +717,111 @@ def test_i5b_gate_refuses_an_unmatched_or_unhashed_pair(tmp_path):
     assert pair is None and "not identified" in reason
 
 
+def test_the_terminal_bypass_applies_at_dense_resolution():
+    """TASK C / I5b: the ADE20K head runs at 512x512 -> 1024 patches, while
+    the gate was trained on 14x14 = 196.
+
+    The first I5b job (4266272) died here:
+
+        EditError: frozen gate map (12, 196) does not match this forward's
+        [H=12, n_patches=1024]
+
+    A CONSTANT map is resolution-independent — every position carries the
+    same multiplier — so applying it at 1024 is exact. This asserts that,
+    and asserts the VALUE is right rather than merely that it runs.
+    """
+    from saga.frozen.edits import _MapGate
+
+    H, n_prefix = 12, 1
+    gate = _MapGate(torch.full((H, 196), 1.0), n_prefix)
+    for n_patches in (196, 1024, 4200):
+        x = torch.randn(2, H, n_prefix + n_patches, 4)
+        out = gate(x)
+        # value 1.0 is a BYPASS: the patch rows come through untouched...
+        assert torch.equal(out, x), f"not a bypass at {n_patches} patches"
+
+    half = _MapGate(torch.full((H, 196), 0.5), n_prefix)
+    x = torch.randn(2, H, n_prefix + 1024, 4)
+    out = half(x)
+    assert torch.equal(out[:, :, :n_prefix, :], x[:, :, :n_prefix, :]), \
+        "prefix rows must never be gated"
+    assert torch.allclose(out[:, :, n_prefix:, :], x[:, :, n_prefix:, :] * 0.5)
+
+
+def test_the_terminal_bypass_runs_on_a_real_model_at_a_dense_resolution():
+    """The cluster failure, reproduced end to end on a real SAGA ViT.
+
+    The unit test above exercises `_MapGate` directly; this one goes through
+    `terminal_gate_override` on a model whose gate was built for 14x14 = 196
+    and then forwards a 320x320 image (20x20 = 400 patches), which is the
+    shape of what I5b does at 512x512 = 1024. Before the fix this raised
+    EditError; the native forward at the same resolution always worked, and
+    the test asserts both so a regression cannot hide in either half.
+    """
+    torch.manual_seed(0)
+    model = _structured_gate(build_saga_vit(
+        "vit_tiny_patch16_224", gate=True, num_classes=10, depth=DEPTH,
+        embed_dim=DIM, num_heads=HEADS).eval())
+    dense = torch.randn(1, 3, 320, 320)
+    stages = ("s11_out", "hist")
+
+    from saga.frozen.edits import terminal_gate_override
+
+    with torch.no_grad():
+        native_logits = model(dense).clone()
+    native = feat.plain_forward_stages(model, dense, stages)
+    with torch.no_grad(), terminal_gate_override(model, 1.0):
+        bypass_logits = model(dense).clone()
+        bypass = feat.plain_forward_stages(model, dense, stages)
+
+    assert native["hist"].shape[1] == 400, "20x20 grid, not the gate's 196"
+
+    # The LOGITS are unchanged, and that is not a weak result — it is I2's
+    # Proposition 2 (a CLS-only readout cannot see the terminal PATCH gate),
+    # which held at exactly 0 on 8 of 8 real checkpoints. Here it holds at a
+    # resolution the gate was never built for.
+    assert torch.equal(native_logits, bypass_logits)
+
+    # The PATCH features at the last block DO move, so the bypass is real and
+    # this test is not vacuous...
+    assert not torch.equal(native["hist"], bypass["hist"])
+    # ...while s11_out cannot move: the edit swaps the LAST block's gate.
+    assert torch.equal(native["s11_out"], bypass["s11_out"])
+
+
+def test_a_map_that_varies_over_patches_is_still_refused_at_another_grid():
+    """The guard that TASK B's I3/I4 edits rely on is UNCHANGED.
+
+    Interpolating a permuted or ring-shuffled map to another resolution is a
+    semantic choice about what that edit means there, and this module must
+    not make it silently on another work package's behalf.
+    """
+    from saga.frozen.edits import EditError, _MapGate
+
+    H = 12
+    varying = torch.arange(H * 196, dtype=torch.float32).reshape(H, 196)
+    gate = _MapGate(varying, 1)
+    with pytest.raises(EditError, match="varies over patches"):
+        gate(torch.randn(2, H, 1 + 1024, 4))
+    # and at its OWN grid it still works, untouched
+    x = torch.randn(2, H, 1 + 196, 4)
+    assert gate(x).shape == x.shape
+
+
+def test_the_dense_path_changes_nothing_at_the_grid_the_map_was_built_for():
+    """Every number I2 and I5a already produced ran at 196. The new branch
+    must not execute there at all, so those results cannot have moved."""
+    from saga.frozen.edits import _MapGate
+
+    H, n_prefix, n_patches = 12, 1, 196
+    g = torch.full((H, n_patches), 0.25)
+    gate = _MapGate(g, n_prefix)
+    x = torch.randn(3, H, n_prefix + n_patches, 8)
+    want = x.clone()
+    want[:, :, n_prefix:, :] = x[:, :, n_prefix:, :] * 0.25
+    assert torch.equal(gate(x), want)
+
+
 def test_i5b_refuses_a_training_mode_call():
     """§4, §11: evaluation of existing heads only."""
     from tools.frozen_I5b_seg_eval import SegEvalError, assert_eval_only
