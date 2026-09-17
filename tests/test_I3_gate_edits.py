@@ -678,7 +678,7 @@ def test_the_decile_edges_are_deterministic_and_exhaustive():
 def test_the_deciles_are_pooled_over_conditions_not_per_family(tmp_path):
     """TASK B §3: ONE energy axis per checkpoint. Per-family deciles would put
     every family's own median in bin 5 and make the comparison vacuous."""
-    records = _synthetic_records("fake_saga", c1_shift=0.3, c2_shift=0.1,
+    records = _synthetic_records("fake_saga", mean_shift=0.3, perm_shift=0.1,
                                  n=60, energy={"mean": 5.0, "mean_half": 2.5,
                                                "perm": 1.0, "ringperm": 0.5,
                                                "dihedral": 0.2})
@@ -702,13 +702,24 @@ def test_the_strata_refuse_a_sweep_with_no_energy_column():
 # C1 / C2 and the interpretation branches
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _synthetic_records(run_id, c1_shift, c2_shift, n=200, seed=0,
-                       energy=None, arch="vit_small", recipe="mixup"):
+def _synthetic_records(run_id, mean_shift, perm_shift, n=200, seed=0,
+                       energy=None, arch="vit_small", recipe="mixup",
+                       ring_shift=None, dih_shift=0.0):
     """Fake I3 record rows: 61 conditions x n images.
+
+    The shifts are PER FAMILY, because the contrasts are:
+        C1 (primary)   perm      - original
+        C2 (primary)   perm      - ringperm
+        S1 (secondary) mean      - original
+        S2 (secondary) perm      - dihedral (t != 0)
+    `ring_shift` defaults to `perm_shift`, which makes C2 exactly 0 in
+    expectation — the "ring membership adds nothing" case.
 
     `energy` maps a family to the `delta_update_norm` it injects; None leaves
     the column MISSING, which is what a sweep run without the flag looks like.
     """
+    if ring_shift is None:
+        ring_shift = perm_shift
     rng = np.random.RandomState(seed)
     ids = [f"n{i // 10:08d}/img_{i}" for i in range(n)]
     base = rng.rand(n) * 2.0
@@ -733,37 +744,76 @@ def _synthetic_records(run_id, c1_shift, c2_shift, n=200, seed=0,
 
     add("original", 0.0, None)
     for layer in LAYERS:
-        add(f"mean_L{layer}", c1_shift, "mean")
-        add(f"mean_half_L{layer}", c1_shift / 2, "mean_half")
+        add(f"mean_L{layer}", mean_shift, "mean")
+        add(f"mean_half_L{layer}", mean_shift / 2, "mean_half")
         for k in range(10):
-            add(f"perm{k}_L{layer}", c2_shift, "perm")
+            add(f"perm{k}_L{layer}", perm_shift, "perm")
         for k in range(10):
-            add(f"ringperm{k}_L{layer}", c2_shift * 0.5, "ringperm")
+            add(f"ringperm{k}_L{layer}", ring_shift, "ringperm")
         for t in range(8):
-            add(f"dihedral{t}_L{layer}", 0.0, "dihedral")
+            add(f"dihedral{t}_L{layer}", 0.0 if t == 0 else dih_shift,
+                "dihedral")
     return rows
 
 
-def _decide(c1_shift, c2_shift, layer=7, resamples=400):
-    recs = {r: _synthetic_records(r, c1_shift, c2_shift, seed=s)
+def _decide(mean_shift, perm_shift, layer=7, resamples=400, **kw):
+    recs = {r: _synthetic_records(r, mean_shift, perm_shift, seed=s, **kw)
             for s, r in enumerate(ic.FRESH_SAGA)}
     return ic.i3_contrasts(recs, layers=(layer,), resamples=resamples)[layer]
 
 
-@pytest.mark.parametrize("c1_shift,c2_shift,branch", [
+@pytest.mark.parametrize("perm_shift,ring_shift,branch", [
     (0.0, 0.0, "neither"),
-    (0.25, 0.0, "ring_only"),
-    (0.25, 0.12, "arrangement"),
-    (-0.25, 0.0, "unanticipated"),
-    (0.0, 0.12, "unanticipated"),
+    (0.25, 0.25, "ring_only"),
+    (0.25, 0.10, "arrangement"),
+    (-0.25, -0.25, "unanticipated"),
+    (0.0, -0.12, "unanticipated"),
 ])
-def test_every_interpretation_branch_is_reachable(c1_shift, c2_shift, branch):
-    """TASK B §4's three branches, plus the pattern it does not name. The
-    module decides; nothing is re-framed by inspection."""
-    got = _decide(c1_shift, c2_shift)
+def test_every_interpretation_branch_is_reachable(perm_shift, ring_shift,
+                                                  branch):
+    """TASK B §4's three branches, plus the pattern it does not name.
+
+    Driven on the LOCKED §9 contrasts: C1 = perm - original, C2 = perm -
+    ringperm. `ring_shift == perm_shift` makes C2 exactly 0 in expectation.
+    """
+    got = _decide(0.30, perm_shift, ring_shift=ring_shift)
     assert got["interpretation"]["branch"] == branch, (
         got["C1"]["verdict"], got["C2"]["verdict"])
     assert got["interpretation"]["anticipated"] is (branch != "unanticipated")
+
+
+def test_the_primary_pair_is_LOCKED_section_9_and_the_old_pair_is_secondary():
+    """On 2026-09-17 the human resolved §4-vs-§9 in favour of the signed
+    document. C1/C2 are now LOCKED §9's pair; the task file's pair is kept,
+    pre-declared, as S1/S2 and never decides the headline."""
+    got = _decide(0.30, 0.20, ring_shift=0.20)
+    assert got["primary"] == ("C1", "C2")
+    assert got["secondary"] == ("S1", "S2")
+    d = got["C1"]["per_checkpoint"][ic.FRESH_SAGA[0]]
+    assert "mean_k nll(perm k) - nll(original)" in d["definition"]
+    assert d["role"] == "primary"
+    d2 = got["C2"]["per_checkpoint"][ic.FRESH_SAGA[0]]
+    assert "mean_k nll(ringperm k)" in d2["definition"]
+    # the old pair, still computed, still labelled
+    assert got["S1"]["per_checkpoint"][ic.FRESH_SAGA[0]]["role"] == "secondary"
+    assert got["S2"]["per_checkpoint"][ic.FRESH_SAGA[0]]["role"] == "secondary"
+    assert "dihedral" in got["S2"]["per_checkpoint"][ic.FRESH_SAGA[0]][
+        "definition"]
+
+
+def test_the_section_4_middle_branch_is_flagged_not_reused():
+    """§4's guide was written against S2. Under §9's C2, `C2 ~ 0` means ring
+    membership adds NOTHING beyond the within-ring arrangement — the reverse
+    of what §4's sentence says. The module flags it instead of handing back a
+    sentence that would mean the opposite of the measurement."""
+    ring_only = _decide(0.30, 0.25, ring_shift=0.25)
+    assert ring_only["interpretation"]["branch"] == "ring_only"
+    assert ring_only["interpretation"]["guide_conflict"] == ic.GUIDE_CONFLICT
+    assert "does not transfer" in ic.GUIDE_CONFLICT
+    # every other branch is unaffected
+    for branch_case in (_decide(0.0, 0.0), _decide(0.30, 0.25,
+                                                   ring_shift=0.10)):
+        assert branch_case["interpretation"]["guide_conflict"] is None
 
 
 def test_the_branch_text_is_byte_identical_to_the_task_file():
@@ -814,24 +864,40 @@ def test_a_direction_disagreement_between_the_fresh_pair_is_a_null():
     assert "direction is not consistent" in got["C1"]["reason"]
 
 
-def test_c2_excludes_the_identity_dihedral():
+def test_s2_excludes_the_identity_dihedral():
     """`dihedral0` is bit-identical to `original`, so its delta is exactly 0.
-    Including it would shrink C2 by 1/8 for a reason unrelated to
-    arrangement."""
-    recs = _synthetic_records("x", 0.2, 0.1)
-    grouped = ic.by_condition(recs)
-    out = ic.c2(grouped, 7, resamples=200)
+    Including it would shrink the contrast by 1/8 for a reason unrelated to
+    arrangement. This property moved from C2 to S2 with the §9
+    reconciliation; it is the same check on the same contrast."""
+    grouped = ic.by_condition(_synthetic_records("x", 0.2, 0.1,
+                                                 dih_shift=0.05))
+    out = ic.s2(grouped, 7, resamples=200)
     assert out["n_perm"] == 10 and out["n_dihedral"] == 7
     assert "dihedral0_L7" not in out["reference"]
     assert "dihedral1_L7" in out["reference"]
 
 
-def test_c2_refuses_a_partial_condition_list():
+def test_c2_contrasts_the_two_permutation_families():
+    grouped = ic.by_condition(_synthetic_records("x", 0.2, 0.30,
+                                                 ring_shift=0.10))
+    out = ic.c2(grouped, 7, resamples=200)
+    assert out["n_perm"] == 10 and out["n_ringperm"] == 10
+    assert "ringperm0_L7" in out["reference"]
+    assert "dihedral" not in out["reference"]
+    assert out["mean_nats"] > 0        # crossing rings costs more here
+
+
+@pytest.mark.parametrize("drop,fn,want", [
+    ("perm9_L7", "c1", "needs 10 `perm` conditions; found 9"),
+    ("ringperm4_L7", "c2", "needs 10 `ringperm` conditions; found 9"),
+    ("dihedral3_L7", "s2", "needs 7 non-identity `dihedral` conditions"),
+])
+def test_a_contrast_refuses_a_partial_condition_list(drop, fn, want):
     recs = [r for r in _synthetic_records("x", 0.2, 0.1)
-            if r["condition_id"] not in ("perm9_L7", "dihedral3_L7")]
+            if r["condition_id"] != drop]
     grouped = ic.by_condition(recs)
-    with pytest.raises(ic.ContrastError, match="found 9 and 6"):
-        ic.c2(grouped, 7, resamples=50)
+    with pytest.raises(ic.ContrastError, match=want):
+        getattr(ic, fn)(grouped, 7, resamples=50)
 
 
 def test_duplicate_rows_are_refused():

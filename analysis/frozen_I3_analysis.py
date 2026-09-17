@@ -208,11 +208,12 @@ def build_a(run_id, records, *, resamples=BOOTSTRAP_RESAMPLES,
 # T_I3b — C1 and C2, and the decision
 # ─────────────────────────────────────────────────────────────────────────────
 
-T_B_FIELDS = ("contrast", "layer", "run_id", "arch", "recipe_actual", "scope",
-              "decides", "n_images", "mean_nats", "ci_lo", "ci_hi",
+T_B_FIELDS = ("contrast", "role", "layer", "run_id", "arch", "recipe_actual",
+              "scope", "decides", "n_images", "mean_nats", "ci_lo", "ci_hi",
               "excludes_zero", "direction", "delta_top1_points",
               "frac_positive", "verdict", "verdict_reason", "branch",
-              "branch_text", "definition", "bootstrap_resamples",
+              "branch_text", "guide_conflict", "definition",
+              "bootstrap_resamples",
               "bootstrap_seed", "split_sha256", "permutations_sha256",
               "ckpt_sha256", "git_sha")
 
@@ -235,13 +236,19 @@ def build_b(loaded, *, layers=(7, 8), resamples=BOOTSTRAP_RESAMPLES,
     for layer in layers:
         d = decisions[int(layer)]
         interp = d["interpretation"]
-        for name in ("C1", "C2"):
+        # LOCKED §9's pair decides; S1/S2 are the pre-declared secondaries,
+        # computed under the same rule and carried in the same table with
+        # `role` saying which is which. A reader must never have to know
+        # which two were primary from memory.
+        for name in d["primary"] + d["secondary"]:
             dec = d[name]
+            role = "primary" if name in d["primary"] else "secondary"
             for run_id in sorted(dec["per_checkpoint"]):
                 s = dec["per_checkpoint"][run_id]
                 p = prov[run_id]
                 rows.append({
-                    "contrast": name, "layer": int(layer), "run_id": run_id,
+                    "contrast": name, "role": role,
+                    "layer": int(layer), "run_id": run_id,
                     "arch": p["arch"], "recipe_actual": p["recipe_actual"],
                     "scope": scope_of(run_id, p["arch"], p["recipe_actual"]),
                     "decides": run_id in dec["deciding"],
@@ -253,8 +260,14 @@ def build_b(loaded, *, layers=(7, 8), resamples=BOOTSTRAP_RESAMPLES,
                     "frac_positive": s["frac_positive"],
                     "verdict": dec["verdict"],
                     "verdict_reason": dec["reason"],
-                    "branch": interp["branch"],
-                    "branch_text": interp["text"],
+                    # the branch belongs to the PRIMARY pair; a secondary row
+                    # carries MISSING rather than borrowing it
+                    "branch": (interp["branch"] if role == "primary"
+                               else MISSING),
+                    "branch_text": (interp["text"] if role == "primary"
+                                    else MISSING),
+                    "guide_conflict": (interp.get("guide_conflict") or MISSING
+                                       if role == "primary" else MISSING),
                     "definition": s["definition"],
                     "bootstrap_resamples": resamples, "bootstrap_seed": seed,
                     "split_sha256": p["split_sha256"],
