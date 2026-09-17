@@ -96,6 +96,35 @@ I3_BRANCHES = {
 #: The closing sentence of the §4 guide, carried with every I3 interpretation.
 I3_GUIDE_CLOSE = "Each is reportable; none is a failure."
 
+#: THE ONE BRANCH OF §4 THAT DOES NOT SURVIVE THE §9 RECONCILIATION.
+#:
+#: §4's guide was written against the contrasts the task file's D7 table
+#: named. On 2026-09-17 the human resolved the §4-vs-§9 disagreement in
+#: favour of LOCKED §9, so C2 is now `perm` - `ringperm` rather than
+#: `perm` - `dihedral`. Under the new definition the middle branch reads
+#: BACKWARDS:
+#:
+#:   §4 says   C1 > 0 but C2 ~ 0 -> "uses the ring/symmetry structure but
+#:             not the within-ring arrangement"
+#:   §9's C2   perm - ringperm ~ 0 means an unrestricted permutation costs
+#:             no more than one that stays inside its rings, i.e. the
+#:             within-ring arrangement already accounts for the whole
+#:             effect and ring membership adds NOTHING — the opposite
+#:             reading.
+#:
+#: `interpret_i3` therefore returns this alongside the branch instead of
+#: quietly handing back a sentence that would mean the reverse of what was
+#: measured. The LOCKED freeze draft proposes the §4 amendment that closes
+#: it; until that is signed, a `ring_only` outcome is reported with BOTH
+#: intervals and no interpretation.
+GUIDE_CONFLICT = (
+    "TASK B §4's middle branch was written against the contrast now called "
+    "S2 (`perm` - `dihedral`) and does not transfer to LOCKED §9's C2 "
+    "(`perm` - `ringperm`), under which C2 ~ 0 means ring membership adds "
+    "nothing beyond the within-ring arrangement — the opposite of what §4's "
+    "sentence says. Report C1 and C2 with their intervals and do not use "
+    "the §4 text for this branch until the freeze amends it.")
+
 #: TASK B §6, the I4 interpretation guide. Defined here with I3's so that both
 #: branch sets live in one place; `interpret_i4` is completed in I4 Phase A'.
 I4_BRANCHES = {
@@ -234,68 +263,162 @@ def _summary(deltas, top1_deltas=None, *, resamples=BOOTSTRAP_RESAMPLES,
     }
 
 
+def _family_delta(grouped: dict, family: str, layer: int, ids, field,
+                  exclude_index=None):
+    """Mean over one family's draws, WITHIN IMAGE, as a [len(ids)] vector.
+
+    LOCKED_ANALYSIS §8: permutation draws are repeated interventions on one
+    checkpoint, never replication — so the ten draws are averaged inside
+    each image before any contrast, and the resampling unit stays the image.
+    """
+    conds = [c for c in family_conditions(grouped, family, layer)
+             if exclude_index is None
+             or parse_condition_id(c)["index"] != exclude_index]
+    if not conds:
+        raise ContrastError(f"no {family!r} condition at layer {layer}")
+    return conds, np.mean([[float(grouped[c][i][field]) for i in ids]
+                           for c in conds], axis=0)
+
+
+def _common_images(grouped: dict, conds) -> list:
+    missing = [c for c in conds if c not in grouped]
+    if missing:
+        raise ContrastError(
+            f"no rows for condition(s) {missing} — a contrast is not "
+            f"computed from a partial sweep")
+    ids = sorted(set.intersection(*[set(grouped[c]) for c in conds]))
+    if not ids:
+        raise ContrastError(f"conditions {list(conds)} share no image")
+    return ids
+
+
+def _expect(name, layer, got, want, what):
+    if len(got) != want:
+        raise ContrastError(
+            f"{name} at layer {layer} needs {want} {what}; found {len(got)}. "
+            f"The condition list is fixed in "
+            f"configs/frozen/I3_gate_edits.yaml and a partial sweep is not a "
+            f"contrast.")
+
+
 def c1(grouped: dict, layer: int, *, reference="original",
        resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
-    """C1 — `mean_L{layer}` minus `original`, per-image NLL.
+    """C1 (PRIMARY, LOCKED §9.1) — the 10 `perm` conditions minus `original`.
 
-    Direction that would support "arrangement matters": Delta-NLL > 0, i.e.
-    collapsing the gate to its per-head mean makes the loss worse.
+    "`original` vs `permute`", as LOCKED_ANALYSIS §9 names it. A position
+    permutation preserves each head's gate MULTISET exactly and destroys only
+    the arrangement, so this asks whether the frozen model uses WHERE its
+    gate values sit at all.
+
+    Direction that would support "arrangement matters": Delta-NLL > 0.
+
+    THIS DEFINITION CHANGED on 2026-09-17. Through I3 Phase A, C1 was
+    `mean` - `original`, following the D7 table of `docs/TASK_B_I3_I4.md`
+    §0, which disagreed with LOCKED §9. The human resolved it in favour of
+    the signed document; the old pair is kept, pre-declared, as `s1`/`s2`.
     """
-    cond = f"mean_L{int(layer)}"
-    _ids, d = paired_delta(grouped, cond, reference, "nll")
-    # `delta_top1_points` is the top-1 change THE EDIT CAUSED — accuracy
-    # under the edit minus accuracy under the reference, in points. It is the
-    # same subtraction as the NLL delta and is NOT sign-flipped to "look
-    # like" a loss: a condition that hurts shows a positive Delta-NLL and a
-    # negative Delta-top-1, and the table says both.
-    _ids2, dtop = paired_delta(grouped, cond, reference, "correct")
-    out = _summary(d, dtop, resamples=resamples, seed=seed)
-    out.update(contrast="C1", condition=cond, reference=reference,
-               layer=int(layer),
-               definition="mean(nll[mean_L{l}]) - mean(nll[original]), "
-                          "paired per image")
+    layer = int(layer)
+    perms = family_conditions(grouped, "perm", layer)
+    _expect("C1", layer, perms, 10, "`perm` conditions")
+    ids = _common_images(grouped, perms + [reference])
+    _c, a = _family_delta(grouped, "perm", layer, ids, "nll")
+    _c, atop = _family_delta(grouped, "perm", layer, ids, "correct")
+    b = np.asarray([float(grouped[reference][i]["nll"]) for i in ids])
+    btop = np.asarray([float(grouped[reference][i]["correct"]) for i in ids])
+    out = _summary(a - b, atop - btop, resamples=resamples, seed=seed)
+    out.update(contrast="C1", layer=layer, role="primary",
+               condition="+".join(perms), reference=reference,
+               n_perm=len(perms),
+               definition="mean_i[ mean_k nll(perm k) - nll(original) ], "
+                          "paired per image (LOCKED §9.1)")
     return out
 
 
 def c2(grouped: dict, layer: int, *, resamples=BOOTSTRAP_RESAMPLES,
        seed=BOOTSTRAP_SEED) -> dict:
-    """C2 — the 10 `perm` conditions minus the 7 non-identity `dihedral` ones.
+    """C2 (PRIMARY, LOCKED §9.1) — `perm` minus `permute_within_ring`.
 
-    Both sides are averaged WITHIN IMAGE before the contrast
-    (LOCKED_ANALYSIS §8: repeated interventions on one checkpoint are never
-    treated as replication), so the resampling unit stays the image.
+    Both families destroy arrangement; only the unrestricted one crosses
+    rings. So this isolates the RING composition from the arrangement inside
+    a ring, on the same checkpoint and the same images.
 
-    Direction that would support "arrangement beyond ring/symmetry structure":
-    > 0.
+    Direction: > 0 means an unrestricted permutation costs MORE than one that
+    keeps every coordinate in its ring — i.e. ring membership carries
+    something the within-ring arrangement does not.
+
+    NOTE, and it matters for reading `interpret_i3`: the §4 interpretation
+    guide of `docs/TASK_B_I3_I4.md` was written against the OTHER C2 (the one
+    now called `s2`). Its middle branch does not transfer to this definition;
+    `interpret_i3` flags that rather than silently re-labelling it.
+    """
+    layer = int(layer)
+    perms = family_conditions(grouped, "perm", layer)
+    rings = family_conditions(grouped, "ringperm", layer)
+    _expect("C2", layer, perms, 10, "`perm` conditions")
+    _expect("C2", layer, rings, 10, "`ringperm` conditions")
+    ids = _common_images(grouped, perms + rings)
+    _c, a = _family_delta(grouped, "perm", layer, ids, "nll")
+    _c, b = _family_delta(grouped, "ringperm", layer, ids, "nll")
+    _c, atop = _family_delta(grouped, "perm", layer, ids, "correct")
+    _c, btop = _family_delta(grouped, "ringperm", layer, ids, "correct")
+    out = _summary(a - b, atop - btop, resamples=resamples, seed=seed)
+    out.update(contrast="C2", layer=layer, role="primary",
+               condition="+".join(perms), reference="+".join(rings),
+               n_perm=len(perms), n_ringperm=len(rings),
+               definition="mean_i[ mean_k nll(perm k) - mean_k "
+                          "nll(ringperm k) ], paired per image (LOCKED §9.1)")
+    return out
+
+
+def s1(grouped: dict, layer: int, *, reference="original",
+       resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """S1 (SECONDARY, pre-declared) — `mean_L{layer}` minus `original`.
+
+    The whole arrangement removed and the per-head mean kept. This was C1
+    through I3 Phase A; it is now reported beside the primaries under the
+    same decision rule and labelled secondary in every table, never as the
+    headline.
+    """
+    layer = int(layer)
+    cond = f"mean_L{layer}"
+    _ids, d = paired_delta(grouped, cond, reference, "nll")
+    _ids2, dtop = paired_delta(grouped, cond, reference, "correct")
+    out = _summary(d, dtop, resamples=resamples, seed=seed)
+    out.update(contrast="S1", layer=layer, role="secondary", condition=cond,
+               reference=reference,
+               definition="mean(nll[mean_L{l}]) - mean(nll[original]), "
+                          "paired per image (secondary)")
+    return out
+
+
+def s2(grouped: dict, layer: int, *, resamples=BOOTSTRAP_RESAMPLES,
+       seed=BOOTSTRAP_SEED) -> dict:
+    """S2 (SECONDARY, pre-declared) — `perm` minus the 7 non-identity
+    `dihedral` transforms.
+
+    `dihedral0` is excluded because it is bit-identical to `original`, so its
+    delta is exactly 0 and including it would shrink the contrast by 1/8 for
+    a reason unrelated to arrangement. This was C2 through I3 Phase A.
     """
     layer = int(layer)
     perms = family_conditions(grouped, "perm", layer)
     dihs = [c for c in family_conditions(grouped, "dihedral", layer)
             if parse_condition_id(c)["index"] != DIHEDRAL_IDENTITY]
-    if len(perms) != 10 or len(dihs) != 7:
-        raise ContrastError(
-            f"C2 at layer {layer} needs the 10 `perm` conditions and the 7 "
-            f"non-identity `dihedral` conditions; found {len(perms)} and "
-            f"{len(dihs)}. The condition list is fixed in "
-            f"configs/frozen/I3_gate_edits.yaml and a partial sweep is not a "
-            f"contrast.")
-    ids = sorted(set.intersection(*[set(grouped[c]) for c in perms + dihs]))
-    if not ids:
-        raise ContrastError(
-            f"C2 at layer {layer}: the 17 conditions share no image")
-
-    def _mean_over(conds, field):
-        return np.mean([[float(grouped[c][i][field]) for i in ids]
-                        for c in conds], axis=0)
-
-    d = _mean_over(perms, "nll") - _mean_over(dihs, "nll")
-    dtop = _mean_over(perms, "correct") - _mean_over(dihs, "correct")
-    out = _summary(d, dtop, resamples=resamples, seed=seed)
-    out.update(contrast="C2", layer=layer, condition="+".join(perms),
-               reference="+".join(dihs),
+    _expect("S2", layer, perms, 10, "`perm` conditions")
+    _expect("S2", layer, dihs, 7, "non-identity `dihedral` conditions")
+    ids = _common_images(grouped, perms + dihs)
+    _c, a = _family_delta(grouped, "perm", layer, ids, "nll")
+    _c, atop = _family_delta(grouped, "perm", layer, ids, "correct")
+    b = np.mean([[float(grouped[c][i]["nll"]) for i in ids] for c in dihs],
+                axis=0)
+    btop = np.mean([[float(grouped[c][i]["correct"]) for i in ids]
+                    for c in dihs], axis=0)
+    out = _summary(a - b, atop - btop, resamples=resamples, seed=seed)
+    out.update(contrast="S2", layer=layer, role="secondary",
+               condition="+".join(perms), reference="+".join(dihs),
                n_perm=len(perms), n_dihedral=len(dihs),
-               definition="mean_i[ mean_k nll(perm k) - mean_t nll(dihedral t, "
-                          "t != 0) ], paired per image")
+               definition="mean_i[ mean_k nll(perm k) - mean_t nll(dihedral "
+                          "t, t != 0) ], paired per image (secondary)")
     return out
 
 
@@ -470,6 +593,10 @@ def interpret_i3(c1_verdict: str, c2_verdict: str) -> dict:
         "c1_verdict": c1_verdict, "c2_verdict": c2_verdict,
         "anticipated": branch != "unanticipated",
         "source": "docs/TASK_B_I3_I4.md §4",
+        # The §4 guide was written against the OLD C2 (now `s2`). Under
+        # LOCKED §9's C2 the middle branch reads backwards, so it is FLAGGED
+        # rather than silently re-labelled. See GUIDE_CONFLICT.
+        "guide_conflict": (GUIDE_CONFLICT if branch == "ring_only" else None),
     }
 
 
@@ -602,13 +729,19 @@ def i3_contrasts(records_by_run: dict, *, layers=(7, 8),
     grouped = {run: by_condition(rows) for run, rows in records_by_run.items()}
     out = {}
     for layer in layers:
-        per_c1 = {run: c1(g, layer, resamples=resamples, seed=seed)
-                  for run, g in grouped.items()}
-        per_c2 = {run: c2(g, layer, resamples=resamples, seed=seed)
-                  for run, g in grouped.items()}
-        d1, d2 = decide(per_c1), decide(per_c2)
+        per = {name: {run: fn(g, layer, resamples=resamples, seed=seed)
+                      for run, g in grouped.items()}
+               for name, fn in (("C1", c1), ("C2", c2), ("S1", s1), ("S2", s2))}
+        decided = {name: decide(v) for name, v in per.items()}
         out[int(layer)] = {
-            "C1": d1, "C2": d2,
-            "interpretation": interpret_i3(d1["verdict"], d2["verdict"]),
+            # LOCKED §9's pair decides; the pre-declared secondaries are
+            # computed under the SAME rule and reported beside them, never as
+            # the headline (LOCKED §9: "everything else is labelled
+            # exploratory and reported as such").
+            "C1": decided["C1"], "C2": decided["C2"],
+            "S1": decided["S1"], "S2": decided["S2"],
+            "primary": ("C1", "C2"), "secondary": ("S1", "S2"),
+            "interpretation": interpret_i3(decided["C1"]["verdict"],
+                                           decided["C2"]["verdict"]),
         }
     return out
