@@ -62,11 +62,30 @@ MISSING = "MISSING"
 #: The `*_addr.json` schema string this contract round-trips.
 ADDR_SCHEMA = "sink_address_v1"
 
-#: sha256 of the DISCOVERY split — the only split any mask may be built
-#: from (`docs/LOCKED_ANALYSIS.md` §11; the file's own digest, as recorded
-#: there). `tests/test_I1_spatial.py` pins it against the file.
+#: The DISCOVERY split has TWO digests, and a mask may carry either.
+#:
+#: It predates `tools/build_frozen_splits.py` and so records no `sha256` of
+#: its own. `docs/LOCKED_ANALYSIS.md` §11 therefore quotes the digest of the
+#: FILE — and says so explicitly — while `saga.frozen.runner.load_split`
+#: stamps the digest of the split's CANONICAL SERIALIZATION into every
+#: artifact built from it. The two differ:
+#:
+#:     file        0a686340…   what LOCKED_ANALYSIS §11 quotes
+#:     content     bcb2a4c5…   what every I1 discovery map carries
+#:
+#: For the four `results/frozen/splits/*.json` splits the two coincide,
+#: because those files record their own canonical digest, which is why this
+#: only surfaces here. Both are accepted; `tests/test_I1_spatial.py` derives
+#: each from the real file so neither can drift.
 DISCOVERY_SPLIT_SHA256 = (
     "0a686340c00846818a857cf4cbf472cbdc035e0a88c20d79483f7d9f463b69b1")
+DISCOVERY_SPLIT_CONTENT_SHA256 = (
+    "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5")
+
+#: The allow-list itself. Two spellings of ONE split — it is not widened by
+#: this: every reporting split's digest is the same under both conventions,
+#: so nothing that was refused before is accepted now.
+DISCOVERY_SPLIT_SHAS = (DISCOVERY_SPLIT_SHA256, DISCOVERY_SPLIT_CONTENT_SHA256)
 
 #: The REPORTING splits, named only so the refusal can say what went wrong.
 #: The guard is the allow-list above; this map never widens it.
@@ -372,7 +391,7 @@ def assert_selection_split(obj, *, what="mask") -> str:
     if isinstance(sha, (bytes, bytearray)):
         sha = sha.decode()
     sha = str(sha or "").strip().lower()
-    if sha == DISCOVERY_SPLIT_SHA256:
+    if sha in DISCOVERY_SPLIT_SHAS:
         return sha
     named = REPORTING_SPLIT_SHA256.get(sha)
     if named is not None:
@@ -384,9 +403,10 @@ def assert_selection_split(obj, *, what="mask") -> str:
             f"(TASK A §2, LOCKED_ANALYSIS §11).")
     raise PrevalenceError(
         f"refusing to build a {what} from split sha {sha[:16] or '<empty>'}… "
-        f"— it is not the discovery split "
-        f"({DISCOVERY_SPLIT_SHA256[:16]}…). Masks are built from discovery "
-        f"data and from nothing else.")
+        f"— it is not the discovery split, whose file digest is "
+        f"{DISCOVERY_SPLIT_SHA256[:16]}… and whose content digest is "
+        f"{DISCOVERY_SPLIT_CONTENT_SHA256[:16]}…. Masks are built from "
+        f"discovery data and from nothing else.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -425,6 +445,33 @@ def ring_composition(mask, side: int) -> dict:
     return dict(sorted(out.items()))
 
 
+def expected_overlap(mask, side: int) -> float:
+    """E[|control ∩ primary|] for a ring-matched control drawn uniformly.
+
+    Ring r contributes `n_r` coordinates to the primary mask and has `N_r`
+    positions in total. A ring-matched control draws `n_r` of those `N_r`
+    without replacement, so each drawn coordinate is in the primary mask
+    with probability `n_r / N_r` and the ring contributes `n_r² / N_r` in
+    expectation. Summing over rings:
+
+        E[overlap] = Σ_r n_r² / N_r
+
+    This is what makes the observed overlap readable. `LOCKED_ANALYSIS` §5
+    requires overlap to be REPORTED rather than designed away, and a count
+    with nothing to compare it against is not a report — 5 of 16 means one
+    thing if chance gives 5.8 and quite another if chance gives 1.2.
+    """
+    side = int(side)
+    counts = ring_composition(mask, side)
+    total = 0.0
+    for ring, n_r in counts.items():
+        N_r = int(ring_indices(side, ring).size)
+        if N_r <= 0:                                  # pragma: no cover
+            raise PrevalenceError(f"ring {ring} is empty on a {side}x{side} grid")
+        total += (n_r * n_r) / N_r
+    return float(total)
+
+
 def mask_coordinates(mask, side: int) -> list:
     """`[{index, row, col, ring}]` — the form `configs/frozen/I4_masks.json`
     records, so a reader never has to divide by the grid width themselves."""
@@ -446,17 +493,23 @@ def ring_matched_controls(mask, side: int, *, n: int = N_CONTROL_MASKS,
     ring by ring in ascending ring order, so the same call always returns the
     same masks.
 
-    OVERLAP WITH THE PRIMARY MASK — the one open question in this function.
+    OVERLAP WITH THE PRIMARY MASK — SETTLED 2026-09-17.
     `docs/LOCKED_ANALYSIS.md` §5 says: "random masks MAY overlap the
     high-prevalence mask. The overlap is REPORTED; draws are never rejected
-    to amplify contrast." `docs/TASK_A_I1_I6.md` §6 says the controls are
-    "drawn from positions outside the primary mask". Those are different
-    rules and they cannot both be followed. The LOCKED document is the
-    signed one, so its rule is the DEFAULT here (`exclude_primary=False`)
-    and the overlap is returned beside every control; the task file's rule
-    is available as `exclude_primary=True` and nothing calls it. D5 is
-    closed in Phase C — the human decides before then, and the choice is
-    recorded in `configs/frozen/I4_masks.json`.
+    to amplify contrast." `docs/TASK_A_I1_I6.md` §6 originally said the
+    controls were "drawn from positions outside the primary mask". Those
+    rules cannot both hold, and excluding the primary mask would enlarge the
+    primary-vs-control contrast by construction — the thing §5 forbids.
+
+    Mahfuzur Rahman Chowdhury ruled that the SIGNED document stands and
+    amended the task file. `exclude_primary=False` is therefore not merely a
+    default but the rule; the parameter survives only so the counterfactual
+    stays exercised by a test, and no artifact is built from it.
+
+    The overlap is not left to be eyeballed: each control reports its
+    observed overlap, and `expected_overlap` gives the analytic expectation
+    Σ_r n_r²/N_r, so a reader can see whether a control overlapped more than
+    chance rather than guessing.
 
     Returns `[(control_mask, {"seed": s, "overlap": m}), ...]`.
     """
@@ -725,11 +778,13 @@ def eta2_positional(pm) -> float:
 
 __all__ = [
     "PrevalenceMap", "PrevalenceError", "MISSING", "MAP_BASES",
-    "DISCOVERY_SPLIT_SHA256", "REPORTING_SPLIT_SHA256", "PRIMARY_MASK_K",
+    "DISCOVERY_SPLIT_SHA256", "DISCOVERY_SPLIT_CONTENT_SHA256",
+    "DISCOVERY_SPLIT_SHAS", "REPORTING_SPLIT_SHA256", "PRIMARY_MASK_K",
     "N_CONTROL_MASKS", "CONTROL_SEEDS", "ADDR_SCHEMA",
     "grid_side_of", "from_counts", "from_i2_maps_npz", "i2_map_keys",
     "cell_mean_map", "assert_selection_split", "topk_mask",
     "ring_composition", "mask_coordinates", "ring_matched_controls",
+    "expected_overlap",
     "from_addr_json", "to_addr_json", "dumps_addr_json",
     "verify_addr_document", "addr_basis_key",
     "ring_profile", "ring_share", "concentration_with_reference",

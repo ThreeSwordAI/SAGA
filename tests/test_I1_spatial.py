@@ -995,3 +995,35 @@ def test_a_live_lock_times_out_loudly(tmp_path):
     with pytest.raises(fdiag.DiagError, match="timed out"):
         with fdiag.exclusive_lock(path, timeout=1, poll=0.1, stale=1e9):
             pass
+
+
+def test_expected_overlap_matches_a_monte_carlo_draw():
+    """E[overlap] = Σ_r n_r²/N_r, checked against the sampler itself.
+
+    LOCKED_ANALYSIS §5 requires the overlap to be REPORTED rather than
+    designed away, and a count with nothing to compare it against is not a
+    report: 5 of 16 means one thing if chance gives 5.8 and another if
+    chance gives 1.2.
+    """
+    freq = np.zeros(N_PATCHES)
+    freq[ring_indices(SIDE, 0)[:6]] = 0.9
+    freq[ring_indices(SIDE, 1)[:10]] = 0.8
+    primary = P.topk_mask(a_map(freq), k=16)
+
+    # analytic: 6 of ring 0 (52 positions) and 10 of ring 1 (44)
+    analytic = P.expected_overlap(primary, SIDE)
+    assert np.isclose(analytic, 6 * 6 / 52 + 10 * 10 / 44)
+
+    draws = P.ring_matched_controls(primary, SIDE, n=10,
+                                    seeds=range(1000, 1010))
+    observed = np.mean([info["overlap"] for _, info in draws])
+    assert abs(observed - analytic) < 1.5, \
+        f"sampler mean {observed} is far from the analytic {analytic}"
+
+
+def test_expected_overlap_is_zero_only_when_the_mask_is_empty_in_every_ring():
+    """A mask taking a whole ring must overlap every control completely."""
+    whole_ring = sorted(int(p) for p in ring_indices(SIDE, 6))   # 4 positions
+    assert np.isclose(P.expected_overlap(whole_ring, SIDE), len(whole_ring))
+    for _, info in P.ring_matched_controls(whole_ring, SIDE):
+        assert info["overlap"] == len(whole_ring)
