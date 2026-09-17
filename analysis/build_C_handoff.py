@@ -83,7 +83,12 @@ def git_sha():
 def section_status(lines):
     text = LOCKED.read_text(encoding="utf-8")
     d9, d10 = "D9" in text, "D10" in text
-    frozen = "STATUS: **FROZEN**" in text
+    # emphasis-insensitive: the header may be written `STATUS: FROZEN`
+    # or `STATUS: **FROZEN**`, and `**` is markdown, not state.
+    # (2026-09-17: the freeze used the unemphasised form and this line
+    # reported "Document frozen: NO" for a signed document.)
+    from saga.frozen.masks import says_frozen
+    frozen = says_frozen(text)
     lines += [
         "## 0. The parameter declaration, as it actually stands",
         "",

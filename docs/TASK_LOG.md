@@ -6562,3 +6562,164 @@ every row.
   say "signed before these results were inspected" the moment it is done and
   the document is frozen. Until then it says the truth.
 - Track C is otherwise COMPLETE: I5 and I7, Phases A, A′, B and C.
+
+## 2026-09-17 — TASK B — PHASE C (tables, contrasts, F4, handoff) — **TASK COMPLETE**
+
+Worktree `../SAGA-B`, branch `task/B`, tag `[C]`. No push by me. Both sweeps
+ran on the HPC before the freeze (I3) and after it (I4).
+
+### The answer, in one line each
+
+**I3 — C1 null, C2 null, both layers. Branch `no_arrangement`:** *the frozen
+model does not use its gate arrangement beyond the per‑head mean*, with C2
+carrying no reading of its own because there is no effect to decompose.
+
+**I4 — C3 null in both methods, both layers. Branch `unanticipated`**, and
+that label is doing real work rather than hiding a result. See below.
+
+### I3, fresh pair, nats (layer 7 / layer 8)
+
+| | s1 | s2 |
+|---|---|---|
+| C1 `perm − original` | +0.000023 / −0.000054 | −0.000136 / −0.000349 |
+| C2 `perm − ringperm` | −0.000275 / +0.000026 | −0.000078 / −0.000030 |
+
+Two of those eight intervals exclude zero, in opposite directions and never
+in both members of a pair. The largest |mean ΔNLL| over all 60 conditions on
+either fresh checkpoint is **0.000695 nats** (`dihedral4_L7`) against a
+native NLL of order 1; no Δtop‑1 exceeds 0.09 points.
+
+**The null survives the obvious objection.** It is not "we perturbed too
+gently":
+
+- the permutation families inject MORE energy than the mean collapse —
+  `perm` 2.21, `ringperm` 2.16 against `mean` 1.55 — and move the loss less;
+- `T_I3c` holds energy fixed: in the top decile (~3 units injected) every
+  family sits within ±5e‑4 nats with intervals straddling zero;
+- `mean_half` injects exactly half of `mean`'s energy (0.7773 vs 1.5546), so
+  the α = 0.5 interpolation is linear as specified.
+
+**The control that had to hold, on real checkpoints:** `dihedral0` is
+bit‑identical to `original` on all 16 rows — max |ΔNLL| and max |Δlogit|
+both exactly 0.000, `delta_update_norm` exactly 0.
+
+**`T_I3d` is not zero, and says so.** The mean collapse moves
+`count_fixed_cal` by +0.016 to +0.025 on a base of 11–13 and `eff_rank` by
+−0.005 to −0.019 on a base of 96–101, several with intervals excluding zero
+because n = 10,000 resolves tiny effects. Distinguishable and negligible are
+different words; the table gives both numbers and neither adjective.
+
+**S2 is the one signed secondary.** `perm − dihedral` is negative in both
+fresh checkpoints at layer 7 (−0.000368, −0.000177): permutations cost
+slightly less than symmetries. No branch, per §9.
+
+### I4, deciding checkpoints
+
+| layer | sign | intervals excluding zero | θ(primary) inside the control band |
+|---|---|---|---|
+| 7 | mixed | 0 of 4 | 3 of 4 |
+| 8 | **consistent (negative)** | 2 of 4 | **0 of 4** |
+
+C3 at layer 8: −0.000078, −0.000115, −0.000111, −0.000051 nats. Every
+deciding checkpoint has θ(primary) just BELOW its control band — by 3e‑6 to
+7.3e‑5 — so attenuating the high‑prevalence coordinates lowers NLL slightly
+more than the ring‑matched controls do, consistently, in both baseline and
+SAGA.
+
+**Why the branch is `unanticipated` and not §6's third.** §6's third branch
+reads "outside the band with the same sign in all methods → coordinate
+specificity is a property of the data position". Layer 8 is structurally
+that. But LOCKED §10 says an effect is claimed only when the direction is
+consistent AND the interval excludes zero in BOTH members of each fresh
+pair, and only 2 of 4 do. `interpret_i4` therefore refuses to attach a
+mechanism sentence to a null, and returns the unanticipated slot with both
+intervals instead. **This is the rule binding against a result that would
+have been convenient to name**, which is what it was written for. The
+numbers are in `T_I4b` and the pattern is stated above; nobody has to take
+the label's word for it.
+
+**The energy confound is measured and is nothing.** Largest
+`energy_rel_error` over all 6.5 million rows: **2.489e‑07** against a 0.01
+tolerance. Matched and unmatched controls give C3 values differing by
+1e‑6 to 4e‑6 nats — so at ε = 0.10 on 16 coordinates the energy difference
+between a fixed‑ε control and a per‑image matched one is immaterial, and
+whatever C3 says cannot be an energy artefact. Zero‑norm images: 0 of
+100,000.
+
+**Cross‑method (`T_I4c`)**: baseline − SAGA paired on the provenance tag is
+−0.000303 to −0.000019 at layer 7 and −0.000150 to +0.000084 at layer 8 —
+small and sign‑inconsistent at layer 8. No cross‑method effect. Registers
+are n = 2 and labelled on every row.
+
+### Verification done before any table was built
+
+- 10 of 10 I4 runs: 650,000 record rows, 65 conditions, 30,000 diag rows,
+  the evaluation split sha, the D5 masks sha, `state_restored = true`.
+- 8 of 8 I3 runs likewise, with the permutations sha.
+- **The reproduction check under the standing rule** — per‑condition MEANS,
+  never contrasts, conditions fixed in `tools/verify_primary_pack.py` rather
+  than chosen at the prompt. I3: 9 comparisons, largest |diff| 1.9e‑11. I4:
+  6 comparisons, largest |diff| 2.6e‑11. Tolerance 1e‑6. Both packs
+  reproduce their parquet and no contrast was computed to find that out.
+
+### Deliverables
+
+| | |
+|---|---|
+| `T_I3a–d` | 480 / 640 / 558 / 40 rows |
+| `T_I4a–d` | built on the cluster, where the parquet lives |
+| `figures_data/frozen/I3_primary.npz` | 30.1 MiB, 8 × 60 × 10,000 |
+| `figures_data/frozen/I4_primary.npz` | 46.5 MiB, 10 × 64 × 10,000 |
+| `figures_data/frozen/F4_interventions.npz` | 37 kB, read from the tables |
+| `docs/B_HANDOFF.md` | 110 lines, generated |
+
+`build_B_handoff.py` refuses to render while LOCKED is unfrozen, and refuses
+to render without the §4 recorded deviation, which it extracts from the task
+file rather than restating.
+
+**Three bugs in my own generator, found by reading its output rather than
+trusting it.** `decides` is written by `fmt()` as `1`/`0`, not `True`/`False`,
+so the first render dropped EVERY deciding checkpoint and printed "0
+deciding checkpoint(s)" under correct tables. `energy_rel_error` at 2.5e‑07
+formatted to six decimals read as `0.000000`, i.e. "not measured". And the
+per‑checkpoint rows carried no layer, so the two layers read as duplicates
+and a pooled sign summary hid that layer 8 is uniformly negative. All three
+fixed; section 1 is now per layer.
+
+### What Track B does not settle
+
+- Frozen‑model edits show what the trained model USES, not what a
+  differently trained model would achieve. I3 never retrains; the scalar‑gate
+  question is Track T.
+- I4's masks come from one cell (`vit_small|mixup`), and **both primary masks
+  are the same 16 coordinates** (ρ = 0.9985 between the two cell mean maps),
+  so I4's two sites compare DEPTH with the address held fixed, not two
+  addresses.
+- Registers are n = 2.
+- A null is a result. Neither I3 nor I4 licenses a mechanism claim, and
+  neither is re‑framed into one.
+
+### A cross-track format mismatch the freeze exposed
+
+`analysis/build_C_handoff.py` tested for `STATUS: **FROZEN**`; this freeze
+wrote `STATUS: FROZEN`, and `saga/frozen/masks.py` tested for that. Those two
+strings are MUTUALLY EXCLUSIVE — the asterisks sit between the colon and the
+word — so whichever style the human used, one of the two modules was going to
+be wrong about a signed document. Track C's handoff duly reported
+"Document frozen: NO" for a frozen document.
+
+The document is markdown and `**` is presentation, so detection is now
+emphasis-insensitive (`saga.frozen.masks.says_frozen`, one regex) in all
+three places that check it: this module, Track C's generator and Track C's
+test. `docs/C_HANDOFF.md` regenerated; it now reads "D9 and D10 are in
+docs/LOCKED_ANALYSIS.md and the document is FROZEN. The parameters below were
+signed before these results were inspected."
+
+Touching Track C's generator and test is outside this track. I did it because
+the mismatch was created by this track's freeze and left their handoff
+stating the opposite of the truth; the change is one line in each and
+weakens no assertion.
+
+### Tests
+
+`pytest -q`: **1243 passed, 30 skipped.**
