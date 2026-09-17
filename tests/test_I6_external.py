@@ -391,12 +391,18 @@ def test_the_download_tool_writes_a_sha_without_touching_anything_else(
     assert "Supervised ImageNet" in updated, "the prediction must survive"
     assert updated.count("#") == original.count("#"), "comments were lost"
 
-    # and it lands on the RIGHT model
+    # and it lands on the RIGHT model, leaving every other one untouched —
+    # asserted against the registry's ACTUAL prior state, not against
+    # "PENDING", which stops being true once the download tool has run
     import yaml
-    doc = yaml.safe_load(updated)
-    by_id = {m["model_id"]: m for m in doc["models"]}
-    assert by_id["vit_small_patch14_reg4_dinov2"]["weight_sha256"] == sha
-    assert by_id["deit_small_patch16_224"]["weight_sha256"] == "PENDING"
+    before = {m["model_id"]: m["weight_sha256"]
+              for m in yaml.safe_load(original)["models"]}
+    after = {m["model_id"]: m["weight_sha256"]
+             for m in yaml.safe_load(updated)["models"]}
+    assert after["vit_small_patch14_reg4_dinov2"] == sha
+    assert {k: v for k, v in after.items()
+            if k != "vit_small_patch14_reg4_dinov2"} ==            {k: v for k, v in before.items()
+            if k != "vit_small_patch14_reg4_dinov2"}
 
 
 def test_the_cache_is_pointed_at_woody_BEFORE_the_heavy_imports():
@@ -674,3 +680,82 @@ def test_set_cache_env_points_at_the_registry_path(registry, tmp_path,
     import os
     assert os.environ["HF_HOME"] == root
     assert os.environ["TORCH_HOME"] == root
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 9. The generated handoff
+# ─────────────────────────────────────────────────────────────────────────────
+
+HANDOFF = REPO / "docs" / "A_HANDOFF.md"
+I6_TABLE = REPO / "results" / "frozen" / "I6_external" / "tables" / \
+    "T_I6a_external.csv"
+
+
+@pytest.mark.skipif(not I6_TABLE.exists(), reason="I6 results not in checkout")
+def test_the_handoff_is_byte_identical_on_a_rebuild(tmp_path):
+    from analysis.build_A_handoff import build
+
+    out = {}
+    for i in (1, 2):
+        p = tmp_path / f"h{i}.md"
+        build(out=p, git_sha_value="c" * 40)
+        out[i] = p.read_bytes()
+    assert out[1] == out[2]
+
+
+@pytest.mark.skipif(not HANDOFF.exists(), reason="handoff not built")
+def test_the_handoff_carries_the_prediction_and_names_every_miss(registry):
+    """The prediction is COPIED from the registry, and a model the
+    prediction failed for is stated rather than buried."""
+    import csv
+
+    text = HANDOFF.read_text(encoding="utf-8")
+    # every sentence of the registered prediction survives into the document
+    for sentence in registry["prediction"].split(". "):
+        s = sentence.strip().rstrip(".")
+        if len(s) > 20:
+            assert s in text, f"the handoff dropped: {s[:60]}"
+
+    if not I6_TABLE.exists():
+        return
+    rows = [r for r in csv.DictReader(open(I6_TABLE, encoding="utf-8"))
+            if r["basis"] == "fixed_cal"]
+    misses = sorted({r["model_id"] for r in rows
+                     if r["prediction_outcome"] == "not met"})
+    for m in misses:
+        assert m in text, f"the handoff does not name the miss {m}"
+    if misses:
+        assert "not met" in text
+
+
+@pytest.mark.skipif(not I6_TABLE.exists(), reason="I6 results not in checkout")
+def test_every_registered_model_has_a_row_and_an_outcome():
+    import csv
+
+    registry = ext.load_registry(REGISTRY)
+    rows = list(csv.DictReader(open(I6_TABLE, encoding="utf-8")))
+    have = {r["model_id"] for r in rows}
+    assert have == {m["model_id"] for m in registry["models"]}, \
+        "a registered model has no row — it must be ABSENT or complete, " \
+        "never silently dropped"
+    allowed = {"met", "not met", "not applicable", MISSING}
+    for r in rows:
+        assert r["prediction_outcome"] in allowed
+        # the outcome must follow the rule, recomputed here independently
+        assert r["prediction_outcome"] == ext.prediction_outcome(
+            r["group"], has_ring_1_peak=r["ring_1_peak"] == "1",
+            gini_excess=float(r["gini_excess"]))
+
+
+@pytest.mark.skipif(not I6_TABLE.exists(), reason="I6 results not in checkout")
+def test_the_resolution_deviation_is_recorded_for_every_patch14_model():
+    """DINOv2 is natively 518 and is run at 224. A row that did not say so
+    would read as a result about DINOv2 as published."""
+    import csv
+
+    rows = list(csv.DictReader(open(I6_TABLE, encoding="utf-8")))
+    for r in rows:
+        expected = "1" if int(r["patch_size"]) == 14 else "0"
+        assert r["resolution_deviation"] == expected, \
+            f"{r['model_id']}: resolution_deviation={r['resolution_deviation']}"
+        assert int(r["grid_side"]) == (16 if int(r["patch_size"]) == 14 else 14)
