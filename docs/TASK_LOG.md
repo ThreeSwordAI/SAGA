@@ -5227,5 +5227,5 @@ which is exactly why the original bug escaped).
 
 ### Pending
 
-Five array tasks: `--array=0` on the I1 discovery split, `--array=4,5,8` on
-I6. `--skip-if-done` leaves the 43 that landed untouched.
+FOUR array tasks — 47 submitted, 43 landed: `--array=0` on the I1 discovery
+split and `--array=4,5,8` on I6. `--skip-if-done` leaves the 43 that landed untouched.
