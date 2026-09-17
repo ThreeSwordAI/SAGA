@@ -48,7 +48,16 @@
 
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/segmentation/scripts/env_alex.sh
 source /home/hpc/iwi5/iwi5359h/my_repos/SAGA/segmentation/scripts/stage_ade20k.sh
-set -u   # after env sourcing: unset vars (e.g. no SLURM context) fail loudly
+# AFTER the env sourcing: unset vars (e.g. no SLURM context) then fail loudly,
+# but env_alex.sh sources /etc/profile, whose site scripts dereference unset
+# variables and would abort this script under `set -u` before one line of the
+# body ran (docs/HPC_WORKFLOW.md, TASK-10 failure #2).
+#
+# The comment is on its OWN line and `set -u` is bare, so that
+# tests/test_task10_ttr.py::test_set_u_never_precedes_the_env_sourcing CHECKS
+# this file instead of skipping it — its matcher requires the line to strip to
+# exactly `set -u`, and a guard that skips is not a guard.
+set -u
 cd $CODE_ROOT
 
 PY=${SAGA_PY:-/home/vault/iwi5/iwi5359h/envs/saga/bin/python}
