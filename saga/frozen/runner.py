@@ -35,6 +35,8 @@ import torch
 import torch.nn.functional as F
 
 from saga.frozen import records as rec
+from saga.frozen.attention import \
+    check_attention_block as _c_check_attention_block        # TASK C / I7
 from saga.frozen.features import \
     check_readout_block as _c_check_readout_block            # TASK C / I5
 from saga.frozen.edits import (TERMINAL_GATE_VALUES, EditError, gate_edit,
@@ -259,6 +261,7 @@ def load_conditions(conditions_yaml, *, masks_path=None, locked_path=None):
                    locked_path=locked_path)          # TASK B / I4 hook
     _check_energy_match(conditions_yaml, doc)        # TASK B / I4 hook
     _c_check_readout_block(conditions_yaml, doc)      # TASK C / I5 hook
+    _c_check_attention_block(conditions_yaml, doc)    # TASK C / I7 hook
     return doc
 
 

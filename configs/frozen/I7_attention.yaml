@@ -1,0 +1,79 @@
+# configs/frozen/I7_attention.yaml — TASK C / I7's capture, and the only place
+# it is defined
+# =============================================================================
+# This project measures NORM outliers. The term the literature attaches to
+# such tokens is a claim about INCOMING ATTENTION, and that claim has not been
+# measured at the positions this paper reports. I7 measures it, against a
+# wording rule declared in advance (D10, analysis/i7_wording.py), so the term
+# is earned or dropped by a number rather than by habit. That module is the
+# only file in this repository allowed to spell the term.
+#
+# Nothing below is selectable from the command line. `tools/frozen_I7_attn.py`
+# takes WHICH run, WHICH split, WHERE the data is and how many images — never
+# a block, a stage or an alignment. saga/frozen/runner.py::load_conditions
+# REFUSES a block that is not declared here and not in D10 (the hook calls
+# saga/frozen/attention.py::check_attention_block).
+#
+# I7 IS A SECONDARY ENDPOINT UNDER D7, like I5. The three primary contrasts of
+# the paper are C1-C3 in Track B. The value-norm ratio and the register-token
+# mass are EXPLORATORY and are labelled so on every row that reports them.
+
+work_package: I7_attention
+
+# The capture this file declares. `check_attention_block` accepts exactly one
+# value, so a second capture cannot appear without a new declared name.
+capture: attention
+
+# The DECLARED reporting stage carried in the npz provenance. `s11_out` is D1
+# (I2 handoff §0) and is also the stage `blocks[11]` is aligned against.
+stage: s11_out
+
+# fp32: a softmax comparison in bf16 would be dominated by the cast.
+precision: fp32
+
+# ── The two blocks, and what each is aligned against (§5, D10) ───────────────
+# THE OFF-BY-ONE THAT WOULD INVERT THE RESULT. Attention inside blocks[l] is
+# computed from that block's INPUT tokens, so it is compared with the
+# exceedance of THOSE tokens — not of the block's own output:
+#
+#   blocks[10]  <->  in_b10   (= the output of blocks[9])
+#   blocks[11]  <->  s11_out  (= the output of blocks[10])
+#
+# `alignment` is written out rather than left implicit so that the committed
+# file states it; saga/frozen/attention.py holds the same mapping and REFUSES
+# a document that declares a different one, so the two cannot drift apart.
+blocks: [10, 11]
+alignment:
+  10: in_b10
+  11: s11_out
+
+# ── Exceedance bases ─────────────────────────────────────────────────────────
+# MAD is PRIMARY and threshold-free — the paper's own per-image rule, which
+# applies to every checkpoint including ones no threshold was calibrated for.
+# I2's tau_cal at s11_out is SECONDARY and is defined per (arch,
+# recipe_actual) cell; it is read from the file below, for the split being
+# evaluated, and is the literal MISSING for a cell that has none.
+exceedance_primary: mad
+thresholds_cal: results/frozen/I2_terminal/{split_name}/thresholds_cal.json
+
+# sub1k is drawn FROM `evaluation`, so the evaluation-split tau_cal is the one
+# that applies to it. Named here because the tau file is per split and using
+# a calibration-split tau on sub1k would be an undeclared threshold with the
+# same key and a different meaning.
+thresholds_cal_split: evaluation
+
+# Image-level bootstrap (LOCKED_ANALYSIS §8: 10,000 resamples; D6 seed 0).
+# The wording rule's CI is this bootstrap.
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# One condition. I7 measures the model as trained; it edits nothing. The
+# terminal-gate bypass belongs to I2 and I5, and a gate edit belongs to I3 —
+# an attention measurement under an edit would be a different experiment and
+# is not declared here.
+conditions:
+  - id: native
+    edit_type: native
+    applies_to: [baseline, registers, saga]
+    stages: [in_b10, s11_out]
