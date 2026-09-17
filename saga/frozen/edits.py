@@ -297,18 +297,50 @@ class _MapGate(nn.Module):
                              persistent=False)
 
     def set_current_grid_size(self, grid_size):
-        """No-op: the map is already resolved for the grid it was built on.
-        Present so SAGAViT._set_gate_grid can treat every gate alike."""
+        """No-op: a map that can be applied at another grid is resolved at
+        FORWARD time by `_at_patch_count`, and one that cannot is refused
+        there. Present so SAGAViT._set_gate_grid can treat every gate alike."""
         return
+
+    @staticmethod
+    def _at_patch_count(g: torch.Tensor, H: int, n_patches: int):
+        """`g` at a different patch count, or a refusal (TASK C / I5b).
+
+        A map that is CONSTANT ALONG THE PATCH AXIS carries the same
+        multiplier at every position, so applying it at another patch count
+        is EXACT — it is not an interpolation and introduces no error. That
+        is precisely `terminal_gate_override`, which builds its map with
+        `torch.full`, and it is what lets the terminal-gate bypass run at
+        dense resolution: I5b evaluates the ADE20K head at 512x512, i.e. 1024
+        patches, while the gate was trained on 14x14 = 196.
+
+        Any map that VARIES over patches is still refused. The native
+        `SpatialGate` interpolates phi to the runtime grid, but interpolating
+        a permuted or ring-shuffled I3/I4 map is a semantic choice about what
+        that edit means at another resolution, and this module will not make
+        it silently on another work package's behalf.
+
+        At the patch count the map was built for, nothing here runs at all,
+        so every number I2 and I5a already produced is untouched.
+        """
+        spatially_constant = (g.ndim == 2 and g.shape[0] == H
+                              and g.shape[1] >= 1
+                              and bool(torch.all(g == g[:, :1])))
+        if spatially_constant:
+            return g[:, :1].expand(H, n_patches)
+        raise EditError(
+            f"frozen gate map {tuple(g.shape)} does not match this forward's "
+            f"[H={H}, n_patches={n_patches}], and it varies over patches so "
+            f"it cannot be carried to another grid without deciding what the "
+            f"edit means there. A CONSTANT map (e.g. terminal_gate_override) "
+            f"is resolution-independent and would have been applied.")
 
     def forward(self, sdpa_out: torch.Tensor) -> torch.Tensor:
         B, H, N, D = sdpa_out.shape
         n_patches = N - self.n_prefix
         g = self._frozen_gate_map
         if g.shape != (H, n_patches):
-            raise EditError(
-                f"frozen gate map {tuple(g.shape)} does not match this "
-                f"forward's [H={H}, n_patches={n_patches}]")
+            g = self._at_patch_count(g, H, n_patches)
         out = sdpa_out.clone()
         out[:, :, self.n_prefix:, :] = (
             sdpa_out[:, :, self.n_prefix:, :]

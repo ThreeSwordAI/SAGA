@@ -6321,3 +6321,96 @@ The freeze. `docs/LOCKED_ANALYSIS.md` is edited by hand from
 `docs/LOCKED_FREEZE_DRAFT.patch`; **both embargo-test replacements go into
 that same commit** so `main` never goes red between the freeze and the test
 flip. `pytest -q` must be green on the frozen sha before the I4 array runs.
+
+---
+
+## 2026-09-17 — TASK C — PHASE B: I5a and I7 LANDED; I5b failed on a resolution assumption
+
+### What landed
+
+**I5a: 19 of 19**, after the device fix. **I7: 10 of 10.** Every run carries
+its completion marker, `run_meta.json`, and records whose `ckpt_sha256` and
+`split_sha256` match the manifest and the frozen split.
+
+The first real check of the §7 control, on a trained ViT-B
+(`legacy_e2_vit_base_nomixdir_baseline`):
+
+| | measured |
+|---|---|
+| `t0_matches_plain_forward` at `s11_out` / `hist` / `s12_post_norm` | **0.0 / 0.0 / 0.0** |
+| `pair_members_identical` | `true` |
+| `state_restored` (hash before == after) | `true`, `be91e05b…` |
+| `n_records_appended` | **48,000** (= 4 transforms x 3 stages x 2 descriptors x 2,000 images) |
+| `skipped_conditions` | `["term_1.00"]` — correct for a baseline |
+
+T0 reproduces the plain evaluation forward BIT-FOR-BIT on a real checkpoint,
+not only on a fake model.
+
+**Size, measured rather than estimated:** 553,279 bytes for a baseline run —
+**0.55 MB**, against the 2-4 MB I predicted and the ~9.3 MB the pre-correction
+schema would have written. The cohort is ~15 MB, not 126 MB.
+
+### I5b failed, and the reason is a real limit rather than a typo
+
+Job `4266272`. It completed the baseline, completed SAGA's `native` pass,
+then died on SAGA's `term_1.00` pass:
+
+    EditError: frozen gate map (12, 196) does not match this forward's
+    [H=12, n_patches=1024]
+
+I5b evaluates the ADE20K head at **512x512 -> 32x32 = 1024 patches**, while
+the SAGA gate was trained on **14x14 = 196**. The native `SpatialGate`
+handles this by INTERPOLATING phi to the runtime grid (`saga/gate.py`, via
+`current_grid_size`); I0's `_MapGate` deliberately does not, and its
+`set_current_grid_size` is a documented no-op — correct for I2 and I5a, which
+both run at 224.
+
+The guard did its job: it refused rather than broadcasting silently. The
+partial output is correctly identifiable as partial — `seg_vitb_saga_s1` has
+`conf_matrix_native.npz` but no `conf_matrix_term_1.00.npz` and **no
+`seg_records.done.json`**, and there is no `I5b_summary.json`, because the
+marker and the summary are written last.
+
+### The fix is not an interpolation
+
+`terminal_gate_override` builds its map with `torch.full` — **a constant**. A
+map that is constant along the patch axis carries the same multiplier at
+every position, so applying it at another patch count is **exact**: no
+interpolation, no error. `_MapGate` now resolves that case at forward time.
+
+Anything that VARIES over patches is still refused. Interpolating a permuted
+or ring-shuffled I3/I4 map is a semantic choice about what that edit means at
+another resolution, and this module will not make it on another work
+package's behalf.
+
+**Nothing changes at 196.** The new branch does not execute at the patch
+count the map was built for, so every number I2 and I5a already produced is
+untouched. Checked by running I0, I2, I3, I4 and I5's suites together: 365
+passed.
+
+Three tests, the third being the one that would actually have caught this:
+the unit case at 196 / 1024 / 4200 patches with the VALUE asserted, the
+refusal for a varying map, and `terminal_gate_override` end-to-end on a real
+SAGA ViT at 320x320. That last one also re-confirms I2's Proposition 2 at a
+resolution the gate was never built for — the CLS logits are bit-identical
+under the bypass while `hist` moves and `s11_out` does not.
+
+### Two bugs, one pattern
+
+Both Phase B failures were mine, and both were invisible to a green CPU suite
+for the same reason: **the tests exercise the code at the classification
+resolution on the CPU, and the cluster runs it at dense resolution on a GPU.**
+The device bug needed a GPU to appear; this one needed a 512-pixel input. The
+tests added for each now cover the axis that was missing, not just the symptom.
+
+`pytest -q`: **1208 passed, 30 skipped.**
+
+### Pending
+
+- I5b resubmission after this fix reaches `main`. It is idempotent:
+  `append_rows` skips the rows already written, so the rerun adds SAGA's
+  `term_1.00` and rewrites nothing.
+- Phase C: tables, the I7 wording verdict, figure data, `docs/C_HANDOFF.md`.
+- D9/D10 are still absent from `docs/LOCKED_ANALYSIS.md`. The I5a and I7
+  evidence has now landed, so the handoff will have to record that the runs
+  preceded the signature.
