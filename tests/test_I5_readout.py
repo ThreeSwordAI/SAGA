@@ -537,6 +537,56 @@ def test_the_writer_is_append_safe_and_idempotent(saga_model, tmp_path):
     assert rec.is_done(out, "corr_records", "a" * 64)
 
 
+def test_every_batch_is_moved_to_the_models_device(saga_model, tmp_path,
+                                                   monkeypatch):
+    """The bug that failed the first I5a array 19 of 19, as a CPU-runnable test.
+
+    On a CPU-only machine the model and the batch are BOTH `cpu`, so a
+    missing `.to(device)` is invisible: every forward succeeds and every
+    assertion passes. That is exactly why the omission survived 54 green
+    tests and only surfaced on an A100 as
+
+        RuntimeError: Input type (torch.FloatTensor) and weight type
+        (torch.cuda.FloatTensor) should be the same
+
+    So this does not test the device — it tests that the MOVE HAPPENS, by
+    counting calls to the `to_device` seam. Before the fix the count is 0.
+    """
+    calls = []
+    real = feat.to_device
+
+    def spy(batch, device):
+        calls.append(device)
+        return real(batch, device)
+
+    monkeypatch.setattr(feat, "to_device", spy)
+
+    items = _fake_split(tmp_path, n=4)
+    conditions = load_conditions(CONDITIONS)
+    feat.run_correspondence_package(
+        row=_fake_row("saga"), conditions=conditions,
+        dataset_for=lambda t: feat.CorrespondencePairDataset(tmp_path, items,
+                                                             t),
+        out_dir=tmp_path / "out",
+        image_ids=[f"img/{i}" for i in range(len(items))],
+        batch_size=2, split_name="fake", split_sha="b" * 64,
+        git_sha="c" * 40, git_dirty=0, model=saga_model)
+
+    assert calls, "no batch was ever moved to the model's device"
+    # 2 conditions x 4 transforms x 2 batches x 2 members, plus the T0 control
+    assert len(calls) >= 2 * 4 * 2 * 2
+    want = feat.model_device(saga_model)
+    assert all(d == want for d in calls), \
+        f"a batch was sent somewhere other than {want}: {set(calls)}"
+
+
+def test_model_device_reads_the_parameters_not_an_argument(saga_model):
+    """`model_device` must report where the weights ARE, so a `device=`
+    argument cannot disagree with them."""
+    assert feat.model_device(saga_model) == next(
+        saga_model.parameters()).device
+
+
 def test_the_model_state_is_restored_after_the_sweep(saga_model, tmp_path):
     items = _fake_split(tmp_path)
     conditions = load_conditions(CONDITIONS)

@@ -74,6 +74,37 @@ D1_STAGE = "s11_out"
 CORR_KEY = ("condition_id", "transform", "stage", "descriptor", "image_id")
 
 
+def model_device(model):
+    """The device the MODEL'S parameters are on.
+
+    Derived from the model rather than threaded through as an argument: the
+    batch has to land wherever the weights already are, and a `device=`
+    parameter can silently disagree with that. It did — the first I5a array
+    (job 4266049, 2026-09-17) failed 19 of 19 with
+
+        RuntimeError: Input type (torch.FloatTensor) and weight type
+        (torch.cuda.FloatTensor) should be the same
+
+    because this loop accepted `device` and never applied it to the images.
+    Reading it off the parameters cannot get out of sync that way.
+    """
+    try:
+        return next(model.parameters()).device
+    except StopIteration:                                # pragma: no cover
+        return torch.device("cpu")
+
+
+def to_device(batch, device):
+    """Move one tensor onto `device`. The seam the tests count calls on.
+
+    A device mismatch cannot be caught by a CPU-only test — both sides are
+    `cpu` and everything passes — so `tests/test_I5_readout.py` asserts
+    instead that this function is CALLED for every member of every batch,
+    which is exactly what was missing.
+    """
+    return batch.to(device) if hasattr(batch, "to") else batch
+
+
 def as_missing_str(value) -> str:
     """A float as a round-tripping string, or the literal MISSING.
 
@@ -254,6 +285,7 @@ def correspondence_rows(model, loader, condition, stages, transform_id, *,
     cursor = 0
     ctx = _edit_context(model, condition)
     with ctx:
+        device = model_device(model)
         for b, batch in enumerate(loader):
             original, transformed, _labels = batch
             if max_images is not None:
@@ -263,6 +295,10 @@ def correspondence_rows(model, loader, condition, stages, transform_id, *,
                     keep = max_images - cursor
                     original, transformed = original[:keep], transformed[:keep]
 
+            # BOTH members go where the weights are. Omitting this is what
+            # failed the first I5a array 19 of 19 (see `model_device`).
+            original = to_device(original, device)
+            transformed = to_device(transformed, device)
             orig_st, trans_st = capture_pair(model, original, transformed,
                                              stages)
             n = original.shape[0]
@@ -440,6 +476,9 @@ def _t0_control(model, dataset_for, condition, batch_size, max_images):
     if max_images is not None:
         original = original[:max_images]
         transformed = transformed[:max_images]
+    device = model_device(model)
+    original = to_device(original, device)
+    transformed = to_device(transformed, device)
     pair_side, _ = capture_pair(model, original, transformed, stages)
     plain = plain_forward_stages(model, original, stages)
     out = {s: float((pair_side[s] - plain[s]).abs().max()) for s in stages}

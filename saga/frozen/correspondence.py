@@ -221,11 +221,17 @@ def split_by_exceedance(result: dict, exc: torch.Tensor) -> dict:
     exact = torch.as_tensor(result["exact_flags"])
     within1 = torch.as_tensor(result["within1_flags"])
 
+    # Every `.numpy()` below is preceded by `.cpu()`, even though `sel`,
+    # `exact` and `within1` are already CPU tensors here: on a GPU run a
+    # missing `.cpu()` raises, and that failure mode cannot be reproduced by
+    # a CPU-only test (it is what cost the first I5a array 19 of 19 in its
+    # sibling form). The call is free on a tensor that is already there.
     out = {}
     for name, mask in (("exc", sel), ("nonexc", ~sel)):
-        out[f"n_shared_{name}"] = mask.sum(dim=1).numpy().astype(np.int64)
+        out[f"n_shared_{name}"] = mask.sum(dim=1).cpu().numpy().astype(
+            np.int64)
         for key, flags in (("n_correct_exact", exact),
                            ("n_correct_1", within1)):
             out[f"{key}_{name}"] = (flags & mask).sum(
-                dim=1).numpy().astype(np.int64)
+                dim=1).cpu().numpy().astype(np.int64)
     return out
