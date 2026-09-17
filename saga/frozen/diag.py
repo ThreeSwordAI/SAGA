@@ -41,6 +41,8 @@ No training, no optimizer, no probe fitting, no selection by any loss.
 import hashlib
 import json
 import os
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -416,6 +418,19 @@ def write_thresholds_cal(path, doc: dict):
 
     The guard is on the RESOLVED path, so a relative path, a symlink or a
     `..` walk that lands on `fixed_thresholds_canon.json` is refused too.
+
+    THE TEMP NAME IS PER-PROCESS. Every task of an array job writes its own
+    run directory alone, but `thresholds_cal.json` is ONE file that all of
+    them may add a key to. With a fixed `<name>.tmp`, two concurrent tasks
+    write the same temp path and the first `os.replace` consumes it, so the
+    second fails with
+
+        FileNotFoundError: ... 'thresholds_cal.json.tmp' -> 'thresholds_cal.json'
+
+    which is how task 0 of the I1 discovery array died (job 4263130,
+    2026-09-17) while the other 18 succeeded. `os.replace` is atomic, so a
+    unique source name is all that is needed for the write itself; use
+    `update_thresholds_cal` for the read-modify-write.
     """
     p = Path(path)
     if p.name == Path(CANON_THRESHOLDS).name or \
@@ -425,14 +440,90 @@ def write_thresholds_cal(path, doc: dict):
             f"calibration and TASK I2 §10 forbids recalibrating it. The "
             f"per-stage thresholds are NEW KEYS in a NEW file.")
     p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".tmp")
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(doc, f, indent=2, sort_keys=True)
-        f.write("\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, p)
+    tmp = p.with_name(f"{p.name}.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(doc, f, indent=2, sort_keys=True)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, p)
+    finally:
+        if tmp.exists():                              # pragma: no cover
+            tmp.unlink()
     return p
+
+
+@contextmanager
+def exclusive_lock(path, *, timeout=900.0, poll=1.0, stale=1800.0):
+    """A crude cross-process lock for a SHARED output file.
+
+    `os.open(O_CREAT | O_EXCL)` is atomic, which is all a lock needs. The
+    holder writes its pid so a human reading the directory can see who has
+    it, and a lock file older than `stale` is broken rather than deadlocking
+    the array — a task killed at the wall clock must not block the next
+    submission.
+
+    Used for `thresholds_cal.json`, which every task of an array job may add
+    a cell (I1/I2) or a model (I6) to. Without it, two tasks can both read
+    the file, both add their own key and the later write silently drops the
+    earlier one's.
+    """
+    lock = Path(f"{path}.lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + float(timeout)
+    fd = None
+    while fd is None:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                age = time.time() - lock.stat().st_mtime
+            except OSError:
+                continue                              # it vanished; retry
+            if age > float(stale):
+                lock.unlink(missing_ok=True)
+                continue
+            if time.time() > deadline:
+                raise DiagError(
+                    f"timed out after {timeout:.0f}s waiting for {lock}. If "
+                    f"no job is running, delete it and resubmit.")
+            time.sleep(float(poll))
+    try:
+        os.write(fd, f"{os.getpid()}\n".encode())
+        os.close(fd)
+        fd = None
+        yield lock
+    finally:
+        if fd is not None:                            # pragma: no cover
+            os.close(fd)
+        lock.unlink(missing_ok=True)
+
+
+def update_thresholds_cal(path, fresh: dict):
+    """Merge `fresh` into the thresholds file at `path`, race-safely.
+
+    Read, merge and write all happen under one lock, so two array tasks
+    calibrating different cells cannot lose each other's work. Returns the
+    merged document.
+    """
+    p = Path(path)
+    with exclusive_lock(p):
+        existing = {}
+        if p.exists():
+            existing = json.loads(p.read_text(encoding="utf-8"))
+        merged = merge_thresholds_cal(existing, fresh)
+        # Derived from `sources`, so it is recomputed HERE rather than by the
+        # caller: a caller that set it before the merge would be describing
+        # the cells it knew about, not the cells the file ended up with.
+        # I6's sources are models and carry no run_id, so the field is left
+        # alone there.
+        runs = sorted({s["run_id"] for s in (merged.get("sources") or {}).values()
+                       if isinstance(s, dict) and s.get("run_id")})
+        if runs:
+            merged["baseline_run_ids"] = runs
+        write_thresholds_cal(p, merged)
+    return merged
 
 
 def merge_thresholds_cal(existing: dict, fresh: dict) -> dict:

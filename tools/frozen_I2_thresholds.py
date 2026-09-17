@@ -249,10 +249,13 @@ def main():
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "tau_cal": tau_cal, "sources": sources,
     }
-    merged = fdiag.merge_thresholds_cal(existing, fresh)
-    merged["baseline_run_ids"] = sorted(
-        s["run_id"] for s in merged["sources"].values() if s)
-    fdiag.write_thresholds_cal(out_path, merged)
+    # Read-merge-write under one lock. Every task of the array runs this tool,
+    # and `thresholds_cal.json` is ONE shared file: two tasks that both read
+    # it, both add a cell and then both write would lose one of the cells, and
+    # with a shared temp name one of them fails outright (job 4263130 task 0,
+    # 2026-09-17). `update_thresholds_cal` re-reads inside the lock, so
+    # `existing` above is only used to decide WHAT to calibrate.
+    merged = fdiag.update_thresholds_cal(out_path, fresh)
     print(f"\nwrote {out_path}: {len(merged['tau_cal'])} cell(s) x "
           f"{len(stages)} stage(s) on {split_name}")
     return 0

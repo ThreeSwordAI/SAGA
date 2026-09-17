@@ -280,18 +280,38 @@ def build_external(model_id: str, registry: dict, *, device="cpu",
     return model, info
 
 
-def external_transform(model):
-    """timm's own validation transform for THIS checkpoint.
+def external_transform(model, *, input_size: int):
+    """timm's own validation transform for THIS checkpoint, at OUR size.
 
-    Read from the model's pretrained config, never from our cohort's
-    `build_val_transform`: the four recipes in this registry disagree about
-    mean, std and crop_pct, and feeding a CLIP checkpoint ImageNet
-    statistics would measure the mismatch rather than the model.
+    Mean, std, interpolation and crop_pct are read from the model's
+    pretrained config, never from our cohort's `build_val_transform`: the
+    four recipes in this registry disagree about all of them, and feeding a
+    CLIP checkpoint ImageNet statistics would measure the mismatch rather
+    than the model.
+
+    `input_size` is OVERRIDDEN, and that is not optional.
+    `resolve_data_config` reports the size the weights were PUBLISHED at, not
+    the size the model was built at: a DINOv2 model created with
+    `img_size=224` still reports `(3, 518, 518)`, because that field comes
+    from the pretrained cfg. Passing it through produced 518-pixel tensors
+    for a 224-pixel model and `patch_embed` refused them:
+
+        AssertionError: Input height (518) doesn't match model (224).
+
+    which is how all three patch-14 DINOv2 models died in Phase B
+    (job 4263132, tasks 4/5/8, 2026-09-17). The size the model was built at
+    is the only size it can be fed.
     """
     import timm
 
-    cfg = timm.data.resolve_data_config({}, model=model)
-    return timm.data.create_transform(**cfg, is_training=False)
+    cfg = dict(timm.data.resolve_data_config({}, model=model))
+    published = cfg.get("input_size")
+    cfg["input_size"] = (3, int(input_size), int(input_size))
+    transform = timm.data.create_transform(**cfg, is_training=False)
+    return transform, {"published_input_size": published,
+                       "transform_input_size": cfg["input_size"],
+                       "crop_pct": float(cfg["crop_pct"]),
+                       "interpolation": str(cfg["interpolation"])}
 
 
 def ext_stage_alias(stage: str) -> str:

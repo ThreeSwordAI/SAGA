@@ -278,6 +278,61 @@ def test_the_analog_stages_capture_patch_rows_only(patch, reg, n_patches):
     assert torch.equal(store["ext_hist"], outs[-1][:, n_prefix:, :])
 
 
+@pytest.mark.parametrize("timm_name,published", [
+    ("vit_small_patch14_dinov2.lvd142m", 518),   # native 518, run at 224
+    ("deit_small_patch16_224.fb_in1k", 224),     # native 224, unchanged
+])
+def test_the_transform_uses_the_size_the_model_was_built_at(timm_name,
+                                                            published):
+    """`resolve_data_config` reports the size the WEIGHTS were published at,
+    not the size the model was BUILT at.
+
+    A DINOv2 model created with `img_size=224` still reports `(3, 518, 518)`,
+    so passing that config straight through fed 518-pixel tensors to a
+    224-pixel model and `patch_embed` refused them:
+
+        AssertionError: Input height (518) doesn't match model (224).
+
+    That killed all three patch-14 models in Phase B (job 4263132, tasks
+    4/5/8). No weights are downloaded here — the geometry and the pretrained
+    cfg are both available with `pretrained=False`.
+    """
+    from PIL import Image
+
+    model = timm.create_model(timm_name, pretrained=False, img_size=224).eval()
+    cfg = timm.data.resolve_data_config({}, model=model)
+    assert cfg["input_size"][-1] == published, \
+        "the premise of this test changed: resolve_data_config now agrees " \
+        "with img_size, and the override may no longer be needed"
+
+    transform, info = ext.external_transform(model, input_size=224)
+    out = transform(Image.fromarray(np.zeros((640, 480, 3), dtype=np.uint8)))
+    assert tuple(out.shape) == (3, 224, 224)
+    assert info["published_input_size"][-1] == published
+    assert info["transform_input_size"] == (3, 224, 224)
+
+    # and the tensor the transform makes actually goes through the model
+    with torch.no_grad():
+        model(out.unsqueeze(0))
+
+
+def test_the_transform_keeps_each_checkpoints_own_normalization():
+    """Only the SIZE is overridden. Mean, std and crop_pct stay timm's own —
+    four of the nine recipes disagree about them."""
+    clip = timm.create_model("vit_base_patch16_clip_224.openai",
+                             pretrained=False, img_size=224).eval()
+    deit = timm.create_model("deit_small_patch16_224.fb_in1k",
+                             pretrained=False, img_size=224).eval()
+    clip_cfg = timm.data.resolve_data_config({}, model=clip)
+    _, clip_info = ext.external_transform(clip, input_size=224)
+    _, deit_info = ext.external_transform(deit, input_size=224)
+    assert clip_info["crop_pct"] == clip_cfg["crop_pct"]
+    # CLIP's normalization is not ImageNet's; the adapter must not flatten that
+    assert tuple(clip_cfg["mean"]) != (0.485, 0.456, 0.406)
+    assert clip_info["interpolation"] == clip_cfg["interpolation"]
+    assert deit_info["published_input_size"] == (3, 224, 224)
+
+
 def test_the_conditions_file_declares_one_native_condition():
     from saga.frozen.runner import load_conditions
     doc = load_conditions(CONDITIONS)

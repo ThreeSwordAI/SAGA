@@ -145,7 +145,13 @@ def main():
               f"run at {info['input_size']} — position embedding interpolated")
 
     from tools.frozen_eval import FrozenSplitDataset, output_digests
-    transform = ext.external_transform(model)
+    # The transform is built at the size the MODEL was built at, not the size
+    # the weights were published at — see external_transform.
+    transform, transform_info = ext.external_transform(
+        model, input_size=int(registry["input_size"]))
+    print(f"                transform: {transform_info['transform_input_size']} "
+          f"(published {transform_info['published_input_size']}), "
+          f"crop_pct={transform_info['crop_pct']}")
 
     # ── thresholds, on CALIBRATION ───────────────────────────────────────────
     cal_doc, cal_items, cal_sha = load_split(args.calibration_split)
@@ -181,16 +187,13 @@ def main():
             calibration_split=cal_name, calibration_sha=cal_sha,
             reporting_split=eval_name, reporting_sha=eval_sha,
             git_sha_value=git_sha())
-        merged = dict(fresh)
-        if existing:
-            # append-safe: a model already calibrated is never recomputed away
-            merged = dict(existing)
-            merged["tau_cal"] = dict(existing.get("tau_cal", {}))
-            merged["sources"] = dict(existing.get("sources", {}))
-            merged["tau_cal"][args.model_id] = tau_cal
-            merged["sources"][args.model_id] = \
-                fresh["sources"][args.model_id]
-        fdiag.write_thresholds_cal(thr_path, merged)
+        # Read-merge-write under one lock. Nine array tasks share this one
+        # file and each adds its own model; without the lock the later write
+        # drops the earlier one's key, and with a shared temp name one task
+        # fails outright (the I1 discovery array hit exactly that on
+        # 2026-09-17). Append-safe: a model already calibrated is never
+        # recomputed away.
+        fdiag.update_thresholds_cal(thr_path, fresh)
         print(f"                wrote {thr_path}")
 
     # ── maps + indicators, on EVALUATION ─────────────────────────────────────
@@ -214,6 +217,7 @@ def main():
         # count_fixed_canon has no definition for an external model
         "tau_canon": MISSING,
         **{f"model_{key}": value for key, value in info.items()},
+        **{f"transform_{key}": value for key, value in transform_info.items()},
     }
 
     written = []

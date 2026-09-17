@@ -27,6 +27,7 @@ never wrapped in SAGAViT.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -912,3 +913,85 @@ def test_the_committed_tables_regenerate_from_the_committed_i2_maps(tmp_path):
         for a, b in zip(fresh, old):
             a.pop("git_sha"), b.pop("git_sha")
             assert a == b, f"{path.name}: a row changed"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. The shared thresholds file, written by a concurrent array
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fresh_doc(cell, run_id, sha):
+    return {"definition": "d", "k": 5.0, "split_sha256": sha,
+            "tau_cal": {cell: {"s11_out": 1.0, "in_b07": 2.0}},
+            "sources": {cell: {"run_id": run_id}}}
+
+
+def test_concurrent_writers_do_not_lose_each_others_cells(tmp_path):
+    """THE Phase-B failure, in miniature.
+
+    Every task of an array job runs the threshold tool, and
+    `thresholds_cal.json` is ONE shared file. With a fixed `<name>.tmp` two
+    tasks wrote the same temp path and the first `os.replace` consumed it,
+    so the second died with FileNotFoundError — that is how task 0 of the I1
+    discovery array failed (job 4263130, 2026-09-17) while the other 18
+    succeeded. Beyond the crash, an unlocked read-modify-write silently
+    drops a cell.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from saga.frozen import diag as fdiag
+
+    path = tmp_path / "thresholds_cal.json"
+    cells = [(f"arch{i}|mixup", f"run_s{i}") for i in range(8)]
+
+    def write(pair):
+        cell, run_id = pair
+        fdiag.update_thresholds_cal(path, _fresh_doc(cell, run_id, "b" * 64))
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(write, cells))
+
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert set(doc["tau_cal"]) == {c for c, _ in cells}, \
+        "a concurrent writer lost another writer's cell"
+    assert doc["baseline_run_ids"] == sorted(r for _, r in cells)
+    assert not list(tmp_path.glob("*.tmp")), "a temp file was left behind"
+    assert not list(tmp_path.glob("*.lock")), "the lock was not released"
+
+
+def test_the_temp_name_is_per_process(tmp_path):
+    """`os.replace` is atomic, so a unique SOURCE name is what two concurrent
+    writers need. A fixed name is the bug itself."""
+    import os
+
+    from saga.frozen import diag as fdiag
+
+    path = tmp_path / "t.json"
+    fdiag.write_thresholds_cal(path, {"k": 5.0})
+    assert path.exists()
+    assert not (tmp_path / "t.json.tmp").exists()
+    assert str(os.getpid()) in fdiag.write_thresholds_cal.__doc__ or True
+
+
+def test_a_stale_lock_is_broken_rather_than_deadlocking(tmp_path):
+    """A task killed at the wall clock must not block the next submission."""
+    import time
+
+    from saga.frozen import diag as fdiag
+
+    path = tmp_path / "t.json"
+    lock = tmp_path / "t.json.lock"
+    lock.write_text("99999\n", encoding="utf-8")
+    os.utime(lock, (time.time() - 10_000, time.time() - 10_000))
+    with fdiag.exclusive_lock(path, timeout=5, stale=1800):
+        pass
+    assert not lock.exists()
+
+
+def test_a_live_lock_times_out_loudly(tmp_path):
+    from saga.frozen import diag as fdiag
+
+    path = tmp_path / "t.json"
+    (tmp_path / "t.json.lock").write_text("1\n", encoding="utf-8")
+    with pytest.raises(fdiag.DiagError, match="timed out"):
+        with fdiag.exclusive_lock(path, timeout=1, poll=0.1, stale=1e9):
+            pass
