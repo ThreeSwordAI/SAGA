@@ -6067,3 +6067,78 @@ the REAL tables can give.
 4. **The human closes D5 in `docs/LOCKED_ANALYSIS.md` §5 with sha256
    `72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e` and
    freezes the document.** That unblocks I4.
+
+---
+
+## 2026-09-17 — TASK A — PHASE C CLOSED (T_I1b landed; every deliverable built)
+
+Worktree `../SAGA-A`, branch `task/A`, rebased onto `main` after Tracks B
+and C merged. `T_I1b_scale_null.csv` came back from the login-node run
+(`c1b4fb0` on `main`), so `docs/A_HANDOFF.md` is regenerated with it and no
+Track A deliverable is outstanding.
+
+### The scale-only null — I1's third question, answered
+
+The claim it tests: SAGA's map is sparser because SAGA shrank the whole norm
+field, so a fixed τ finds fewer positions while the arrangement is untouched.
+Rescale each baseline's norm field by the scalar `c` that reproduces its
+paired SAGA run's mean fixed count, then ask whether the rescaled map now
+looks like SAGA's.
+
+**It does not close the gap.** Over all 16 (pair × stage) rows, rescaling
+moves ρ(baseline, SAGA) by −0.005 to +0.12, and in 5 rows it makes the match
+WORSE. The rescaling required is not marginal — `c` runs down to 0.272, a
+3.7× shrink — and the map correlation barely responds to it.
+
+`rho_baseline_vs_baseline`, two baselines differing only by seed, is the
+ceiling that makes this readable. In the mixup cells the SAGA map sits below
+that ceiling before AND after the count is matched:
+
+| cell | tag | stage | c | ρ(b,S) | ρ(rescaled,S) | seed ceiling |
+|---|---|---|---|---|---|---|
+| `vit_small\|mixup` | legacy-mixupdir | `s11_out` | 0.690 | 0.8738 | 0.8690 | 0.9421 |
+| `vit_small\|mixup` | legacy-nomixdir | `s11_out` | 0.796 | 0.8060 | 0.8063 | 0.9447 |
+| `vit_base\|mixup` | s1 | `s11_out` | 0.272 | 0.7799 | 0.8023 | 0.8441 |
+| `vit_base\|mixup` | legacy-nomixdir | `s11_out` | 0.761 | 0.8374 | 0.8371 | 0.8441 |
+
+`mad_count_invariant` is **1 on all 16 rows**: the MAD count is exactly
+unchanged under `c`, as `median(cv) + k·MAD(cv) = c·(median(v) + k·MAD(v))`
+requires. A difference that survives on the MAD basis is therefore not a
+scale effect at all.
+
+**What this does NOT license.** It rules out ONE alternative explanation —
+a single multiplicative rescaling of the norm field. A rescaling that varied
+by position, or any other confound, is untouched by it. That sentence is in
+`docs/A_HANDOFF.md` §4 and should survive into the paper.
+
+### Track A deliverable status
+
+| ID | state |
+|---|---|
+| A1–A3, A8, A10, A11 | done (Phases A, A′) |
+| A4 | done — thresholds on both splits, evaluation bit-identical to I2's |
+| A5 | done — `T_I1a`–`T_I1h`, reporting in `tables/`, selection in `tables_discovery/` |
+| A6 | **D5 built**, sha256 `72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e` |
+| A7 | done — `F3_spatial.npz`, `F1_prevalence_draft.npz` |
+| A9 | done — `T_I6a_external.csv`, `F3_external.npz` |
+| A12 | done — `docs/A_HANDOFF.md` (250 lines, generated) |
+
+### What remains, and it is not mine
+
+**The human closes D5** in `docs/LOCKED_ANALYSIS.md` §5 with the sha above
+and freezes the document. That is the last open decision in the programme
+and it unblocks I4.
+
+One thing to weigh before signing, from `D5_note.md` §4: both primary masks
+are the SAME 16 coordinates, so I4's two sites differ in DEPTH alone with the
+address held fixed. That is a property of the data (the two cell mean maps
+correlate at ρ = 0.9985) and it may be exactly what is wanted — but if I4 was
+meant to probe two different addresses, this is the moment to say so, not
+after the document is frozen.
+
+### Tests
+
+`tests/test_I1_spatial.py` + `tests/test_I6_external.py`: **146 passed**
+after the rebase onto Tracks B and C. Their `stages.py` additions — I7's
+`in_b10` capture-only stage and I4's `MASK_LAYERS` contract — leave I1's two
+block-input stages and I6's two analog stages untouched.
