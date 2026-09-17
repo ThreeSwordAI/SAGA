@@ -1,0 +1,9 @@
+layer_range_label,layer_range,base_run_id,status,n_neurons_grid,n_points,endpoint_class
+all,"0,12",e2r_vitb_mixup_baseline_s1,MISSING,MISSING,0,descriptive
+all,"0,12",e2r_vits_mixup_baseline_s1,present,0|9|10|11|12|13|14|15,8,descriptive
+all,"0,12",e2r_vits_nomix_baseline_s1,MISSING,MISSING,0,descriptive
+all,"0,12",legacy_vits_baseline,MISSING,MISSING,0,descriptive
+midlayer,"3,12",e2r_vitb_mixup_baseline_s1,present,0|8|10|12|16|24,6,descriptive
+midlayer,"3,12",e2r_vits_mixup_baseline_s1,present,0|8|10|12|16|24,6,descriptive
+midlayer,"3,12",e2r_vits_nomix_baseline_s1,present,0|8|10|12|16|24,6,descriptive
+midlayer,"3,12",legacy_vits_baseline,present,0|8|10|12|16|24,6,descriptive
