@@ -8,10 +8,18 @@ D7 named them in advance and `docs/LOCKED_ANALYSIS.md` fixes the rule that
 decides them. This module is where both live, so that Phase C copies an
 OUTPUT into the notes instead of reading a table and choosing a sentence:
 
-    C1   I3: `mean` collapse - `original`, per-image NLL
-    C2   I3: mean over the 10 `perm` conditions
-             - mean over the 7 NON-IDENTITY `dihedral` conditions
+    C1   I3: `permute` - `original`, per-image NLL          (LOCKED §9)
+    C2   I3: `permute` - `permute_within_ring`               (LOCKED §9)
     C3   I4: theta(primary mask) - mean theta(10 matched controls), eps = 0.10
+
+    S1   I3: `mean` - `original`             pre-declared SECONDARY
+    S2   I3: `permute` - `dihedral` (t != 0) pre-declared SECONDARY
+
+C1 and C2 were the S1/S2 pair through I3 Phase A, following the D7 table of
+`docs/TASK_B_I3_I4.md` §0. On 2026-09-17 the human resolved that table's
+disagreement with LOCKED §9 in favour of the signed document, and §4's
+interpretation guide was amended to match; the superseded guide is kept,
+struck through, in the task file.
 
 The decision rule, applied per contrast (LOCKED_ANALYSIS §10, TASK B §0):
 
@@ -29,7 +37,9 @@ WHY THIS IS A MODULE AND NOT A PARAGRAPH IN A NOTEBOOK
 ------------------------------------------------------
 I3 and I4 are the two experiments in this project that could be tuned into a
 result. The interpretation branches of TASK B §4 and §6 were written before
-any evaluation number existed; `interpret_i3` returns one of them VERBATIM,
+any evaluation number existed, and §4's amendment of 2026-09-17 carries a
+RECORDED DEVIATION saying exactly what had been computed when it was written;
+`interpret_i3` returns one of them VERBATIM,
 and `tests/test_I3_gate_edits.py` asserts the returned string appears
 byte-for-byte in `docs/TASK_B_I3_I4.md`. A branch cannot be softened without
 editing the task file, and editing the task file is visible in the diff.
@@ -72,58 +82,45 @@ VERDICTS = ("positive", "negative", "null", "insufficient")
 # The interpretation branches, VERBATIM from TASK B §4 and §6
 # ─────────────────────────────────────────────────────────────────────────────
 
-#: TASK B §4, the I3 interpretation guide, fixed before any result existed.
-#: These four strings are quoted out of the task file; the first three are the
-#: branches it names and a test pins each one byte-for-byte against
-#: `docs/TASK_B_I3_I4.md`. The fourth is NOT in the task file, and says so: a
-#: pattern the guide did not anticipate is reported as unanticipated rather
-#: than bent into the nearest named branch.
-#: NOTE: the task file writes "per‑head", "within‑ring",
-#: "high‑prevalence" and "cross‑method" with U+2011 NON-BREAKING
-#: HYPHENS, and these literals carry the same characters. A plain "-" here
-#: would make the byte-identity test fail, which is the test doing its job.
-I3_BRANCHES = {
-    "neither": "the frozen model does not use its gate arrangement beyond "
-               "the per‑head mean",
-    "ring_only": "it uses the ring/symmetry structure but not the "
-                 "within‑ring arrangement",
-    "arrangement": "it uses the specific arrangement",
-    "unanticipated": "the C1/C2 pattern is not one of the three branches "
-                     "TASK B §4 names; it is reported with both "
-                     "intervals and no interpretation is supplied",
-}
-
 #: The closing sentence of the §4 guide, carried with every I3 interpretation.
 I3_GUIDE_CLOSE = "Each is reportable; none is a failure."
 
-#: THE ONE BRANCH OF §4 THAT DOES NOT SURVIVE THE §9 RECONCILIATION.
+#: The §4 guide as AMENDED on 2026-09-17 to the signed LOCKED §9 contrasts.
+#: Four patterns, exhaustive over the verdicts `decide` can return for the
+#: primary pair. The first three carry the task file's text VERBATIM (its
+#: non-breaking hyphens included) and a test pins each against
+#: `docs/TASK_B_I3_I4.md`; the fourth is the anomaly slot.
 #:
-#: §4's guide was written against the contrasts the task file's D7 table
-#: named. On 2026-09-17 the human resolved the §4-vs-§9 disagreement in
-#: favour of LOCKED §9, so C2 is now `perm` - `ringperm` rather than
-#: `perm` - `dihedral`. Under the new definition the middle branch reads
-#: BACKWARDS:
-#:
-#:   §4 says   C1 > 0 but C2 ~ 0 -> "uses the ring/symmetry structure but
-#:             not the within-ring arrangement"
-#:   §9's C2   perm - ringperm ~ 0 means an unrestricted permutation costs
-#:             no more than one that stays inside its rings, i.e. the
-#:             within-ring arrangement already accounts for the whole
-#:             effect and ring membership adds NOTHING — the opposite
-#:             reading.
-#:
-#: `interpret_i3` therefore returns this alongside the branch instead of
-#: quietly handing back a sentence that would mean the reverse of what was
-#: measured. The LOCKED freeze draft proposes the §4 amendment that closes
-#: it; until that is signed, a `ring_only` outcome is reported with BOTH
-#: intervals and no interpretation.
-GUIDE_CONFLICT = (
-    "TASK B §4's middle branch was written against the contrast now called "
-    "S2 (`perm` - `dihedral`) and does not transfer to LOCKED §9's C2 "
-    "(`perm` - `ringperm`), under which C2 ~ 0 means ring membership adds "
-    "nothing beyond the within-ring arrangement — the opposite of what §4's "
-    "sentence says. Report C1 and C2 with their intervals and do not use "
-    "the §4 text for this branch until the freeze amends it.")
+#: The SUPERSEDED guide is still in the task file, struck through, because
+#: it was the pre-registered text and the paper trail matters more than a
+#: clean page. It is deliberately NOT reproduced here: this module returns
+#: the guide in force, and holding both would let a caller pick.
+I3_BRANCHES = {
+    "no_arrangement": "the frozen model does not use its gate arrangement "
+                      "beyond the per‑head mean",
+    "ring_profile": "it uses the ring profile, and within‑ring permutation "
+                    "hurts less",
+    "within_ring": "it uses the arrangement within rings, and ring "
+                   "membership adds nothing beyond it",
+    "anomaly": "anomaly. Both intervals are reported and no mechanism "
+               "statement is made.",
+}
+
+#: What C2 means when C1 is null: nothing. With no effect to decompose, the
+#: split between ring profile and within-ring arrangement is not
+#: interpretable, so the branch says so rather than reading a null C2 as
+#: evidence of anything.
+I3_C2_NOT_READ = ("C2 is reported without a reading: with no effect to "
+                  f"decompose, the split between ring profile and within‑ring "
+                  "arrangement is not interpretable.")
+
+#: A deciding checkpoint is absent. Not one of §4's four patterns — it is a
+#: statement about the RECORDS, not about the model — so it gets its own
+#: slot rather than being folded into `anomaly`.
+I3_INSUFFICIENT = ("a deciding checkpoint is absent from these records; both "
+                   "intervals are reported and no mechanism statement is "
+                   "made.")
+
 
 #: TASK B §6, the I4 interpretation guide. Defined here with I3's so that both
 #: branch sets live in one place; `interpret_i4` is completed in I4 Phase A'.
@@ -568,35 +565,45 @@ def decide(per_checkpoint: dict, *, deciding=FRESH_SAGA) -> dict:
 def interpret_i3(c1_verdict: str, c2_verdict: str) -> dict:
     """The TASK B §4 branch a (C1, C2) pair lands in, with its VERBATIM text.
 
-    The three branches the guide names are keyed on "C1 > 0" versus "C1 ~ 0"
-    and likewise for C2. A `negative` verdict is NOT "> 0" and is NOT "~ 0":
-    the guide did not anticipate it, so it lands in `unanticipated` and the
-    text says so rather than borrowing a sentence that would mean the
-    opposite of what was measured.
+    Four patterns, exhaustive over the verdicts `decide` returns for the
+    SIGNED pair (C1 = permute - original, C2 = permute - permute_within_ring):
+
+        C1 ~ 0                 -> no_arrangement  (+ C2 carries no reading)
+        C1 > 0 and C2 > 0      -> ring_profile
+        C1 > 0 and C2 ~ 0      -> within_ring
+        C1 < 0 or  C2 < 0      -> anomaly, intervals only
+
+    plus `insufficient` when a deciding checkpoint is absent, which is a
+    statement about the records rather than about the model.
     """
     for name, v in (("C1", c1_verdict), ("C2", c2_verdict)):
         if v not in VERDICTS:
             raise ContrastError(
                 f"{name} verdict {v!r} is not one of {list(VERDICTS)}")
-    pair = (c1_verdict, c2_verdict)
-    if pair == ("null", "null"):
-        branch = "neither"
-    elif pair == ("positive", "null"):
-        branch = "ring_only"
-    elif pair == ("positive", "positive"):
-        branch = "arrangement"
+    # ORDER MATTERS. A negative contrast is flagged as an anomaly even when
+    # C1 is null, where §4's first pattern would otherwise absorb it into
+    # "C2 reported without a reading". The two are not in conflict — the
+    # anomaly branch is strictly more informative and still makes no
+    # mechanism statement — and flagging a sign nobody predicted is the
+    # safer of the two readings.
+    if "insufficient" in (c1_verdict, c2_verdict):
+        branch, text = "insufficient", I3_INSUFFICIENT
+    elif "negative" in (c1_verdict, c2_verdict):
+        branch, text = "anomaly", I3_BRANCHES["anomaly"]
+    elif c1_verdict == "null":
+        branch, text = "no_arrangement", I3_BRANCHES["no_arrangement"]
+    elif c2_verdict == "positive":
+        branch, text = "ring_profile", I3_BRANCHES["ring_profile"]
     else:
-        branch = "unanticipated"
+        branch, text = "within_ring", I3_BRANCHES["within_ring"]
+
     return {
-        "branch": branch, "text": I3_BRANCHES[branch],
-        "close": I3_GUIDE_CLOSE,
+        "branch": branch, "text": text, "close": I3_GUIDE_CLOSE,
         "c1_verdict": c1_verdict, "c2_verdict": c2_verdict,
-        "anticipated": branch != "unanticipated",
-        "source": "docs/TASK_B_I3_I4.md §4",
-        # The §4 guide was written against the OLD C2 (now `s2`). Under
-        # LOCKED §9's C2 the middle branch reads backwards, so it is FLAGGED
-        # rather than silently re-labelled. See GUIDE_CONFLICT.
-        "guide_conflict": (GUIDE_CONFLICT if branch == "ring_only" else None),
+        # §4: when C1 is null, C2 carries no reading of its own.
+        "c2_note": (I3_C2_NOT_READ if branch == "no_arrangement" else None),
+        "anticipated": branch in I3_BRANCHES,
+        "source": "docs/TASK_B_I3_I4.md §4 (amended 2026-09-17)",
     }
 
 

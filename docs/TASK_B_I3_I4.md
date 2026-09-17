@@ -75,7 +75,40 @@ Total per checkpoint: 1 + 2 × 30 = **61 forwards** of 10,000 images. All permut
 | `T_I3c_energy_strata` | ΔNLL by `delta_update_norm` decile, per condition family (`mean`, `mean_half`, `permute`, `ringperm`, `dihedral`), per checkpoint |
 | `T_I3d_diag_s11` | `s11_out` diagnostics under `original` vs `mean_L7`, `mean_L8`: paired Δ with CI (does removing the arrangement move the exceedance count or cosine one block from the readout?) |
 
-Interpretation guide, fixed now: C1 ≈ 0 and C2 ≈ 0 → the frozen model does not use its gate arrangement beyond the per‑head mean; C1 > 0 but C2 ≈ 0 → it uses the ring/symmetry structure but not the within‑ring arrangement; C1 > 0 and C2 > 0 → it uses the specific arrangement. Each is reportable; none is a failure.
+**Interpretation guide — amended 2026‑09‑17, reconciled to `LOCKED_ANALYSIS.md` §9.**
+
+The contrasts this guide reads are the SIGNED pair, not the pair the D7 table of §0 named: **C1 = `permute` − `original`** and **C2 = `permute` − `permute_within_ring`**. A position permutation preserves each head's gate multiset exactly, so C1 asks whether the arrangement is used at all; both permutation families destroy arrangement and only the unrestricted one crosses rings, so C2 isolates the ring profile from the arrangement inside a ring.
+
+| pattern | reading |
+|---|---|
+| **C1 ≈ 0** | the frozen model does not use its gate arrangement beyond the per‑head mean. C2 is reported without a reading: with no effect to decompose, the split between ring profile and within‑ring arrangement is not interpretable. |
+| **C1 > 0 and C2 > 0** | it uses the ring profile, and within‑ring permutation hurts less. |
+| **C1 > 0 and C2 ≈ 0** | it uses the arrangement within rings, and ring membership adds nothing beyond it. |
+| **C1 < 0 or C2 < 0** | anomaly. Both intervals are reported and no mechanism statement is made. |
+
+Each is reportable; none is a failure.
+
+**`mean` − `original` and `permute` − `dihedral` (7 non‑identity transforms) are pre‑declared SECONDARY contrasts** (`s1`, `s2` in `analysis/i34_contrasts.py`): reported beside the primaries under the same decision rule, with no branch of their own.
+
+> ~~Interpretation guide, fixed now: C1 ≈ 0 and C2 ≈ 0 → the frozen model does not use its gate arrangement beyond the per‑head mean; C1 > 0 but C2 ≈ 0 → it uses the ring/symmetry structure but not the within‑ring arrangement; C1 > 0 and C2 > 0 → it uses the specific arrangement. Each is reportable; none is a failure.~~
+>
+> **Superseded 2026‑09‑17, reconciliation to LOCKED §9.** Written against the D7 pair, where C2 was `permute` − `dihedral`. Under the signed C2 its middle branch reads backwards: `permute` − `permute_within_ring` ≈ 0 means an unrestricted permutation costs no more than one that keeps every coordinate in its ring, i.e. the within‑ring arrangement accounts for the whole effect and ring membership adds nothing — the opposite of "uses the ring/symmetry structure but not the within‑ring arrangement". Kept here because the superseded text was the pre‑registered one and the paper trail matters more than a clean page.
+
+### Recorded deviation — what had been computed when this guide was written
+
+The §4 inversion was identified, and its corrected reading committed, at **`3a030f6` (11:03:27)**, before any contrast had been computed on real records. Between that commit and **`3b0ca2f` (11:14:13)**, C1 and C2 MEANS were computed **at layer 7 only**, on three checkpoints, as the `figures_data/frozen/I3_primary.npz` reproduction check, and appear in the session record:
+
+| checkpoint | C1 | C2 |
+|---|---|---|
+| `e2r_vits_mixup_saga_s1` | +0.00002289 | −0.00027491 |
+| `e2r_vits_mixup_saga_s2` | −0.00013621 | −0.00007828 |
+| `legacy_e2_vit_small_mixupdir_saga` | −0.00034356 | −0.00004071 |
+
+Bootstrap CIs at 50 resamples were computed INTERNALLY by `_summary` and were never printed or inspected. No verdict was computed, no decision rule applied, no secondary contrast evaluated, and layer 8 was not touched.
+
+The four‑pattern mapping above is a completion of a logical correction, not a response to those values — the corrected middle branch predates them. It is nevertheless disclosed as written with them known, because the alternative is an attestation that is not true. A reader can judge it.
+
+**Standing rule, effective 2026‑09‑17:** a reproduction check compares **per‑condition means, never contrasts**, and only for conditions selected by a fixed rule stated in the log BEFORE the check runs. For I4: verify `I4_primary.npz` against the parquet on `native`, `prim_e10_L7` and `ctrl0_e10m_L7`, for the first three run_ids in manifest order, and nothing else, before `analysis/i34_contrasts.py` is invoked.
 
 ## 5. I4 conditions (`configs/frozen/I4_perturbation.yaml`)
 
@@ -149,4 +182,4 @@ Job files read run_ids and checkpoint roots from the manifest via `tools/derive_
 
 ## 11. Log and handoff
 
-Log entries: `TASK B — I3 PHASE A`, `TASK B — I4 PHASE A`, `TASK B — PHASE C`. `docs/B_HANDOFF.md` is generated: the three contrasts with their outcomes copied from `i34_contrasts.py` output, the interpretation branch each landed in (from §4 and §6, verbatim), the energy‑stratified view, the cross‑method row, and what Track B does not settle (frozen‑model edits show what the trained model uses, not what a differently trained model would achieve; I4's masks come from one cell; registers n = 2).
+Log entries: `TASK B — I3 PHASE A`, `TASK B — I4 PHASE A`, `TASK B — PHASE C`. `docs/B_HANDOFF.md` is generated: the three contrasts with their outcomes copied from `i34_contrasts.py` output, the interpretation branch each landed in (from §4 and §6, verbatim), the energy‑stratified view, the cross‑method row, and what Track B does not settle (frozen‑model edits show what the trained model uses, not what a differently trained model would achieve; I4's masks come from one cell; registers n = 2), the **recorded deviation** of §4 verbatim under that heading, and the standing reproduction‑check rule).
