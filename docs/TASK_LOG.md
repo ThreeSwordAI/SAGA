@@ -5561,3 +5561,234 @@ reach `main`.
 - I7 Phase A′ — not started, awaiting "continue with I7".
 - No merge and no push yet: Track C hands nothing to the HPC until D9 and
   D10 are both signed, and the merge happens BEFORE the HPC block, not after.
+
+---
+
+## 2026-09-17 — TASK C — I7 PHASE A (attention capture, the wording rule, the TTR curve, tables, job, tests)
+
+Worktree `../SAGA-C`, branch `task/C`, tag `[I7]`. Ten commits on top of the
+I5 nine. `main` moved THREE times during this sitting (Track A's later work,
+then Track B's I3 Phase B, then Track B's I4 Phase A), so `task/C` was rebased
+onto it three times; the final base is `dcc7012`. No push. Nothing ran on the
+HPC. Phase B not started.
+
+### What is stored per image, and its shape
+
+One `incoming_mass.npz` per run. The key axis is the FULL token axis, because
+the mass landing on each PREFIX token is one of the quantities §5 asks for and
+a register model's four register tokens ARE prefix positions:
+
+| quantity | 1-prefix model (baseline / SAGA) | 5-prefix model (registers) |
+|---|---|---|
+| `in_mass_patchq` | `[N, 2, 197]` | `[N, 2, 201]` |
+| `in_mass_clsq` | `[N, 2, 197]` | `[N, 2, 201]` |
+| `value_norm` | `[N, 2, 197]` | `[N, 2, 201]` |
+| `exceedance_mad` | `[N, 2, 196]` | `[N, 2, 196]` |
+| `exceedance_tau_cal` | `[N, 2, 196]` | `[N, 2, 196]` |
+
+`N` = 1,000 (`sub1k`), the middle axis is the two blocks. The exceedance axis
+is the PATCH axis at 196 for both, because MAD is calibrated on patch norms.
+`n_prefix` is recorded in `meta_json` so a reader slices the prefix and patch
+regions without guessing. **No attention map is stored**; a test asserts no
+array in the npz has 4 or more dimensions.
+
+`in_mass_patchq` is a MEAN over queries, not a sum, so it is comparable across
+models with different token counts — and because each row of the underlying
+map sums to 1, the summary itself sums to 1 over keys, which a test pins.
+
+### The alignment, and the off-by-one it prevents
+
+Attention inside `blocks[l]` is computed from that block's INPUT tokens:
+
+    blocks[10]  <->  in_b10   (= the output of blocks[9])
+    blocks[11]  <->  s11_out  (= the output of blocks[10])
+
+`in_b10` was added to `saga/frozen/stages.py` additively, beside TASK A's
+`in_b07`/`in_b08`; the I0 four are untouched. A test pins `in_b10` against
+`blocks[9]` by comparing TENSORS. The alignment is written out in the YAML AND
+held in `saga/frozen/attention.py`, and the runner REFUSES a document that
+declares a different one — comparing a block's incoming attention with the
+norms of its own OUTPUT would place the effect one block after its cause, and
+would do so silently.
+
+### Discrepancies found, and how each was handled
+
+1. **Fused attention is never disabled in this repository.** §5 says the dump
+   runs "with fused attention disabled ... as `tools/dump_attention.py` does".
+   It does not. That tool uses `saga.attn_extract.capture_attention`, which
+   monkey-patches each attention module's `forward` so the explicit
+   `softmax(q·kᵀ·scale)` map is ALSO computed, while the ORIGINAL fused
+   forward still produces the output — so model outputs are bit-identical with
+   and without capture. There is no `fused_attn` flag to toggle:
+   `saga/vit.py:88` calls `F.scaled_dot_product_attention` unconditionally and
+   `GatedAttention` carries no such attribute; only the timm register models
+   have one. **Reconciliation:** reuse `capture_attention` rather than add a
+   second mechanism, and assert what the task file actually wants guaranteed —
+   that the model afterwards is exactly the model before — three ways: the
+   `state_hash`, every `fused_attn` flag that exists, and that no attention
+   module is left carrying a patched instance `forward`. All three are checked
+   on all three model shapes, and the model's output is asserted bit-identical.
+
+2. **`tools/frozen_manifest_hashes.py` has no `--verify` flag.** §10's HPC
+   block calls it that way; its arguments are `--manifest`, `--out`,
+   `--limit`. The tool is resume-safe by construction (a path already in
+   `ckpt_hashes.json` is kept, not rehashed), so running it with no flags IS
+   the re-check. The Phase B block below uses the correct invocation. The real
+   guard is `runner.verify_checkpoint`, which hashes every checkpoint at load
+   and refuses one that moved.
+
+3. **`scripts/sync_results.sh` does not cover `results/frozen/**`.** Its
+   `git add` list names `results/runs`, `results/detection` and
+   `results/segmentation` only. The Phase B block therefore carries explicit
+   `git add` lines for the I5/I7 outputs, which is the pattern
+   `frozen_I2.sbatch` already echoes at the end of a successful array.
+
+4. **`in_b10` silently widened TASK B's I4 mask contract — a BUG I introduced
+   and fixed.** Adding `in_b10` to `BLOCK_INPUT_STAGES` (the obvious place,
+   beside TASK A's `in_b07`/`in_b08`) broke **15 of Track B's I4 tests**, and
+   broke them QUIETLY: `saga/frozen/masks.py` derives the layers I4 EDITS from
+   that dict —
+
+       MASK_LAYERS = tuple(sorted(BLOCK_INPUT_STAGES.values()))
+
+   — so a capture-only stage added for I7 required a `*_L10` mask family in
+   `configs/frozen/I4_masks.json` that was never drawn, and changed another
+   work package's declared experiment. Caught by running Track B's suite on
+   this branch and again on bare `main` (44 passed there, 9 failed + 6 errors
+   here). `BLOCK_INPUT_STAGES` is now documented as what it is — I4's contract
+   — and `in_b10` lives in `EXTRA_BLOCK_INPUT_STAGES`, with
+   `ALL_BLOCK_INPUT_STAGES` the union that `resolve_stage` and the capture
+   machinery use. A test asserts BOTH halves: `in_b10` resolves and captures,
+   AND `MASK_LAYERS == (7, 8)`. **The general lesson for the remaining tracks:
+   a shared dict may be another track's contract, so adding a key to one is
+   not automatically additive.**
+
+5. **The `sink` wording guard versus historical column names.** §11 says the
+   word appears in code only inside `analysis/i7_wording.py`. The TTR sweep
+   files' own columns are named `sink_reduction_frac`, `sink_fixed_canon` and
+   so on, and a module that READS them must name them. The guard is therefore
+   two-part: the PHRASE "attention sink" appears in no I7 file but the wording
+   module, and every other occurrence of the word must be one of eleven
+   allow-listed historical identifiers. Writing this guard caught the phrase
+   in two of my own docstrings, which are now reworded.
+
+### The TTR operating curve — what exists and what is MISSING
+
+Built from committed files only; **no new TTR runs**. **32 points**, and the
+two layer ranges are NOT a crossed grid — they were swept on different neuron
+grids over different cell sets:
+
+| range | directory | layer_range | n_neurons swept | cells | points |
+|---|---|---|---|---|---|
+| `all` | `results/ttr/` | `[0, 12]` | 0, 9, 10, 11, 12, 13, 14, 15 | **1 of 4** | 8 |
+| `midlayer` | `results/ttr_midlayer/` | `[3, 12]` | 0, 8, 10, 12, 16, 24 | **4 of 4** | 24 |
+
+`MISSING` in the `all` range: `e2r_vitb_mixup_baseline_s1`,
+`e2r_vits_nomix_baseline_s1`, `legacy_vits_baseline`. The `midlayer` range has
+no gaps. The coverage table states presence per range rather than presenting
+the 56 cells of a cross product nobody intended to run.
+
+The gate thresholds are READ from each `validate.json`
+(`min_sink_reduction = 0.5`, `max_top1_drop = 1.0`) and asserted to agree
+across all five files. `results/tables/T_ttr_sweep.csv` turns out to be the
+MIDLAYER aggregate only — the all-layer sweep is not in it — so it is used as
+a CROSS-CHECK, not as the source; the check currently reports **zero
+disagreements**. The four chosen operating points (all `n_neurons = 24` at
+`[3, 12]`) are matched on cell AND neuron count AND layer range, because
+matching on neuron count alone would also mark the all-range point, which is a
+different configuration.
+
+### D10, and the two sentences it can return
+
+`analysis/i7_wording.py` implements the rule verbatim and returns the verdict
+AND the sentence, so the wording cannot be adjusted after seeing the number:
+Phase C runs it ONCE and copies the sentence.
+
+Four conditions, each checked separately so a failure names the cell: every
+required measurement exists; the query group is `patch`; `ratio >= 3`; and the
+bootstrap CI EXCLUDES 3. The CI condition is `ci_lo > 3.0` **strictly** — a CI
+whose lower bound is exactly 3.0 CONTAINS 3 and therefore does not exclude it.
+A test pins that edge, and a missing measurement cannot pass (the fallback is
+the outlier wording, which is the safe direction).
+
+### A correction to my own I5 Phase A schema
+
+Measured while preparing the Phase B block, before handing 19 GPU jobs to the
+queue: `corr_records.parquet` as I first wrote it would have been **9.34 MB
+per SAGA run, ~126 MB over the cohort**. The four near-unique float-as-string
+columns were 9.2 MB of the 9.34. That is the same mistake `.gitignore` already
+records against I3 ("113 MiB of I3 parquet"), and it contradicts §8, which
+says corr_records "is small ... and is committed".
+
+Every accuracy this readout produces is `n_correct / n_shared` for two small
+integers, so the **counts** are now what is stored and the analysis divides.
+Exact rather than a rounded quotient; `n_shared_exc == 0` expresses MISSING
+without a sentinel string; and **1.77 MB per SAGA run, ~24 MB for the cohort**.
+`records.CORR_ACCURACY_COUNTS` declares which count divides which, in one
+place, and `analysis/frozen_I5_analysis.accuracy()` is the one place the
+division happens.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| C7 | `saga/frozen/attention.py`, `configs/frozen/I7_attention.yaml`; `in_b10` in `saga/frozen/stages.py`; one hook line in `saga/frozen/runner.py` |
+| C8 | `analysis/i7_wording.py` |
+| C9 | `analysis/frozen_I7_ttr_curve.py` → `T_I7d_ttr_curve.csv`, `T_I7d_ttr_coverage.csv` |
+| C10 | `analysis/frozen_I7_analysis.py` → `T_I7a`–`T_I7c`; `scripts/jobs/frozen_I7.sbatch` |
+| C12 | `tests/test_I7_attention.py` — 52 tests |
+| — | `tools/frozen_I7_attn.py` (the driver, as I5 has one) |
+
+Track C now has TWO hook lines in `load_conditions`, one per work package, as
+§7 describes — beside Track B's `_resolve_permutations`:
+
+```
+    _resolve_permutations(conditions_yaml, doc)       # TASK B / I3 hook
+    _c_check_readout_block(conditions_yaml, doc)      # TASK C / I5 hook
+    _c_check_attention_block(conditions_yaml, doc)    # TASK C / I7 hook
+```
+
+Each is a no-op for every document that does not declare its key, asserted
+against all five other committed YAMLs.
+
+### Tests
+
+`pytest -q`: **2 failed, 1175 passed, 30 skipped**.
+
+Both failures are **pre-existing and belong to Track A**. Verified by checking
+out `main` in detached HEAD, WITHOUT any Track C code, and running each one
+there:
+
+- `tests/test_I1_spatial.py::test_the_committed_tables_regenerate_from_the_committed_i2_maps`
+  — `ValueError: The truth value of an array with more than one element is
+  ambiguous`. Fails identically on bare `main`.
+- `tests/test_I6_external.py::test_the_download_tool_writes_a_sha_without_touching_anything_else`
+  — asserts `deit_small_patch16_224.weight_sha256 == "PENDING"` while
+  `configs/frozen/I6_models.yaml` already carries the real sha. Fails
+  identically on bare `main`, and was already failing at `e3a2b46` before
+  TASK C started.
+
+Track C touches neither file and adds no failure. Track B's I4 suite, which
+this track did briefly break (discrepancy 4), is back to **44 passed**.
+
+Two smaller repairs made in the same pass:
+
+- `scripts/jobs/frozen_I5b.sbatch` had `set -u   # comment`, and TASK-10's
+  repo-wide guard matches on `line.strip() == "set -u"` — so it SKIPPED the
+  file instead of checking it. The ordering was already correct; the comment
+  moved to its own line so the guard actually guards. All three Track C job
+  files are now checked rather than skipped.
+- The labelling comments I had put on Track B's three hook lines in
+  `runner.py` were reverted: they were cosmetic and turned B's lines into a
+  diff of mine. Track C's footprint in `runner.py` is now **+6/−0** — its own
+  two hook lines and their imports, nothing else.
+
+### Pending
+
+- **D9 AND D10 must be signed into `docs/LOCKED_ANALYSIS.md` before Phase B
+  runs** (task file §9). The document is still `STATUS: DRAFT — NOT YET FROZEN`
+  and D5 is still open. Track C hands nothing to the HPC until both are signed.
+- Phase B: the HPC block is printed in this session's report. The merge and
+  push come BEFORE it, because the HPC runs `main`.
+- Phase C: tables, the wording verdict, the four figure `.npz`, and
+  `docs/C_HANDOFF.md`.
