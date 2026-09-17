@@ -5394,3 +5394,170 @@ contrasts stand without C3.
   `figures_data/frozen/I3_primary.npz` is arguably redundant. I would still
   build it — it is what the bootstrap resamples and it keeps I3 and I4
   symmetric — but the human decides.
+
+---
+
+---
+
+## 2026-09-17 — TASK C — I5 PHASE A (correspondence readout: transforms, matcher, I5b wrapper, tables, jobs, tests)
+
+Worktree `../SAGA-C`, branch `task/C`, tag `[I5]`. Eight commits, `7d7d742`
+through `72384e9`, rebased onto `e9bc995` (the Track B merge, which landed on
+`main` mid-session). No push. Nothing ran on the HPC. I7 not started.
+
+### The three correspondence tables
+
+Derived from the two-crop geometry in `saga/frozen/transforms.py`, never
+tabulated by hand — a hand table would be a second source of truth for the
+thing the whole readout rests on.
+
+| id | transform | shared | bijection | chance (exact) | chance (±1) |
+|---|---|---|---|---|---|
+| `T0` | identity (reference forward) | 196 | yes | 0.005102 | 0.041649 |
+| `T1` | horizontal flip | **196** | yes | 0.005102 | 0.041649 |
+| `T2` | 1-patch translation, 240 → two 224 crops 16 px apart | **182** | yes | 0.005102 | 0.042610 |
+| `T3` | 2-patch translation, 256 → two 224 crops 32 px apart | **168** | yes | 0.005102 | 0.042517 |
+
+196 / 182 / 168 as §3 expects. The 1-tolerance chance is COMPUTED, not the
+9/196 = 0.045918 bound: it is the neighbourhood size averaged over the true
+positions, so it is strictly smaller wherever the shared set touches the
+border. Both values are columns on every readout table.
+
+Each table is asserted to be a bijection, and the matcher scores **1.0000 at
+`acc_exact` and `acc_1` on a synthetic image with unique patches**, for all
+three transforms × both descriptors. The complement matters as much: a
+randomly permuted image scores **< 0.15**, so a matcher that ignored its
+input and returned the answer key could not pass both tests.
+
+### I5b: the condition is MET — the wrapper is written
+
+Decided from the `dense_seg` rows of `results/frozen/I0_manifest/manifest.csv`
+and nothing else:
+
+| run_id | kind | variant | arch | epochs_completed | ckpt_sha256 | status | backbone |
+|---|---|---|---|---|---|---|---|
+| `seg_vitb_baseline_s1` | `last` | baseline | vit_base | **80** | `d3aeca644c10…` | eligible | `e2r_vitb_mixup_baseline_s1` |
+| `seg_vitb_saga_s1` | `last` | saga | vit_base | **80** | `a0833a80d6eb…` | eligible | `e2r_vitb_mixup_saga_s1` |
+| `seg_vitb_registers_s1` | `last` | registers | vit_base | 80 | `5bf8c29554d6…` | eligible | `legacy_e2_vitb_registers_nomixdir` |
+
+Baseline and SAGA are matched at epoch 80, both hashed, both on the SEEDED
+e2r ViT-B mixup backbones → **I5b RUNS**. The registers row is NOT
+backbone-matched (unseeded legacy backbone), so it is excluded unless
+`--include-registers` is passed, and every row it would write carries
+`backbone_matched=0`. `matched_seg_rows()` is that condition in one place;
+`tests/test_I5_readout.py` runs it against the REAL manifest, so the test
+states what I5b's status actually is and fails loudly if the pair ever stops
+being matched.
+
+### Discrepancies found, and how each was handled
+
+1. **The segmentation evaluation entry point is not the one the task file
+   assumes.** §4 says "a thin wrapper around the repository's existing
+   segmentation evaluation", but `segmentation/tools/evaluate.py` is
+   **SUPERSEDED and REFUSES TO RUN** — TASK-09 disabled it because its mIoU
+   ignores `ignore_index=255` (bug B4) and averages per-IMAGE IoU. The
+   evaluation this project actually reports lives in
+   `segmentation/tools/train.py`. The wrapper therefore imports
+   `update_confusion` / `iou_from_confusion` / `summarize_confusion` FROM
+   there. Per-image records are per-image confusion matrices whose SUM is
+   bit-identical to the pooled matrix (integer counts add), and a test
+   asserts that equality against the trainer's own function rather than
+   assuming it. The dataset mIoU is read from the pooled matrix and NEVER
+   from averaging the per-image column — that would be bug B4's sibling. No
+   segmentation training code was modified.
+
+2. **The deliverable table names no I5a driver, but one is needed.**
+   `tools/frozen_eval.py` runs ONE image per forward and records a functional
+   response against a label; I5 runs a PAIR per forward step and has no
+   label-based response at all. `tools/frozen_I5_corr.py` is the driver
+   `frozen_I5a.sbatch` calls, following the structure every other work
+   package with a different loop already uses (`frozen_I1_norms.py`,
+   `frozen_I2_thresholds.py`, `frozen_I6_maps.py`). The conditions contract
+   is unaffected — the YAML is still parsed by
+   `saga.frozen.runner.load_conditions`, the project's one parser.
+
+3. **The per-position MAD mask is not a stored column.** §3 lists "the
+   per-position MAD exceedance flag" on the record. It is computed on the fly
+   from the same forward and REDUCED to the split it exists for
+   (`n_shared_exc` / `acc_exact_exc` / … vs the non-exceedance half) before
+   anything is written. Storing the 196-bit mask on every one of ~36,000 rows
+   per run would add tens of megabytes across 27 runs to a file §8 requires
+   to be COMMITTED. The consequence §3 asks for — "so accuracy can be split
+   into exceedance positions vs others" — is exactly what is recorded.
+
+4. **`records.py` gained two schemas, not just the runner hook.** §7 fixes
+   the runner at one hook line, which is what it got (plus its import).
+   `corr_records` and `seg_records` needed schema entries in
+   `saga/frozen/records.py`, which is the designated home for every record
+   schema in this project (I0 handoff §9). Additive; Track B's
+   `RECORD_UPDATE_COLUMNS` is untouched.
+
+### The two controls (§7), measured rather than asserted
+
+- **`T0` reproduces the plain forward bit-for-bit.** `torch.equal`, not a
+  tolerance, at all three stages; the pair's two members are the same tensor.
+  Every run also writes the MEASURED max |difference| per stage into
+  `run_meta.json` as `t0_matches_plain_forward`, so the control is a number
+  in the output and not an argument in a docstring. On the fake model: **0.0
+  at `s11_out`, `hist` and `s12_post_norm`.**
+- **`term_1.00` cannot change `s11_out`.** Every bypass row carries the
+  measured `max_abs_s11_diff_vs_native` (**`0.0`** on the fake model; `native`
+  rows carry `MISSING`, having nothing to difference against). The test is
+  guarded against vacuity: it also asserts the bypass DOES move `hist` and
+  `s12_post_norm` in the sweep's own records, so a bug that dropped the edit
+  context could not pass.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| C1 | `saga/frozen/transforms.py`, `saga/frozen/features.py`; one hook line in `saga/frozen/runner.py` |
+| C2 | `configs/frozen/I5_readout.yaml` |
+| C3 | `saga/frozen/correspondence.py`; `corr_records` schema in `saga/frozen/records.py` |
+| C4 | `tools/frozen_I5b_seg_eval.py` (**RUNS** — matched weights present) |
+| C5 | `analysis/frozen_I5_analysis.py` → `T_I5a`–`T_I5e`, plus `T_I5f`/`T_I5g` for I5b |
+| C6 | `scripts/jobs/frozen_I5a.sbatch`, `scripts/jobs/frozen_I5b.sbatch` |
+| C12 | `tests/test_I5_readout.py` — 54 tests |
+| — | `tools/frozen_I5_corr.py` (the driver; discrepancy 2) |
+
+The runner hook is ONE line in `load_conditions`:
+`_c_check_readout_block(conditions_yaml, doc)      # TASK C / I5 hook`,
+directly after Track B's `_resolve_permutations(...)`. A test pins that there
+is exactly one call site. The hook is a no-op for every document that
+declares no `readout`, asserted against all four pre-existing YAMLs.
+
+### Merge with Track B
+
+Track B merged into `main` (`e9bc995`) mid-session, so `task/C` was rebased
+onto it. Two conflicts, both resolved by KEEPING EVERY TRACK'S WORK:
+
+- `saga/frozen/runner.py` — B's `_resolve_permutations` hook and C's
+  `_c_check_readout_block` hook, both retained, B's first.
+- `saga/frozen/records.py` — B's `RECORD_UPDATE_COLUMNS` and C's
+  `CORR_COLUMNS`/`CORR_MISSING_COLUMNS`/`SEG_COLUMNS`, all retained, with one
+  merged `SCHEMAS` dict carrying all four stems.
+
+`git diff main` is now purely additive; `runner.py` is +5/-2.
+
+### Tests
+
+`pytest -q`: **1 failed, 1065 passed, 31 skipped**.
+
+The one failure is **pre-existing and belongs to Track A**:
+`tests/test_I6_external.py::test_the_download_tool_writes_a_sha_without_touching_anything_else`
+asserts `deit_small_patch16_224.weight_sha256 == "PENDING"`, but
+`configs/frozen/I6_models.yaml` on `main` already carries the real sha from
+the HPC (commit `4917b11`). It was failing on `main` before TASK C started —
+measured baseline at `e3a2b46`: **1 failed, 937 passed, 30 skipped** — and
+nothing in TASK C touches that file or that test. Track A's `../SAGA-A` log
+records `938 passed` locally, so the fix exists on `task/A` and needs to
+reach `main`.
+
+### Pending
+
+- **D9 must be signed into `docs/LOCKED_ANALYSIS.md` before I5 Phase B runs**
+  (task file §9). The document is still `STATUS: DRAFT — NOT YET FROZEN` and
+  D5 is still open.
+- I7 Phase A′ — not started, awaiting "continue with I7".
+- No merge and no push yet: Track C hands nothing to the HPC until D9 and
+  D10 are both signed, and the merge happens BEFORE the HPC block, not after.
