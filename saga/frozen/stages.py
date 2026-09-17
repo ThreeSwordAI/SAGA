@@ -52,6 +52,21 @@ stages are that input, for those two blocks.
 `in_b08 == blocks[7](x)` on a fake model by comparing TENSORS, so the
 convention cannot drift from this docstring.
 
+A THIRD ONE (TASK C / I7 §5 — added for the attention alignment)
+----------------------------------------------------------------
+    in_b10         the residual stream entering blocks[10]
+                   == output of blocks[9]
+
+Same convention, same capture path, added for one reason: the attention
+INSIDE `blocks[10]` is computed from that block's INPUT tokens, so the
+exceedance it must be compared against is the exceedance of those tokens —
+not of the block's output. I7 pairs `blocks[10]` with `in_b10` and
+`blocks[11]` with `s11_out` (which IS the output of `blocks[10]` on a
+12-block model, i.e. the input to `blocks[11]`). Comparing a block's
+incoming attention with the norms of its own OUTPUT would put the effect one
+block after its cause. `tests/test_I7_attention.py` pins
+`in_b10 == blocks[9](x)` by comparing TENSORS.
+
 THE HISTORICAL STAGE (TASK I0 §2.5 — identified, not assumed)
 -------------------------------------------------------------
 Every historical patch diagnostic in this project was computed on the
@@ -91,10 +106,33 @@ from saga.metrics import infer_num_prefix_tokens
 # shallow. The new names live in BLOCK_INPUT_STAGES and in ALL_STAGES.
 STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
 
-#: The block-input stages (TASK A / I1), as {name: the 0-based index of the
+#: The block-input stages of TASK A / I1, as {name: the 0-based index of the
 #: block whose INPUT this is}. `in_b07` enters blocks[7]; see the module
 #: docstring for both numbering conventions.
+#:
+#: THIS TUPLE IS I4'S CONTRACT, NOT A LIST OF EVERY BLOCK-INPUT STAGE.
+#: `saga/frozen/masks.py` derives the layers I4 EDITS from it
+#: (`MASK_LAYERS = tuple(sorted(BLOCK_INPUT_STAGES.values()))`), so adding a
+#: name here silently requires a new mask family in
+#: `configs/frozen/I4_masks.json` and changes another work package's declared
+#: experiment. A new block-input stage that I4 does not edit goes in
+#: `EXTRA_BLOCK_INPUT_STAGES` below. (Measured: putting `in_b10` here made 15
+#: of Track B's I4 tests fail by demanding `*_L10` masks that were never
+#: drawn.)
 BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8}
+
+#: Block-input stages that exist for CAPTURE ONLY — no work package edits
+#: them, so they are not part of any mask or layer contract.
+#:
+#: `in_b10` (TASK C / I7 §5): the attention inside `blocks[10]` is computed
+#: from that block's INPUT tokens, so I7 compares it against the exceedance
+#: of those tokens. I7 edits nothing.
+EXTRA_BLOCK_INPUT_STAGES = {"in_b10": 10}
+
+#: Every block-input stage this module can capture, whatever declared it.
+#: `resolve_stage` and the capture machinery use THIS; a contract that is
+#: about which blocks a work package EDITS uses its own tuple.
+ALL_BLOCK_INPUT_STAGES = {**BLOCK_INPUT_STAGES, **EXTRA_BLOCK_INPUT_STAGES}
 
 #: Which real stage the historical diagnostics used. See the module docstring
 #: for the code citation; a test pins it.
@@ -116,7 +154,8 @@ EXTERNAL_STAGES = {"ext_s11_out": "s11_out", "ext_hist": HIST_STAGE}
 #: Every stage name this module accepts. `resolve_stage` validates against
 #: THIS, so a conditions YAML may spell any of the eight; `STAGES` keeps its
 #: I0 meaning for everything that enumerates the terminal four.
-ALL_STAGES = (STAGES + tuple(BLOCK_INPUT_STAGES) + tuple(EXTERNAL_STAGES))
+ALL_STAGES = (STAGES + tuple(ALL_BLOCK_INPUT_STAGES)
+              + tuple(EXTERNAL_STAGES))
 
 HIST_STAGE_CITATION = (
     "saga/metrics.py:287-291 (forward hooks on model.blocks[i], storing the "
@@ -132,7 +171,8 @@ _BLOCK_STAGES = {"s11_out": -2, "s12_pre_norm": -1}
 #: carries them}. `in_b07` enters blocks[7], so it is captured on blocks[6].
 #: ABSOLUTE indices — a block-input stage names one specific block, and
 #: rebasing it on the depth would move it on a model of another depth.
-_BLOCK_INPUT_SOURCE = {name: idx - 1 for name, idx in BLOCK_INPUT_STAGES.items()}
+_BLOCK_INPUT_SOURCE = {name: idx - 1
+                       for name, idx in ALL_BLOCK_INPUT_STAGES.items()}
 
 
 class StageError(ValueError):
@@ -193,7 +233,8 @@ def stage_block_index(model, stage: str) -> int:
         idx = _BLOCK_INPUT_SOURCE[real]
         if idx >= depth:
             raise StageError(
-                f"stage {real!r} is the input to blocks[{BLOCK_INPUT_STAGES[real]}], "
+                f"stage {real!r} is the input to "
+                f"blocks[{ALL_BLOCK_INPUT_STAGES[real]}], "
                 f"i.e. the output of blocks[{idx}], but the model has only "
                 f"{depth} block(s) — this stage does not exist on it")
         return idx

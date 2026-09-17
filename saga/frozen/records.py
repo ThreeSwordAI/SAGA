@@ -128,7 +128,84 @@ RECORD_PERTURBATION_COLUMNS = RECORD_COLUMNS + (
     "n_masked_coords", "masks_sha256",
 )
 
-SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS}
+#: TASK C / I5 — the correspondence readout, one row per
+#: (condition, transform, stage, descriptor, image). Its own file stem
+#: (`corr_records`) because it is neither the functional response nor the
+#: patch diagnostics: it is an accuracy against a known answer key, and a
+#: third column set in the `diag` file would be a third row shape there.
+#:
+#: `stage` (a provenance column) varies PER ROW, as it does in a multi-stage
+#: diag sweep. `count_mad_s11` is the D1-stage exceedance count carried on
+#: EVERY row whatever that row's own stage is, so an accuracy can be
+#: correlated against the diagnostic the paper reports without a join.
+#:
+#: ACCURACIES ARE STORED AS THE COUNTS THEY ARE. Every accuracy this readout
+#: produces is `n_correct / n_shared` for two small integers, so the counts
+#: are what is written and the ratio is derived by the analysis. Three
+#: reasons, in order of importance:
+#:
+#:   1. EXACT. A count is exact; a float accuracy is a rounded quotient, and
+#:      a table that re-derives it from the count cannot disagree with one
+#:      that stored it.
+#:   2. MISSING NEEDS NO SENTINEL. An image with no exceedance position has
+#:      `n_shared_exc == 0`, which says so without a string column standing
+#:      in for an undefined float (I0 handoff §8.2).
+#:   3. SIZE, and this one is measured. As near-unique float strings the six
+#:      would-be MISSING columns cost 9.2 MB of a 9.34 MB per-run file —
+#:      126 MB over the cohort, which is exactly the "113 MiB of I3 parquet"
+#:      mistake recorded in `.gitignore`. As small ints they cost ~0.1 MB
+#:      each, which is what lets §8's "corr_records.parquet is small and is
+#:      committed" actually be true.
+#:
+#: `count_mad_s11` is the D1-stage exceedance count carried on EVERY row
+#: whatever that row's own stage is, so an accuracy can be correlated against
+#: the diagnostic the paper reports without a join.
+CORR_COLUMNS = PROVENANCE_COLUMNS + (
+    "transform", "descriptor", "grid", "n_shared",
+    "chance_exact", "chance_1",
+    "n_correct_exact", "n_correct_1", "mean_nn_sim",
+    "count_mad_stage", "count_mad_s11", "max_abs_s11_diff_vs_native",
+    "n_shared_exc", "n_correct_exact_exc", "n_correct_1_exc",
+    "n_shared_nonexc", "n_correct_exact_nonexc", "n_correct_1_nonexc",
+)
+
+#: The two `corr_records` columns that may still hold the literal MISSING,
+#: and are therefore written as strings. Both take very few distinct values
+#: (an integer count, and a difference that is 0.0 or MISSING), so parquet
+#: dictionary-encodes them to almost nothing. A reader turns one into a
+#: number with `float(v)` after checking it is not MISSING — never with a
+#: coercion that maps the string to NaN and then to zero.
+CORR_MISSING_COLUMNS = ("count_mad_s11", "max_abs_s11_diff_vs_native")
+
+#: The count columns an accuracy is derived from: {accuracy: (numerator,
+#: denominator)}. ONE definition, imported by the analysis, so a table and
+#: the schema cannot disagree about which count divides which.
+CORR_ACCURACY_COUNTS = {
+    "acc_exact": ("n_correct_exact", "n_shared"),
+    "acc_1": ("n_correct_1", "n_shared"),
+    "acc_exact_exc": ("n_correct_exact_exc", "n_shared_exc"),
+    "acc_1_exc": ("n_correct_1_exc", "n_shared_exc"),
+    "acc_exact_nonexc": ("n_correct_exact_nonexc", "n_shared_nonexc"),
+    "acc_1_nonexc": ("n_correct_1_nonexc", "n_shared_nonexc"),
+}
+
+#: TASK C / I5b — the frozen ADE20K evaluation, one row per (condition,
+#: image). Deliberately NOT the `records` schema: a dense evaluation has no
+#: nll, no top-1 and no logit shift, so the classification columns would be
+#: MISSING on every row. `miou_present` is a PER-IMAGE quantity over the
+#: classes that image scores and is NEVER the dataset metric — the
+#: dataset-level mIoU comes from the pooled confusion matrix, which is what
+#: `segmentation/tools/train.py` fixed in bug B4 and what this schema must
+#: not tempt a reader into recomputing by averaging a column.
+SEG_COLUMNS = (
+    "run_id", "variant", "arch", "ckpt_kind", "ckpt_sha256",
+    "backbone_run_id", "backbone_matched", "epochs_completed",
+    "image_id", "condition_id", "precision", "git_sha", "git_dirty",
+    "n_labelled_pixels", "n_classes_present", "pixel_acc", "miou_present",
+)
+
+SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS,
+           "corr_records": CORR_COLUMNS, "seg_records": SEG_COLUMNS}
 
 #: Key for a per-stage diag file: one row per (condition, stage, image).
 DIAG_STAGE_KEY = ("condition_id", "stage", "image_id")
