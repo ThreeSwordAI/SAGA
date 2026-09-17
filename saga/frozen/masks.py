@@ -113,6 +113,27 @@ def file_sha256(path) -> str:
 # The freeze
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: Values that are a PROMISE of a signature rather than one. `PENDING` is the
+#: draft's own word; the angle-bracket forms are what a prepared-but-unsigned
+#: edit leaves behind, and `docs/LOCKED_FREEZE_DRAFT.patch` uses exactly those.
+#:
+#: This matters more than it looks. A staged freeze with `<DATE>` still in it
+#: would otherwise satisfy the header check, and the repository would read as
+#: FROZEN while nobody had signed anything — the one failure mode a freeze
+#: guard must not have.
+UNSIGNED = ("PENDING", "TBD", "TODO", "")
+
+
+def _unsigned(value: str) -> bool:
+    """True when a signature line is empty, pending, or a placeholder."""
+    v = str(value or "").strip()
+    if v in UNSIGNED or v == MISSING:
+        return True
+    if v.startswith("<") and v.endswith(">"):
+        return True
+    return "PLACEHOLDER" in v.upper()
+
+
 def locked_state(locked_path=LOCKED_FILE, *, masks_path=MASKS_FILE) -> dict:
     """What the LOCKED document says, as data. Never raises on content.
 
@@ -143,7 +164,7 @@ def locked_state(locked_path=LOCKED_FILE, *, masks_path=MASKS_FILE) -> dict:
     date = re.search(r"Date frozen:\s*`?([^`\n]+)`?", text)
     date = (date.group(1).strip() if date else MISSING)
     state["date"] = date
-    if date in (MISSING, "PENDING", ""):
+    if _unsigned(date):
         state["missing"].append(
             f"{p} has no freeze DATE (the 'Date frozen:' line is "
             f"{date!r})")
@@ -151,7 +172,7 @@ def locked_state(locked_path=LOCKED_FILE, *, masks_path=MASKS_FILE) -> dict:
     sha = re.search(r"Git sha at freeze:\s*`?([^`\n]+)`?", text)
     sha = (sha.group(1).strip() if sha else MISSING)
     state["git_sha"] = sha
-    if sha in (MISSING, "PENDING", ""):
+    if _unsigned(sha):
         state["missing"].append(
             f"{p} has no git sha at freeze (the 'Git sha at freeze:' line is "
             f"{sha!r})")

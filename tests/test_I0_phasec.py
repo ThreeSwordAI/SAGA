@@ -191,10 +191,18 @@ def test_handoff_reports_the_recorded_fail_rather_than_hiding_it(text,
     assert "left exactly as the HPC wrote it" in text
 
 
-def test_handoff_states_that_locked_analysis_is_still_a_draft(text):
-    assert "**DRAFT**" in text
-    assert "no I3/I4 Phase-B job may run" in text
-    assert "BLOCKS a work package" in text
+def test_handoff_states_that_locked_analysis_is_frozen(text):
+    """Inverted at the freeze, 2026-09-17, with the sentence it checks.
+
+    The generator used to assert "is a **DRAFT** ... three PENDING lines"
+    unconditionally, which after the freeze sat directly above its own
+    generated count of zero open decisions. It now READS the state
+    (`saga.frozen.masks.locked_state`) and writes whichever sentence is true.
+    """
+    assert "**FROZEN**" in text
+    assert "**DRAFT**" not in text
+    assert "no I3/I4 Phase-B job may run" not in text
+    assert "decisions are closed" in text
 
 
 def test_handoff_states_the_split_protocol_limit(text):
@@ -223,16 +231,27 @@ def test_locked_analysis_split_shas_are_filled_in_and_correct():
         assert f"`{d['sha256']}`" in locked, name
 
 
-def test_locked_analysis_is_still_unsigned():
-    """Phase C fills in FACTS. The three signature lines are the human's, and
-    filling them in is what freezes the document."""
+def test_locked_analysis_is_signed():
+    """I0 Phase C filled in FACTS and left the three signature lines to the
+    human. They were signed on 2026-09-17, once TASK A / I1 Phase C had built
+    D5's masks and TASK B had amended §3 and §9 to what was actually run.
+
+    This assertion is the INVERSE of the one that stood until then
+    (`test_locked_analysis_is_still_unsigned`). Flipped rather than deleted:
+    the unsigned period was a real state of this repository, and the suite
+    should say which side of the freeze we are on.
+    """
     locked = LOCKED.read_text(encoding="utf-8")
-    assert "STATUS: **DRAFT — NOT YET FROZEN**" in locked
-    # the two machine-checkable signature fields are still unfilled, and the
-    # "signed by" line still names the human rather than anyone else
-    assert "Date frozen: `PENDING`" in locked
-    assert "Git sha at freeze: `PENDING`" in locked
-    assert "Signed and dated by: *(the human — nobody else)*" in locked
+    assert "STATUS: FROZEN" in locked
+    assert "STATUS: **DRAFT — NOT YET FROZEN**" not in locked
+    # the two machine-checkable signature fields carry real values, and a
+    # placeholder does not count as one (saga/frozen/masks._unsigned)
+    from saga.frozen.masks import locked_state
+    state = locked_state(LOCKED)
+    assert state["frozen"] is True
+    assert state["date"] not in ("PENDING", "MISSING", "")
+    assert state["git_sha"] not in ("PENDING", "MISSING", "")
+    assert "Signed and dated by: Mahfuzur Rahman Chowdhury" in locked
 
 
 def test_every_decision_is_still_listed_and_d5_still_blocks():
@@ -250,10 +269,14 @@ def test_every_decision_is_still_listed_and_d5_still_blocks():
     locked = LOCKED.read_text(encoding="utf-8")
     rows = [ln for ln in locked.splitlines()
             if re.match(r"^\| ~*D\d+~*", ln)]
-    assert len(rows) == 8
+    # 8 when I0 wrote this; D9 and D10 (Track C) were added at the freeze.
+    assert len(rows) == 10
     closed = {re.search(r"D\d+", ln).group()
               for ln in rows if ln.startswith("| ~~")}
-    assert closed == {"D1", "D2", "D3", "D4", "D6", "D7", "D8"}
-    d5 = next(ln for ln in rows if ln.startswith("| D5"))
-    assert "no default" in d5
-    assert "D5" not in closed, "D5 is open until I1 produces the block-input map"
+    assert closed == {"D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8",
+                      "D9", "D10"}
+    # D5 closed on 2026-09-17 against a NAMED file and its digest — the thing
+    # this test used to guard was that it could not close without one.
+    d5 = next(ln for ln in rows if ln.startswith("| ~~D5~~"))
+    assert "configs/frozen/I4_masks.json" in d5
+    assert re.search(r"\b[0-9a-f]{64}\b", d5), "D5 closed without a digest"

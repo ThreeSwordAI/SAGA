@@ -295,11 +295,27 @@ def test_the_REAL_d5_file_reproduces_track_As_reported_numbers():
 
 @pytest.mark.skipif(not REAL_MASKS.exists(),
                     reason="D5's mask file is not in this checkout")
-def test_the_real_file_is_still_refused_while_locked_is_a_draft():
-    """The file existing is NOT the freeze. D5 must also be closed in
-    LOCKED_ANALYSIS with this digest, and the header signed."""
-    with pytest.raises(fmasks.MaskError, match="EMBARGOED"):
-        fmasks.load_masks(REAL_MASKS, require_freeze=True)
+def test_the_real_file_loads_now_that_locked_is_frozen():
+    """Until the freeze this asserted the opposite: the mask file EXISTED and
+    was refused anyway, because existing is not the same as being signed for.
+    Both halves now hold — the digest in LOCKED matches the file and the
+    header is signed — so the contract opens.
+
+    Inverted rather than deleted: the embargo was a real state of this
+    repository and the suite should say which side of it we are on.
+    """
+    loaded = fmasks.load_masks(REAL_MASKS, require_freeze=True)
+    assert set(loaded["masks"]) == set(fmasks.expected_mask_ids())
+    assert loaded["sha256"] == fmasks.file_sha256(REAL_MASKS)
+
+
+def test_the_real_conditions_file_now_parses():
+    """The I4 document could not be parsed at all while D5 was open, because
+    `load_conditions` resolves every mask through the contract. After the
+    freeze it parses against the REAL mask file and declares 65 conditions."""
+    doc = load_conditions(CONDITIONS)
+    assert len(doc["conditions"]) == 65
+    assert doc["masks_sha256"] == fmasks.file_sha256(REAL_MASKS)
 
 
 def test_a_file_in_an_unknown_schema_is_refused(tmp_path, fake_masks):
@@ -332,14 +348,40 @@ def test_a_mask_file_built_from_reporting_data_is_refused(tmp_path,
         fmasks.load_masks(p, locked_path=locked)
 
 
-def test_the_real_repository_is_still_embargoed_today():
-    """D5 is OPEN and LOCKED is a DRAFT on this checkout. If this test ever
-    fails, the freeze has happened and I4 Phase B may run."""
+def test_the_repository_is_frozen_and_i4_may_run():
+    """The freeze took: D5 closed, the header signed, and the digest in
+    LOCKED matching the mask file on disk. I4 Phase B may run.
+
+    This is the INVERSE of the assertion that stood until the freeze
+    (`test_the_real_repository_is_still_embargoed_today`). Flipped rather
+    than deleted, for the same reason as the one above it.
+
+    While the freeze is STAGED but unsigned — `Date frozen: <DATE>` — this
+    fails, deliberately: `saga/frozen/masks._unsigned` treats a placeholder
+    as no signature, so a prepared-but-unsigned freeze cannot read as done.
+    """
     state = fmasks.locked_state()
-    assert state["missing"], (
-        "docs/LOCKED_ANALYSIS.md appears to be FROZEN with D5 closed — "
-        "update this test and run I4 Phase B")
-    assert state["frozen"] is False
+    assert state["missing"] == [], state["missing"]
+    assert state["frozen"] is True
+    assert state["d5_closed"] is True
+    assert state["date"] not in ("PENDING", "MISSING", "")
+    assert state["git_sha"] not in ("PENDING", "MISSING", "")
+    assert state["masks_sha"] == fmasks.file_sha256(fmasks.MASKS_FILE)
+
+
+def test_a_placeholder_is_not_a_signature(tmp_path, fake_masks):
+    """The failure mode a freeze guard must not have: a staged edit with
+    `<DATE>` still in it reading as FROZEN because the header line is
+    present."""
+    digest = fmasks.file_sha256(fake_masks)
+    for placeholder in ("<DATE>", "PENDING", "TBD", "<PLACEHOLDER>"):
+        p = tmp_path / f"L_{placeholder.strip('<>')}.md"
+        p.write_text(
+            f"STATUS: FROZEN\nDate frozen: `{placeholder}`\n"
+            f"Git sha at freeze: `abc1234`\n~~D5~~ `{digest}`\n",
+            encoding="utf-8", newline="\n")
+        state = fmasks.locked_state(p, masks_path=fake_masks)
+        assert any("freeze DATE" in m for m in state["missing"]), placeholder
 
 
 # ─────────────────────────────────────────────────────────────────────────────

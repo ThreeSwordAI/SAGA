@@ -1550,30 +1550,36 @@ def test_the_signature_lives_in_LOCKED_ANALYSIS_and_the_note_reads_it_back():
 
 
 @needs_results
-def test_D1_is_closed_and_the_document_is_still_a_draft():
-    """Closing a decision and freezing the document are separate acts: D1
-    (and D2/D3/D4/D6/D7) are closed, D5 is open, and the header's three
-    signature lines stay PENDING while it is."""
+def test_D1_is_closed_and_the_document_is_frozen():
+    """D1 is closed, and so is every other decision: the document was frozen
+    on 2026-09-17 once TASK A / I1 Phase C produced D5's masks.
+
+    Until then this asserted the opposite — D5 open, the header PENDING, and
+    exactly one `DECISION NEEDED` marker left in §5. Flipped rather than
+    deleted, because the draft period was a real state and the suite should
+    say which side of the freeze we are on. What it still guards is
+    unchanged: every decision says so WHERE IT IS DEFINED, not only in §12.
+    """
     locked = (REPO / "docs" / "LOCKED_ANALYSIS.md").read_text(encoding="utf-8")
     section = locked.split("## 1. Feature stage")[1].split("## 2.")[0]
     assert "DECISION NEEDED" not in section
     assert "**`s11_out`**" in section
-    # the closed set, struck through in §12 the way D8 already was
-    for closed in ("~~D1~~", "~~D2~~", "~~D3~~", "~~D4~~", "~~D6~~",
-                   "~~D7~~", "~~D8~~"):
+    # every decision struck through in §12
+    for closed in ("~~D1~~", "~~D2~~", "~~D3~~", "~~D4~~", "~~D5~~",
+                   "~~D6~~", "~~D7~~", "~~D8~~", "~~D9~~", "~~D10~~"):
         assert closed in locked, closed
-    assert "~~D5~~" not in locked, "D5 is NOT closed — I1 owns it"
-    assert "| D5 | 5 |" in locked
-    # EXACTLY ONE decision still carries the marker, and it is D5's own
-    # row in section 5. Every closed decision says so where it is defined.
+    # D5 closed against a NAMED file and its digest, in §12 AND in §5 where
+    # it is defined. NO `DECISION NEEDED` marker survives in the body.
     body = locked.split("## 1. Feature stage", 1)[1]
-    marked = [l for l in body.splitlines() if "DECISION NEEDED" in l]
-    assert len(marked) == 1, marked
-    assert "Which discovery map" in marked[0]
-    # the document itself is NOT frozen
-    assert "STATUS: **DRAFT — NOT YET FROZEN**" in locked
+    assert not [l for l in body.splitlines() if "DECISION NEEDED" in l]
+    assert body.count("configs/frozen/I4_masks.json") >= 2
+    assert "STATUS: FROZEN" in locked
+    # ... and the header carries a real signature, not the two `PENDING`
+    # placeholders it held until 2026-09-17
+    assert "STATUS: **DRAFT — NOT YET FROZEN**" not in locked
     header = locked.split("## 1. Feature stage")[0]
-    assert header.count("`PENDING`") == 2
+    assert header.count("`PENDING`") == 0
+    assert "Signed and dated by: Mahfuzur Rahman Chowdhury" in header
 
 
 @needs_results
