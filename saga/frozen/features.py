@@ -299,18 +299,17 @@ def correspondence_rows(model, loader, condition, stages, transform_id, *,
                             n_shared=int(result["n_shared"]),
                             chance_exact=chance_exact(grid),
                             chance_1=chance_within_1(transform_id, grid),
-                            acc_exact=float(result["acc_exact"][i]),
-                            acc_1=float(result["acc_1"][i]),
+                            n_correct_exact=int(
+                                result["n_correct_exact"][i]),
+                            n_correct_1=int(result["n_correct_1"][i]),
                             mean_nn_sim=float(result["mean_nn_sim"][i]),
-                            count_mad_stage=float(count_stage[i]),
+                            count_mad_stage=int(count_stage[i]),
                             count_mad_s11=as_missing_str(
                                 count_s11[i] if count_s11 is not None
                                 else MISSING),
                             max_abs_s11_diff_vs_native=as_missing_str(
                                 s11_diff),
-                            **{k: (int(v[i]) if k.startswith("n_")
-                                   else as_missing_str(v[i]))
-                               for k, v in split.items()}))
+                            **{k: int(v[i]) for k, v in split.items()}))
             cursor += n
     return rows, s11_by_batch
 

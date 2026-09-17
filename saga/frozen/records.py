@@ -139,30 +139,55 @@ RECORD_PERTURBATION_COLUMNS = RECORD_COLUMNS + (
 #: EVERY row whatever that row's own stage is, so an accuracy can be
 #: correlated against the diagnostic the paper reports without a join.
 #:
-#: `CORR_MISSING_COLUMNS` are STRING columns, for the reason the per-stage
-#: diag schema above gives: they hold the literal MISSING whenever the
-#: quantity is undefined — an image with no exceedance position has no
-#: accuracy at exceedance positions, and a `native` row has no difference
-#: against itself — and a parquet column cannot hold both a float and a
-#: string, while a null would be silently skipped by a mean (I0 handoff
-#: §8.2: MISSING is a value, never averaged, never replaced by a guess).
+#: ACCURACIES ARE STORED AS THE COUNTS THEY ARE. Every accuracy this readout
+#: produces is `n_correct / n_shared` for two small integers, so the counts
+#: are what is written and the ratio is derived by the analysis. Three
+#: reasons, in order of importance:
+#:
+#:   1. EXACT. A count is exact; a float accuracy is a rounded quotient, and
+#:      a table that re-derives it from the count cannot disagree with one
+#:      that stored it.
+#:   2. MISSING NEEDS NO SENTINEL. An image with no exceedance position has
+#:      `n_shared_exc == 0`, which says so without a string column standing
+#:      in for an undefined float (I0 handoff §8.2).
+#:   3. SIZE, and this one is measured. As near-unique float strings the six
+#:      would-be MISSING columns cost 9.2 MB of a 9.34 MB per-run file —
+#:      126 MB over the cohort, which is exactly the "113 MiB of I3 parquet"
+#:      mistake recorded in `.gitignore`. As small ints they cost ~0.1 MB
+#:      each, which is what lets §8's "corr_records.parquet is small and is
+#:      committed" actually be true.
+#:
+#: `count_mad_s11` is the D1-stage exceedance count carried on EVERY row
+#: whatever that row's own stage is, so an accuracy can be correlated against
+#: the diagnostic the paper reports without a join.
 CORR_COLUMNS = PROVENANCE_COLUMNS + (
     "transform", "descriptor", "grid", "n_shared",
     "chance_exact", "chance_1",
-    "acc_exact", "acc_1", "mean_nn_sim",
+    "n_correct_exact", "n_correct_1", "mean_nn_sim",
     "count_mad_stage", "count_mad_s11", "max_abs_s11_diff_vs_native",
-    "n_shared_exc", "acc_exact_exc", "acc_1_exc",
-    "n_shared_nonexc", "acc_exact_nonexc", "acc_1_nonexc",
+    "n_shared_exc", "n_correct_exact_exc", "n_correct_1_exc",
+    "n_shared_nonexc", "n_correct_exact_nonexc", "n_correct_1_nonexc",
 )
 
-#: The `corr_records` columns that may hold the literal MISSING, and are
-#: therefore written as strings throughout. A reader turns one into a number
-#: with `float(v)` after checking it is not MISSING — never with a coercion
-#: that maps the string to NaN and then to zero.
-CORR_MISSING_COLUMNS = (
-    "count_mad_s11", "max_abs_s11_diff_vs_native",
-    "acc_exact_exc", "acc_1_exc", "acc_exact_nonexc", "acc_1_nonexc",
-)
+#: The two `corr_records` columns that may still hold the literal MISSING,
+#: and are therefore written as strings. Both take very few distinct values
+#: (an integer count, and a difference that is 0.0 or MISSING), so parquet
+#: dictionary-encodes them to almost nothing. A reader turns one into a
+#: number with `float(v)` after checking it is not MISSING — never with a
+#: coercion that maps the string to NaN and then to zero.
+CORR_MISSING_COLUMNS = ("count_mad_s11", "max_abs_s11_diff_vs_native")
+
+#: The count columns an accuracy is derived from: {accuracy: (numerator,
+#: denominator)}. ONE definition, imported by the analysis, so a table and
+#: the schema cannot disagree about which count divides which.
+CORR_ACCURACY_COUNTS = {
+    "acc_exact": ("n_correct_exact", "n_shared"),
+    "acc_1": ("n_correct_1", "n_shared"),
+    "acc_exact_exc": ("n_correct_exact_exc", "n_shared_exc"),
+    "acc_1_exc": ("n_correct_1_exc", "n_shared_exc"),
+    "acc_exact_nonexc": ("n_correct_exact_nonexc", "n_shared_nonexc"),
+    "acc_1_nonexc": ("n_correct_1_nonexc", "n_shared_nonexc"),
+}
 
 #: TASK C / I5b — the frozen ADE20K evaluation, one row per (condition,
 #: image). Deliberately NOT the `records` schema: a dense evaluation has no

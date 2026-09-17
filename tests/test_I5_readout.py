@@ -185,9 +185,12 @@ def test_the_matcher_scores_100_percent_on_an_image_with_unique_patches(
     transformed[:, t_idx, :] = original[:, o_idx, :]
 
     result = match(original, transformed, tid, kind, grid=GRID)
-    assert result["n_shared"] == EXPECTED_SHARED[tid]
-    assert np.allclose(result["acc_exact"], 1.0)
-    assert np.allclose(result["acc_1"], 1.0)
+    n = EXPECTED_SHARED[tid]
+    assert result["n_shared"] == n
+    # every shared position matched: the counts EQUAL the shared-set size,
+    # which is an exact integer statement, not a float comparison
+    assert (result["n_correct_exact"] == n).all()
+    assert (result["n_correct_1"] == n).all()
 
 
 def test_a_shuffled_image_scores_near_chance_not_near_one():
@@ -199,7 +202,8 @@ def test_a_shuffled_image_scores_near_chance_not_near_one():
     perm = torch.randperm(N_PATCHES, generator=g)
     transformed = original[:, perm, :]
     result = match(original, transformed, "T1", "l2", grid=GRID)
-    assert result["acc_exact"].mean() < 0.15
+    acc = result["n_correct_exact"] / result["n_shared"]
+    assert acc.mean() < 0.15
 
 
 def test_chance_is_computed_and_below_the_quoted_bound():
@@ -284,7 +288,15 @@ def test_on_the_fly_mad_flags_equal_saga_metrics_exactly():
 
 def test_exceedance_split_reports_missing_for_an_empty_half():
     """I0 handoff §8.2: MISSING is a value. An image with no exceedance
-    position has no accuracy there — not a zero."""
+    position has no accuracy there — not a zero.
+
+    The record says so with a COUNT: `n_shared_exc == 0`. The analysis turns
+    that into MISSING, which is checked here through the same helper the
+    tables use, so the schema and the reader cannot disagree.
+    """
+    from analysis.frozen_I5_analysis import MISSING as ANALYSIS_MISSING
+    from analysis.frozen_I5_analysis import accuracy
+
     g = torch.Generator().manual_seed(8)
     original = torch.randn(2, N_PATCHES, DIM, generator=g)
     t_idx, o_idx = TR.correspondence("T1", GRID)
@@ -292,16 +304,36 @@ def test_exceedance_split_reports_missing_for_an_empty_half():
     transformed[:, t_idx, :] = original[:, o_idx, :]
     result = match(original, transformed, "T1", "l2", grid=GRID)
 
+    def rows(split):
+        return [{k: v[i] for k, v in split.items()} for i in range(2)]
+
     none_exceed = torch.zeros(2, N_PATCHES, dtype=torch.bool)
     split = split_by_exceedance(result, none_exceed)
     assert list(split["n_shared_exc"]) == [0, 0]
-    assert split["acc_exact_exc"] == ["MISSING", "MISSING"]
-    assert split["acc_exact_nonexc"] == [1.0, 1.0]
+    for r in rows(split):
+        assert accuracy(r, "acc_exact_exc") is ANALYSIS_MISSING
+        assert accuracy(r, "acc_exact_nonexc") == 1.0
 
     all_exceed = torch.ones(2, N_PATCHES, dtype=torch.bool)
     split = split_by_exceedance(result, all_exceed)
-    assert split["acc_exact_nonexc"] == ["MISSING", "MISSING"]
-    assert split["acc_exact_exc"] == [1.0, 1.0]
+    assert list(split["n_shared_nonexc"]) == [0, 0]
+    for r in rows(split):
+        assert accuracy(r, "acc_exact_nonexc") is ANALYSIS_MISSING
+        assert accuracy(r, "acc_exact_exc") == 1.0
+
+
+def test_accuracies_are_stored_as_exact_counts_not_as_floats():
+    """The schema stores `n_correct_* / n_shared_*`, and the analysis
+    divides. A float accuracy column would be a rounded quotient AND, as
+    measured, 9.2 MB of a 9.34 MB per-run file."""
+    from saga.frozen.records import CORR_ACCURACY_COUNTS, CORR_COLUMNS
+
+    for acc, (num, den) in CORR_ACCURACY_COUNTS.items():
+        assert acc not in CORR_COLUMNS, f"{acc} must be derived, not stored"
+        assert num in CORR_COLUMNS and den in CORR_COLUMNS
+    # and only the two genuinely-undefined columns remain strings
+    assert rec.CORR_MISSING_COLUMNS == ("count_mad_s11",
+                                        "max_abs_s11_diff_vs_native")
 
 
 def test_the_split_halves_add_up_to_the_whole():
@@ -347,7 +379,8 @@ def test_the_readout_runs_on_a_five_prefix_register_model(reg4_model, images):
         patches = store["s11_out"].clone()
     result = match(patches, patches, "T1", "l2")
     assert result["n_shared"] == 196
-    assert np.isfinite(result["acc_exact"]).all()
+    assert (result["n_correct_exact"] >= 0).all()
+    assert (result["n_correct_exact"] <= result["n_shared"]).all()
 
 
 # ── the two controls (§7) ────────────────────────────────────────────────────
@@ -707,8 +740,14 @@ def test_missing_is_never_averaged():
     mean, n, n_missing = mean_or_missing([1.0, MISSING, 3.0])
     assert (mean, n, n_missing) == (2.0, 2, 1)
     assert mean_or_missing([MISSING, MISSING]) == (MISSING, 0, 2)
-    assert value({"acc_exact_exc": "MISSING"}, "acc_exact_exc") is MISSING
-    assert value({"acc_exact_exc": "0.25"}, "acc_exact_exc") == 0.25
+    # an accuracy is derived from its two counts; a zero denominator is
+    # MISSING, never a zero
+    assert value({"n_correct_exact_exc": 0, "n_shared_exc": 0},
+                 "acc_exact_exc") is MISSING
+    assert value({"n_correct_exact_exc": 1, "n_shared_exc": 4},
+                 "acc_exact_exc") == 0.25
+    assert value({"count_mad_s11": "MISSING"}, "count_mad_s11") is MISSING
+    assert value({"count_mad_s11": "17.0"}, "count_mad_s11") == 17.0
 
 
 def test_the_tables_are_byte_identical_when_rebuilt(saga_model, baseline_model,

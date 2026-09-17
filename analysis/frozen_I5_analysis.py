@@ -62,7 +62,8 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from saga.frozen.records import CORR_MISSING_COLUMNS, records_path  # noqa: E402
+from saga.frozen.records import (CORR_ACCURACY_COUNTS,  # noqa: E402
+                                 CORR_MISSING_COLUMNS, records_path)
 from saga.frozen.runner import eligible_cohort  # noqa: E402
 from saga.frozen.transforms import MATCHED_TRANSFORMS  # noqa: E402
 
@@ -104,8 +105,10 @@ def value(row, key):
     The columns in `CORR_MISSING_COLUMNS` are strings on disk (a parquet
     column cannot hold both a float and the literal MISSING), so this is
     where a reader turns one back into a number, having first checked it is
-    not MISSING.
+    not MISSING. An ACCURACY is not a column at all — see `accuracy`.
     """
+    if key in CORR_ACCURACY_COUNTS:
+        return accuracy(row, key)
     v = row.get(key, MISSING)
     if v is None or v == MISSING or v == "":
         return MISSING
@@ -115,6 +118,26 @@ def value(row, key):
         except (TypeError, ValueError):
             return MISSING
     return float(v)
+
+
+def accuracy(row, name):
+    """An accuracy, derived from the two exact counts that define it.
+
+    `corr_records` stores `n_correct_* / n_shared_*` rather than the
+    quotient, so this is the ONE place the division happens and
+    `records.CORR_ACCURACY_COUNTS` is the one place the pairing is declared.
+    A zero denominator is MISSING — an image with no exceedance position has
+    no accuracy there, and that is not a zero (I0 handoff §8.2).
+    """
+    num_key, den_key = CORR_ACCURACY_COUNTS[name]
+    num, den = row.get(num_key), row.get(den_key)
+    if num in (None, "", MISSING) or den in (None, "", MISSING):
+        return MISSING
+    try:
+        num, den = float(num), float(den)
+    except (TypeError, ValueError):
+        return MISSING
+    return MISSING if den <= 0 else num / den
 
 
 def load_run(root, run_id):

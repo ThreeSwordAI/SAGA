@@ -62,13 +62,18 @@ WHAT IS STORED
 --------------
 Per-image records only — no raw features, no attention, no descriptors
 (§7). The per-position exceedance flag is used on the fly and REDUCED to
-the split it exists for (`n_shared_exc`/`acc_exact_exc`/... vs the
+the split it exists for (`n_shared_exc` / `n_correct_exact_exc` / ... vs the
 non-exceedance half) before anything is written; the 196-bit mask itself is
 not a column, because `corr_records.parquet` is committed and a mask on
-every one of ~36,000 rows per run would add tens of megabytes across the
+every one of ~48,000 rows per run would add tens of megabytes across the
 cohort for a quantity the tables only ever consume as that split. This is
 the one place this module's record differs from the column list in §3 of
 the task file, and it is recorded in `docs/TASK_LOG.md`.
+
+The split is stored as COUNTS, and so is the overall accuracy: every
+accuracy here is `n_correct / n_shared` for two small integers, and
+`saga/frozen/records.py::CORR_ACCURACY_COUNTS` declares which count divides
+which. Exact, and MISSING needs no sentinel (`n_shared_exc == 0` says it).
 """
 
 import numpy as np
@@ -165,9 +170,11 @@ def match(original: torch.Tensor, transformed: torch.Tensor, transform_id: str,
         chebyshev(nn.cpu().numpy(), o_idx[None, :], grid), dtype=torch.long)
     within1 = (dist <= 1)
 
+    # COUNTS, not accuracies: `n_correct / n_shared` is derived by the
+    # analysis from two exact integers (see records.CORR_ACCURACY_COUNTS).
     return {
-        "acc_exact": exact.float().mean(dim=1).cpu().numpy(),
-        "acc_1": within1.float().mean(dim=1).cpu().numpy(),
+        "n_correct_exact": exact.sum(dim=1).cpu().numpy().astype(np.int64),
+        "n_correct_1": within1.sum(dim=1).cpu().numpy().astype(np.int64),
         "mean_nn_sim": best_sim.float().mean(dim=1).cpu().numpy(),
         "exact_flags": exact.cpu().numpy(),                # [B, S] bool
         "within1_flags": within1.cpu().numpy(),            # [B, S] bool
@@ -196,17 +203,18 @@ def exceedance_flags(patches: torch.Tensor, k: float = MAD_K) -> torch.Tensor:
 
 
 def split_by_exceedance(result: dict, exc: torch.Tensor) -> dict:
-    """Accuracy at exceedance positions vs the rest, per image (T_I5d).
+    """Correct-counts at exceedance positions vs the rest, per image (T_I5d).
 
     A position is scored as "exceedance" by the flag of the ORIGINAL image's
     CORRESPONDING patch — the answer key's position, not the query's. That is
     the quantity the table is about: whether a patch whose norm is an outlier
     is one that a consumer can still locate.
 
-    An image with no exceedance position (or no non-exceedance position)
-    yields the literal MISSING for that half rather than a zero, because a
-    mean over an empty set is not zero and `MISSING` is never averaged
-    (I0 handoff §8.2).
+    Returns COUNTS, in six integer columns. An image with no exceedance
+    position has `n_shared_exc == 0`, and the analysis reports MISSING for
+    its accuracy rather than a zero — a mean over an empty set is not zero,
+    and MISSING is never averaged (I0 handoff §8.2). Storing the counts says
+    that without a string column standing in for an undefined float.
     """
     target = torch.as_tensor(result["target_idx"], dtype=torch.long)
     sel = exc.detach().cpu()[:, target]                    # [B, S] bool
@@ -215,11 +223,9 @@ def split_by_exceedance(result: dict, exc: torch.Tensor) -> dict:
 
     out = {}
     for name, mask in (("exc", sel), ("nonexc", ~sel)):
-        n = mask.sum(dim=1)
-        out[f"n_shared_{name}"] = n.numpy().astype(np.int64)
-        for key, flags in (("acc_exact", exact), ("acc_1", within1)):
-            hit = (flags & mask).sum(dim=1).double()
-            out[f"{key}_{name}"] = [
-                (float(hit[i] / n[i]) if int(n[i]) > 0 else MISSING)
-                for i in range(int(n.shape[0]))]
+        out[f"n_shared_{name}"] = mask.sum(dim=1).numpy().astype(np.int64)
+        for key, flags in (("n_correct_exact", exact),
+                           ("n_correct_1", within1)):
+            out[f"{key}_{name}"] = (flags & mask).sum(
+                dim=1).numpy().astype(np.int64)
     return out
