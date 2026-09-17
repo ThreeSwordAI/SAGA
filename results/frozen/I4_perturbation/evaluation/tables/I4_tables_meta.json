@@ -1,0 +1,38 @@
+{
+  "bootstrap_resamples": 10000,
+  "bootstrap_seed": 0,
+  "decisions": {
+    "7": {
+      "baseline": "null",
+      "branch": "unanticipated",
+      "branch_text": "the theta/control-band pattern is not one of the three branches TASK B \u00a76 names; it is reported with the band, the intervals and no interpretation supplied",
+      "saga": "null"
+    },
+    "8": {
+      "baseline": "null",
+      "branch": "unanticipated",
+      "branch_text": "the theta/control-band pattern is not one of the three branches TASK B \u00a76 names; it is reported with the band, the intervals and no interpretation supplied",
+      "saga": "null"
+    }
+  },
+  "energy_rel_error_max": 2.489252651676387e-07,
+  "energy_rel_error_tol": 0.01,
+  "generated_at": "2026-09-17T16:13:37+00:00",
+  "generated_by": "analysis/frozen_I4_analysis.py",
+  "git_sha": "b4c7c71a028859ceb2c138113ecd1d8f17dd59f2",
+  "results": "results/frozen/I4_perturbation/evaluation",
+  "runs_absent": [],
+  "runs_loaded": [
+    "e2r_vits_mixup_baseline_s1",
+    "e2r_vits_mixup_baseline_s2",
+    "e2r_vits_mixup_saga_s1",
+    "e2r_vits_mixup_saga_s2",
+    "legacy_e2_vit_small_mixupdir_baseline",
+    "legacy_e2_vit_small_mixupdir_registers",
+    "legacy_e2_vit_small_mixupdir_saga",
+    "legacy_e2_vit_small_nomixdir_baseline",
+    "legacy_e2_vit_small_nomixdir_registers",
+    "legacy_e2_vit_small_nomixdir_saga"
+  ],
+  "work_package": "I4_perturbation"
+}

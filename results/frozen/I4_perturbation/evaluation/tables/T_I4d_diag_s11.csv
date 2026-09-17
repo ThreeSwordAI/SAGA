@@ -1,0 +1,1 @@
+run_id,arch,recipe_actual,scope,stage,condition_id,layer,diagnostic,n_images,mean_original,mean_condition,mean_delta,ci_lo,ci_hi,excludes_zero,tau_cal_value,bootstrap_resamples,bootstrap_seed,split_sha256,ckpt_sha256,git_sha
