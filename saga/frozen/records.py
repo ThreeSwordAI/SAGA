@@ -128,7 +128,59 @@ RECORD_PERTURBATION_COLUMNS = RECORD_COLUMNS + (
     "n_masked_coords", "masks_sha256",
 )
 
-SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS}
+#: TASK C / I5 — the correspondence readout, one row per
+#: (condition, transform, stage, descriptor, image). Its own file stem
+#: (`corr_records`) because it is neither the functional response nor the
+#: patch diagnostics: it is an accuracy against a known answer key, and a
+#: third column set in the `diag` file would be a third row shape there.
+#:
+#: `stage` (a provenance column) varies PER ROW, as it does in a multi-stage
+#: diag sweep. `count_mad_s11` is the D1-stage exceedance count carried on
+#: EVERY row whatever that row's own stage is, so an accuracy can be
+#: correlated against the diagnostic the paper reports without a join.
+#:
+#: `CORR_MISSING_COLUMNS` are STRING columns, for the reason the per-stage
+#: diag schema above gives: they hold the literal MISSING whenever the
+#: quantity is undefined — an image with no exceedance position has no
+#: accuracy at exceedance positions, and a `native` row has no difference
+#: against itself — and a parquet column cannot hold both a float and a
+#: string, while a null would be silently skipped by a mean (I0 handoff
+#: §8.2: MISSING is a value, never averaged, never replaced by a guess).
+CORR_COLUMNS = PROVENANCE_COLUMNS + (
+    "transform", "descriptor", "grid", "n_shared",
+    "chance_exact", "chance_1",
+    "acc_exact", "acc_1", "mean_nn_sim",
+    "count_mad_stage", "count_mad_s11", "max_abs_s11_diff_vs_native",
+    "n_shared_exc", "acc_exact_exc", "acc_1_exc",
+    "n_shared_nonexc", "acc_exact_nonexc", "acc_1_nonexc",
+)
+
+#: The `corr_records` columns that may hold the literal MISSING, and are
+#: therefore written as strings throughout. A reader turns one into a number
+#: with `float(v)` after checking it is not MISSING — never with a coercion
+#: that maps the string to NaN and then to zero.
+CORR_MISSING_COLUMNS = (
+    "count_mad_s11", "max_abs_s11_diff_vs_native",
+    "acc_exact_exc", "acc_1_exc", "acc_exact_nonexc", "acc_1_nonexc",
+)
+
+#: TASK C / I5b — the frozen ADE20K evaluation, one row per (condition,
+#: image). Deliberately NOT the `records` schema: a dense evaluation has no
+#: nll, no top-1 and no logit shift, so the classification columns would be
+#: MISSING on every row. `miou_present` is a PER-IMAGE quantity over the
+#: classes that image scores and is NEVER the dataset metric — the
+#: dataset-level mIoU comes from the pooled confusion matrix, which is what
+#: `segmentation/tools/train.py` fixed in bug B4 and what this schema must
+#: not tempt a reader into recomputing by averaging a column.
+SEG_COLUMNS = (
+    "run_id", "variant", "arch", "ckpt_kind", "ckpt_sha256",
+    "backbone_run_id", "backbone_matched", "epochs_completed",
+    "image_id", "condition_id", "precision", "git_sha", "git_dirty",
+    "n_labelled_pixels", "n_classes_present", "pixel_acc", "miou_present",
+)
+
+SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS,
+           "corr_records": CORR_COLUMNS, "seg_records": SEG_COLUMNS}
 
 #: Key for a per-stage diag file: one row per (condition, stage, image).
 DIAG_STAGE_KEY = ("condition_id", "stage", "image_id")
