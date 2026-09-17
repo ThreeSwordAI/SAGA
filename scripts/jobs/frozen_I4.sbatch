@@ -124,19 +124,34 @@ fi
 # The same check tools/frozen_eval.py makes, run here so that an embargoed
 # submission costs seconds rather than a staged dataset. It names every
 # missing piece at once.
+# The refusal is printed to STDOUT as well as stderr, so the .log a person
+# actually opens explains itself. Measured 2026-09-17 on job 4265735: the
+# guard fired correctly, but every line of the reason went to the .err and
+# the .log jumped from the torch version straight to JOB_STATISTICS — a job
+# that stopped for no visible cause. A guard whose message is in the other
+# file is a guard nobody reads.
 if ! $PY -c "
 import sys
 sys.path.insert(0, '.')
 from tools.frozen_eval import assert_not_embargoed
-state = assert_not_embargoed('$CONDITIONS')
+try:
+    state = assert_not_embargoed('$CONDITIONS')
+except Exception as exc:
+    print(exc)                      # stdout -> the .log
+    print(exc, file=sys.stderr)     # stderr -> the .err
+    sys.exit(1)
 print('LOCKED_ANALYSIS is FROZEN:', state['date'], state['git_sha'])
 print('D5 masks sha256:', state['masks_sha'])
 "; then
-    echo "" >&2
-    echo "ERROR: I4 is EMBARGOED (TASK B section 7). D5 must be closed and" >&2
-    echo "       docs/LOCKED_ANALYSIS.md must be FROZEN before this job may" >&2
-    echo "       run. The refusal above names what is missing." >&2
-    echo "       This is the guard working, not a bug. I3 is unaffected." >&2
+    for stream in 1 2; do
+        echo ""                                                        >&$stream
+        echo "ERROR: I4 is EMBARGOED (TASK B section 7). D5 must be"    >&$stream
+        echo "       closed and docs/LOCKED_ANALYSIS.md must be FROZEN" >&$stream
+        echo "       before this job may run. The refusal above names"  >&$stream
+        echo "       what is missing."                                  >&$stream
+        echo "       This is the guard working, not a bug. Nothing was" >&$stream
+        echo "       staged and nothing was written. I3 is unaffected." >&$stream
+    done
     exit 1
 fi
 
