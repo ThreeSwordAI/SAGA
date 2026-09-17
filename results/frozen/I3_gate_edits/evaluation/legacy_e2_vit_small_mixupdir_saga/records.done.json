@@ -1,0 +1,20 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "92a03a4716ce07c0460eb132720d8a816aaa2bcde49713b86c57c774fef22995",
+  "git_sha": "e9bc99596db9244061bdef4c2b51a387a3eed7af",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 61,
+  "n_records_appended": 610000,
+  "n_records_skipped": 0,
+  "permutations_file": "configs/frozen/permutations_14x14.json",
+  "permutations_sha256": "75149f36329e480e192e23a25ac39c88b9a77d6b230ad40938d043525ddfa460",
+  "run_id": "legacy_e2_vit_small_mixupdir_saga",
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stage": "s11_out",
+  "tau_cal": {
+    "s11_out": 18.698548316955566
+  },
+  "tau_canon": 20.8515625,
+  "work_package": "I3_gate_edits"
+}
