@@ -1,0 +1,230 @@
+# DRAFT — the freeze of docs/LOCKED_ANALYSIS.md.  NOT APPLIED.
+#
+# Prepared 2026-09-17 by Claude Code on task/B at the human's request.
+# Review, fill the three <PLACEHOLDER> values, then:
+#
+#     git apply --check docs/LOCKED_FREEZE_DRAFT.patch   # dry run first
+#     git apply         docs/LOCKED_FREEZE_DRAFT.patch
+#
+# THREE PLACEHOLDERS, all of which only the human can fill:
+#   <DATE>          the date of the freeze, e.g. 2026-09-18
+#   <GIT_SHA>       the commit the freeze is signed at
+#   <MASKS_SHA256>  sha256 of configs/frozen/I4_masks.json, LF-normalised,
+#                   which does not exist yet. Get it with:
+#                     python -c "from saga.frozen.masks import file_sha256; \
+#                                print(file_sha256('configs/frozen/I4_masks.json'))"
+#
+# PRECONDITION: this patch closes D5, so TASK A / I1 Phase C must have
+# written configs/frozen/I4_masks.json FIRST. Applying it before that file
+# exists produces a document that claims a digest for nothing, and
+# saga/frozen/masks.py will refuse the mismatch — loudly, which is the
+# intended behaviour, but it is better not to get there.
+#
+# ── WHAT IS IN HERE, AND WHY ────────────────────────────────────────────────
+#  1. STATUS: FROZEN header with the date and sha placeholders.
+#  2. §1 item 1 (was §3 item 1): `original` becomes the plain forward and
+#     `dihedral0` becomes the identity/bit-exactness check.
+#  3. §3 item 7: the energy-matched EDIT becomes decile stratification of
+#     `delta_update_norm`, dated, with the reason — the edit variant was
+#     never run, and no forward pass for it exists in any I3 sweep.
+#  4. §9: the two primary I3 contrasts are UNCHANGED. One line is added
+#     naming `mean − original` and `permute − dihedral` as pre-declared
+#     SECONDARY contrasts.
+#  5. §4 of docs/TASK_B_I3_I4.md — NOT ASKED FOR, and necessary. See the
+#     note at the end of this file.
+#  6. D5 closed with the mask-file digest.
+#  7. D9 and D10, copied from docs/TASK_C_I5_I7.md §9.
+#  8. §12 table rows for D5, D9, D10.
+#  9. tests/test_I4_perturbation.py: the embargo test flipped to assert the
+#     FROZEN state, so the suite proves the freeze took.
+#
+# D9 AND D10 COME FROM AN UNMERGED BRANCH. `docs/TASK_C_I5_I7.md` exists
+# only on `task/C` (commit 5d55023, 2026-09-17 06:20). The two lines are
+# copied verbatim as they stand there. If Track C revises them before it
+# merges, this patch is stale and the signed text would not match the task
+# file it came from — re-copy before signing.
+
+--- a/docs/LOCKED_ANALYSIS.md
++++ b/docs/LOCKED_ANALYSIS.md
+@@ -1,13 +1,17 @@
+ # LOCKED_ANALYSIS.md — the analysis parameters I3/I4/I5 will use
+
+-> ## STATUS: **DRAFT — NOT YET FROZEN**
++> ## STATUS: FROZEN
+ >
+-> Signed and dated by: *(the human — nobody else)*
+-> Date frozen: `PENDING`
+-> Git sha at freeze: `PENDING`
++> Signed and dated by: Mahfuzur Rahman Chowdhury
++> Date frozen: `<DATE>`
++> Git sha at freeze: `<GIT_SHA>`
+ >
+-> Until those three lines are filled in, nothing in this file is locked and
+-> **no I3/I4 Phase-B job may run**. Once they are filled in, every value below
+-> is fixed: a later file REFERENCES this document rather than restating a
+-> parameter, and a change is a new dated section, never an edit in place.
++> Every value below is now FIXED. A later file REFERENCES this document
++> rather than restating a parameter, and a change is a new dated section,
++> never an edit in place. `saga/frozen/masks.py` and `tools/frozen_eval.py`
++> read this header and the D5 line at run time and refuse an I4 job while
++> either is missing, so the freeze is enforced by the code and not only by
++> this sentence.
++>
++> I3 Phase B ran on 2026-09-17, before the freeze, under the parameters this
++> document already had closed (D1, D2, D3, D6, D7). Its 8 × 610,000 records
++> are unaffected by anything amended below; §3 item 7 and §9 change how they
++> are ANALYSED, not what was measured.
+
+ @@ §3 item 1 — the reference condition @@
+-1. `original` — the gate's own map, through the replacement module (also the
+-   bit-exactness control)
++1. `original` — the unedited forward. It is the reference of every Δ and the
++   source of the cached native logits `max_abs_logit_diff_vs_native` is
++   measured against, which is why it is a plain forward and not a gate map
++   pushed through the replacement module.
++   **The bit-exactness control is `dihedral0`** (amended <DATE>): the
++   identity element of `DIHEDRAL_OPS`, i.e. the gate's own map through the
++   REPLACEMENT module, which §3 item 6 already requires to be bit-identical
++   to `original`. That is the check this item originally described, under
++   the name it actually has in `configs/frozen/I3_gate_edits.yaml`.
++   MEASURED on all 8 checkpoints of the I3 evaluation sweep: max |ΔNLL| =
++   0.000 and max |Δlogit| = 0.000, exactly.
+
+ @@ §3 item 7 — the spatial-component control @@
+-7. **energy-matched edit** (plan §5.5) — the spatial-component control:
+-   `Y^{π,energy} = Y^μ + (‖D^id‖_F / ‖D^π‖_F) · D^π`, single-layer so the
+-   incoming activations are identical. A zero denominator is handled
+-   explicitly and logged.
++7. **energy matching by STRATIFICATION** (amended <DATE>, replacing the
++   energy-matched edit `Y^{π,energy} = Y^μ + (‖D^id‖_F / ‖D^π‖_F) · D^π`).
++   ΔNLL is reported within **deciles of `delta_update_norm`**, computed per
++   checkpoint over the pooled edited conditions, so `mean`, `mean_half`,
++   `permute`, `ringperm` and `dihedral` are compared at equal injected
++   energy. `delta_update_norm` is ‖u_edit − u_native‖_F over the patch rows
++   of the attention-branch residual update at the edited block
++   (`saga/frozen/reference.py`).
++
++   REASON FOR THE AMENDMENT: the energy-matched edit was never run. It is
++   not one of the 61 conditions in `configs/frozen/I3_gate_edits.yaml`, no
++   forward pass for it exists in the I3 evaluation sweep, and adding it now
++   would mean a second sweep for a control that stratification already
++   provides from the records in hand. The per-image matching this item
++   described is used in I4, where a scalar ε makes it natural (§6).
++   Deciles are the LOCKED count; `analysis/frozen_I3_analysis.decile_edges`
++   is the one implementation and a test pins its determinism.
+
+ @@ §9 — multiplicity @@
+ Declared **primary contrasts only**:
+
+ 1. I3: `original` vs `permute`, and `permute` vs `permute_within_ring`, at
+    each of the two declared layers, on the two FRESH ViT-S/mixup SAGA pairs.
+ 2. I4: θ for the baseline-derived mask, per checkpoint, at ε = 0.10.
+ 3. I4 cross-method: θ(SAGA) − θ(baseline) on matched checkpoints, same
+    images, same coordinates.
+
++**Pre-declared SECONDARY contrasts (added <DATE>), reported beside the
++primaries under the same decision rule and never as a headline:** I3
++`mean` − `original`, and `permute` − `dihedral` over the 7 non-identity
++transforms. Both were named in the D7 table of `docs/TASK_B_I3_I4.md` §0
++before any evaluation number existed, so they are pre-declared rather than
++post hoc; they are implemented as `s1` and `s2` in
++`analysis/i34_contrasts.py` and carry `role = secondary` in `T_I3b`. The
++primary pair above is unchanged and remains the only pair that decides.
++
+ Everything else — every other layer, ε, architecture, recipe, the legacy
+
+ @@ §12 — the decision table @@
+-| D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | **OPEN** — blocks I4; no default. I1 owns it |
++| ~~D5~~ | 5 | ~~The discovery map at the INPUT to block 7/8 does not exist~~ | **CLOSED** — `configs/frozen/I4_masks.json`, sha256 (LF-normalised) `<MASKS_SHA256>`. Built by TASK A / I1 Phase C from the DISCOVERY split: `cell_mean_map` over the four ViT-S/mixup baselines at `in_b07` and `in_b08`, `fixed_cal` basis (D4), `topk_mask(k=16)` and `ring_matched_controls(n=10)`. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
++| D9 | — | I5 secondary endpoints | **CLOSED** — see below. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
++| D10 | — | I7 wording rule | **CLOSED** — see below. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
+
+ @@ new §13, appended at the end of the document @@
++
++## 13. D9 and D10 — Track C (I5, I7)
++
++Copied verbatim from `docs/TASK_C_I5_I7.md` §9.
++
++> **D9 (I5, secondary endpoints).** Correspondence readout on `sub2k` (2,000 evaluation images; sha recorded). Transforms T1 flip, T2 one‑patch translation via 240→224 offset crops, T3 two‑patch translation via 256→224; exact grid correspondence only. Descriptors: patch tokens at `s11_out` (primary), `hist`, `s12_post_norm`; L2‑normalized (primary) and image‑centred L2 (secondary). Cosine nearest neighbour; `acc_exact` primary, `acc_1` secondary; chance printed. Image‑level bootstrap 10,000, seed 0. Paired by seed where seeds match. I5b runs only on matched‑epoch weights present in the manifest. All I5 comparisons are secondary under D7.
++>
++> **D10 (I7, wording rule).** Incoming attention captured at `blocks[10]` and `blocks[11]` on `sub1k`, fused attention off for the dump, compared with MAD exceedance of the same block's input tokens. The paper uses "attention sink" only if, in both fresh ViT‑S/mixup baselines, at both blocks, for patch queries, mean incoming mass per exceedance token ≥ 3× that per non‑exceedance token with the bootstrap CI excluding 3; otherwise "high‑norm outlier tokens" throughout. The 3× is conventional and declared. Value‑norm ratio and register‑token mass are exploratory.
++
++Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>.
+
+--- a/tests/test_I4_perturbation.py
++++ b/tests/test_I4_perturbation.py
+@@ the embargo test @@
+-def test_the_real_repository_is_still_embargoed_today():
+-    """D5 is OPEN and LOCKED is a DRAFT on this checkout. If this test ever
+-    fails, the freeze has happened and I4 Phase B may run."""
+-    state = fmasks.locked_state()
+-    assert state["missing"], (
+-        "docs/LOCKED_ANALYSIS.md appears to be FROZEN with D5 closed — "
+-        "update this test and run I4 Phase B")
+-    assert state["frozen"] is False
++def test_the_repository_is_frozen_and_i4_may_run():
++    """The freeze took. D5 is closed, the header is signed, and the digest in
++    LOCKED matches the mask file on disk — so I4 Phase B may run.
++
++    This assertion is the INVERSE of the one that stood until the freeze
++    (`test_the_real_repository_is_still_embargoed_today`). It is flipped
++    rather than deleted because the embargo was a real state of this
++    repository and the suite should say which side of it we are on.
++    """
++    state = fmasks.locked_state()
++    assert state["missing"] == [], state["missing"]
++    assert state["frozen"] is True
++    assert state["d5_closed"] is True
++    assert state["date"] not in ("PENDING", "MISSING", "")
++    assert state["git_sha"] not in ("PENDING", "MISSING", "")
++    assert state["masks_sha"] == fmasks.file_sha256(fmasks.MASKS_FILE)
++
++
++def test_the_real_conditions_file_now_parses():
++    """The I4 document could not be parsed at all while D5 was open, because
++    `load_conditions` resolves every mask through the contract. After the
++    freeze it parses against the REAL mask file and declares 65 conditions."""
++    from saga.frozen.runner import load_conditions
++    doc = load_conditions(CONDITIONS)
++    assert len(doc["conditions"]) == 65
++    assert doc["masks_sha256"] == fmasks.file_sha256(fmasks.MASKS_FILE)
+
+
+# ── ONE THING NOBODY ASKED FOR, AND WHY IT IS HERE ──────────────────────────
+#
+# §9 of LOCKED and §4 of docs/TASK_B_I3_I4.md are now inconsistent, and
+# keeping §9 unchanged is what made them so.
+#
+# §4's interpretation guide was written against the D7 contrasts, where
+# C2 = permute − dihedral. Under §9's C2 = permute − permute_within_ring, its
+# MIDDLE BRANCH reads backwards:
+#
+#     §4 says:  C1 > 0 but C2 ≈ 0  →  "it uses the ring/symmetry structure
+#                                      but not the within-ring arrangement"
+#
+#     §9's C2:  permute − permute_within_ring ≈ 0 means an unrestricted
+#               permutation costs NO MORE than one that keeps every
+#               coordinate in its ring — i.e. the within-ring arrangement
+#               already accounts for the whole effect and ring membership
+#               adds nothing. The opposite of the sentence above.
+#
+# The other two branches are unaffected: C1 ≈ 0 and C2 ≈ 0 still reads as
+# "no use of arrangement beyond the per-head distribution" (a permutation
+# preserves each head's multiset exactly), and C1 > 0 with C2 > 0 still reads
+# as "uses the specific arrangement".
+#
+# `analysis/i34_contrasts.py` does NOT silently re-label it: `interpret_i3`
+# returns `GUIDE_CONFLICT` for that one branch and `T_I3b` carries it in its
+# own column, so a `ring_only` outcome is reported with both intervals and no
+# interpretation until this is signed.
+#
+# PROPOSED §4 AMENDMENT — a one-line replacement for that branch, which I
+# have NOT written into the patch above because it changes a task file rather
+# than the LOCKED document, and because the wording is the human's call:
+#
+#     C1 > 0 but C2 ≈ 0 → it uses the arrangement within rings, and ring
+#     membership adds nothing beyond it
+#
+# If you would rather leave §4 alone, the alternative is to let
+# GUIDE_CONFLICT stand and have Phase C report that branch with numbers and
+# no sentence. Both are defensible; neither should be decided by the code.

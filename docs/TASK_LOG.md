@@ -5394,3 +5394,116 @@ contrasts stand without C3.
   `figures_data/frozen/I3_primary.npz` is arguably redundant. I would still
   build it — it is what the bootstrap resamples and it keeps I3 and I4
   symmetric — but the human decides.
+
+## 2026-09-17 — TASK B — INCIDENT: 113 MiB of I3 parquet pushed to the remote, and the §9 reconciliation
+
+Two things on `task/B`, both consequences of earlier decisions of mine, both
+corrected here. No experimental number changed.
+
+### The incident
+
+**113.1 MiB of raw I3 records went to GitHub on 2026-09-17.** 16 files —
+`records.parquet` and `diag.parquet` for all 8 SAGA checkpoints — pushed in
+commit `4019071` from the HPC.
+
+**What happened.** `.gitignore` excludes I2's raw records by name
+(`results/frozen/I2_terminal/evaluation/*/records.parquet`) and had no
+equivalent for I3. I noticed the asymmetry, called it "not blocking", and
+offered to fix it afterwards. Before that happened, a broad `git add` on the
+cluster — made to pick up Track A's results — took the untracked I3 parquet
+with it. The `git add` I had written named only the four small artifact
+types and would not have caught them; the gap was the missing ignore rule,
+and the right moment to close it was before any push, not after.
+
+**What was NOT lost.** Every `run_meta.json` records the sha256 and byte size
+of the file it describes, written by `tools/frozen_eval.output_digests`. All
+16 were verified byte-for-byte against the committed files before anything
+was untracked: **16 of 16 match.** Provenance is intact either way.
+
+**What is done about it.**
+
+- `ecb3fc4` added the ignore rules for I3 AND I4, named per work package
+  rather than as a `results/frozen/**/records.parquet` wildcard, so a small
+  sweep on a small split stays committable by default and dropping a raw
+  record file out of git is always a deliberate line in that file. This is
+  what stops I4 adding another ~130 MiB.
+- The 16 files are now `git rm --cached` — untracked, still on disk, and
+  matched by the ignore rules so they cannot come back by accident.
+- **The blobs stay in history.** A rewrite with two other sessions pushing
+  to the same branch costs more than the bloat, and `git rm --cached` does
+  not shrink the pack anyway. Every clone pays the 113 MiB once; that is the
+  price of the mistake and it is not worth a history surgery to avoid.
+
+### `figures_data/frozen/I3_primary.npz` — built, and verified against the parquet
+
+`tools/build_I3_primary_pack.py` (new) writes the per-image pack task file §9
+always intended, which is now the only committed source of the per-image
+values:
+
+| array | dtype | content |
+|---|---|---|
+| `<run>__dnll` | float32 [60, 10000] | `nll(cond) − nll(original)` |
+| `<run>__dcorrect` | int8 [60, 10000] | `correct(cond) − correct(original)` |
+| `<run>__dun` | float32 [60, 10000] | `delta_update_norm` |
+| `<run>__native_nll` | float32 [10000] | so the absolute scale is recoverable |
+| `<run>__max_abs_logit_diff` | float32 [60] | per condition, not per image |
+| `<run>__image_ids`, `__conditions` | str | the split's own order |
+
+**30.1 MiB, 8 runs × 60 conditions × 10,000 images.**
+`max_abs_logit_diff_vs_native` is stored per CONDITION as its maximum: it
+answers a bit-identity question, and a per-image column would add 19 MB to
+answer it 10,000 times over.
+
+The Phase C reproduction check was run early, on three checkpoints, and
+**passes**: C1 and C2 rebuilt from the pack match the parquet-built values to
+|Δ| ≤ 5e-11, which is float32 storage precision. And on the real
+checkpoints, **`dihedral0` has max |ΔNLL| exactly 0.000 and max logit
+difference exactly 0.000** — the bit-identity control TASK B §7 requires,
+holding on real data and not only on a fake model.
+
+No verdict is recorded here. The C1/C2 point estimates exist but their
+intervals, the decision rule and the branch belong to Phase C, through
+`analysis/i34_contrasts.py`.
+
+### The §9 reconciliation, applied now
+
+The human resolved the §4-vs-§9 disagreement in favour of the SIGNED
+document, so `analysis/i34_contrasts.py` was corrected (`3a030f6`):
+
+| | now | through I3 Phase A |
+|---|---|---|
+| C1 (primary) | `perm` − `original` | `mean` − `original` |
+| C2 (primary) | `perm` − `ringperm` | `perm` − `dihedral`(t ≠ 0) |
+| S1 (secondary) | `mean` − `original` | — |
+| S2 (secondary) | `perm` − `dihedral`(t ≠ 0) | — |
+
+All four run under the same decision rule and land in `T_I3b` with a `role`
+column. **One branch of §4 does not survive this**, and the module flags it
+rather than papering over it: §4's middle branch reads "C1 > 0 but C2 ≈ 0 →
+uses the ring/symmetry structure but not the within-ring arrangement", which
+was written against the old C2. Under §9's C2, `perm − ringperm ≈ 0` means an
+unrestricted permutation costs no more than one that stays inside its rings —
+the within-ring arrangement accounts for the whole effect and ring membership
+adds NOTHING. The opposite reading. `interpret_i3` returns `GUIDE_CONFLICT`
+for that one branch, `T_I3b` carries it in its own column, and the freeze
+draft proposes the §4 amendment that closes it.
+
+### The freeze draft
+
+`docs/LOCKED_FREEZE_DRAFT.patch` — a reviewable patch, **not applied**, for
+the human to sign. It carries the `STATUS: FROZEN` header with date and sha
+placeholders, the D5 closure line with a mask-sha placeholder, the §3 item 1
+and item 7 amendments, the §9 secondary-contrast line, D9 and D10 copied from
+Track C, the §12 table rows, and the flip of
+`test_the_real_repository_is_still_embargoed_today` to assert the frozen
+state. It also proposes the §4 amendment above, which nobody asked for and
+which the §9 decision makes necessary.
+
+D9 and D10 are copied from `docs/TASK_C_I5_I7.md` §9, which lives on the
+**unmerged** `task/C` branch (`5d55023`). They may still change before Track
+C merges; the draft says so where they appear.
+
+### Tests
+
+`pytest -q`: **1062 passed, 2 failed, 30 skipped.** The two failures are
+Track A's, unchanged, untouched by instruction.
