@@ -55,6 +55,41 @@ def is_multistage(conditions: dict) -> bool:
     return any("stages" in c for c in conditions["conditions"])
 
 
+#: Conditions files that are EMBARGOED until the analysis parameters are
+#: frozen (TASK B §7). Matched on the file NAME, before the document is
+#: parsed, so that a malformed I4 document is refused for the right reason
+#: and an I4 job cannot start by naming no mask at all.
+EMBARGOED_GLOB = "I4_*.yaml"
+
+
+def assert_not_embargoed(conditions_path, *, locked_path=None,
+                         masks_path=None):
+    """Refuse an I4 conditions file until D5 is closed and LOCKED is FROZEN.
+
+    TASK B §7, the freeze guard. `docs/LOCKED_ANALYSIS.md` must carry the
+    header line `STATUS: FROZEN` with a date and a git sha, and D5 must be
+    closed with a sha256 that matches `configs/frozen/I4_masks.json`. The
+    refusal names every missing piece, so one run tells the human the whole
+    list.
+
+    I3 is deliberately NOT embargoed: the task file runs it immediately after
+    the merge, and everything it depends on (D1, D2, D3, D6, D7) is closed
+    and signed. Only the masks are open, and only I4 uses them.
+
+    The paths are arguments so the tests can exercise both states against a
+    fake LOCKED file without touching the real one.
+    """
+    from fnmatch import fnmatch
+
+    from saga.frozen import masks as fmasks
+
+    name = Path(conditions_path).name
+    if not fnmatch(name, EMBARGOED_GLOB):
+        return None
+    return fmasks.assert_frozen(locked_path or fmasks.LOCKED_FILE,
+                                masks_path=masks_path or fmasks.MASKS_FILE)
+
+
 class FrozenSplitDataset(torch.utils.data.Dataset):
     """A frozen split (tools/build_frozen_splits.py) as a dataset.
 
@@ -118,6 +153,14 @@ def main():
     device = torch.device(
         args.device if (torch.cuda.is_available()
                         or not args.device.startswith("cuda")) else "cpu")
+
+    # BEFORE the checkpoint is hashed and before the document is parsed: an
+    # embargoed work package must not consume a GPU-minute (TASK B §7).
+    try:
+        assert_not_embargoed(args.conditions)
+    except Exception as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
 
     row = load_manifest_row(args.manifest, args.run_id, args.ckpt_kind)
     sha = verify_checkpoint(row, args.ckpt)
