@@ -1,0 +1,47 @@
+{
+  "alignment": {
+    "10": "in_b10",
+    "11": "s11_out"
+  },
+  "arch": "vit_small",
+  "blocks": [
+    10,
+    11
+  ],
+  "capture_mechanism": "saga.attn_extract.capture_attention \u2014 the explicit post-softmax map is recomputed alongside the fused forward, which still produces the output; no fused_attn flag is toggled and none exists in saga/vit.py",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "8d980da27a4b571a117e82451c8c9deff126e437206faee5120e069d3667e10d",
+  "exceedance_primary": "mad",
+  "fused_attn_flags": {
+    "0": true,
+    "1": true,
+    "10": true,
+    "11": true,
+    "2": true,
+    "3": true,
+    "4": true,
+    "5": true,
+    "6": true,
+    "7": true,
+    "8": true,
+    "9": true
+  },
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_images": 1000,
+  "n_prefix": 1,
+  "n_records_appended": 1000,
+  "outputs": {
+    "incoming_mass.npz": 4287629
+  },
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "legacy_e2_vit_small_nomixdir_baseline",
+  "split_name": "sub1k",
+  "split_sha256": "6a38d1000b32f2ca0c5bcfd1187cde86258b2d45a4b1e4b47cfd5580fe088ef3",
+  "state_hash_after": "500a375d7065cb6104a49d84d2c3ccaf97e58029b25ff4f508a4a4ce7f4d5982",
+  "state_hash_before": "500a375d7065cb6104a49d84d2c3ccaf97e58029b25ff4f508a4a4ce7f4d5982",
+  "state_restored": true,
+  "tau_cal_s11_out": 18.698548316955566,
+  "variant": "baseline",
+  "work_package": "I7_attention"
+}

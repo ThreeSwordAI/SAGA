@@ -1,0 +1,22 @@
+{
+  "ckpt_sha256": "68d64007a4bcae2335cf7ead1fe698e1df73e48ef538f9727c46ddc186ffd5ab",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_conditions": 2,
+  "n_records_appended": 96000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vits_nomix_saga_s2",
+  "split_name": "sub2k",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "stage": "s11_out",
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "work_package": "I5_readout"
+}

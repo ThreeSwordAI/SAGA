@@ -1,0 +1,38 @@
+{
+  "alignment": {
+    "10": "in_b10",
+    "11": "s11_out"
+  },
+  "arch": "vit_small",
+  "blocks": [
+    10,
+    11
+  ],
+  "bytes": 4245795,
+  "capture_mechanism": "saga.attn_extract.capture_attention \u2014 the explicit post-softmax map is recomputed alongside the fused forward, which still produces the output; no fused_attn flag is toggled and none exists in saga/vit.py",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "92a03a4716ce07c0460eb132720d8a816aaa2bcde49713b86c57c774fef22995",
+  "conditions_file": "configs/frozen/I7_attention.yaml",
+  "device": "cuda",
+  "exceedance_primary": "mad",
+  "fused_attn_flags": {},
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_images": 1000,
+  "n_prefix": 1,
+  "out_dir": "results/frozen/I7_attention/sub1k/legacy_e2_vit_small_mixupdir_saga",
+  "path": "results/frozen/I7_attention/sub1k/legacy_e2_vit_small_mixupdir_saga/incoming_mass.npz",
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "legacy_e2_vit_small_mixupdir_saga",
+  "seed": 0,
+  "split": "results/frozen/splits/sub1k.json",
+  "split_name": "sub1k",
+  "split_sha256": "6a38d1000b32f2ca0c5bcfd1187cde86258b2d45a4b1e4b47cfd5580fe088ef3",
+  "state_hash_after": "e51e86ffaefa6650d1c3122586d4bc5a2b1ea578952fd9bac9bf0be2d67d2ce3",
+  "state_hash_before": "e51e86ffaefa6650d1c3122586d4bc5a2b1ea578952fd9bac9bf0be2d67d2ce3",
+  "state_restored": true,
+  "tau_cal_s11_out": 18.698548316955566,
+  "tau_cal_source": "results/frozen/I2_terminal/evaluation/thresholds_cal.json",
+  "variant": "saga",
+  "work_package": "I7_attention"
+}

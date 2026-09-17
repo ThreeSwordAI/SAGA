@@ -1,0 +1,62 @@
+{
+  "ckpt_sha256": "7ca33ed755106aa7f0d0b02ebf6ceb003808fc5dc3f78699538de1fba820e536",
+  "conditions": {
+    "native": {
+      "edit_type": "native",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I5_readout.yaml",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "device": "cuda",
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_records": 48000,
+  "n_skipped": 0,
+  "out_dir": "results/frozen/I5_readout/sub2k/legacy_e2_vit_small_nomixdir_registers",
+  "outputs": {
+    "corr_records.done.json": {
+      "bytes": 555,
+      "sha256": "f67da8d17dd243fbf90fd82d307d0e506debd36c49afa11bcfdbca8a1102bcb1"
+    },
+    "corr_records.parquet": {
+      "bytes": 546024,
+      "sha256": "e05c412504fac8897965984bdc5abf0edcbb6dd238bb7c329b84afe6130b5077"
+    }
+  },
+  "run_id": "legacy_e2_vit_small_nomixdir_registers",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/sub2k.json",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "state_hash_after": "350819ac7c68c02100d565f1d7385d1ce8c4bbc27ad08745d8224c08c328c968",
+  "state_hash_before": "350819ac7c68c02100d565f1d7385d1ce8c4bbc27ad08745d8224c08c328c968",
+  "state_restored": true,
+  "t0_matches_plain_forward": {
+    "hist": 0.0,
+    "n_images": 64,
+    "pair_members_identical": true,
+    "s11_out": 0.0,
+    "s12_post_norm": 0.0
+  },
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "ckpt_sha256": "cd926200127b98cbc597ddad82d84fd823376addc0ac1075a98de73b21e7d17d",
+  "conditions": {
+    "native": {
+      "edit_type": "native",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I5_readout.yaml",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "device": "cuda",
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_records": 48000,
+  "n_skipped": 0,
+  "out_dir": "results/frozen/I5_readout/sub2k/legacy_e2_vit_small_mixupdir_baseline",
+  "outputs": {
+    "corr_records.done.json": {
+      "bytes": 554,
+      "sha256": "92e003478989df5987b6d896c92be2d5ea3c831b5c3c214fbb1158ff75cf8aea"
+    },
+    "corr_records.parquet": {
+      "bytes": 537337,
+      "sha256": "39feb07de6f6b874749a8790bee46b25197c89ef662c9266e5a37053479b317d"
+    }
+  },
+  "run_id": "legacy_e2_vit_small_mixupdir_baseline",
+  "seed": 0,
+  "skipped_conditions": [
+    "term_1.00"
+  ],
+  "split": "results/frozen/splits/sub2k.json",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "state_hash_after": "92857374dd77333e9f8804bad8c4c63c85e84871a425e101c2cbe6a8b2b48360",
+  "state_hash_before": "92857374dd77333e9f8804bad8c4c63c85e84871a425e101c2cbe6a8b2b48360",
+  "state_restored": true,
+  "t0_matches_plain_forward": {
+    "hist": 0.0,
+    "n_images": 64,
+    "pair_members_identical": true,
+    "s11_out": 0.0,
+    "s12_post_norm": 0.0
+  },
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ]
+}

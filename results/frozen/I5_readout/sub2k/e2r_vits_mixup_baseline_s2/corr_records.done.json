@@ -1,0 +1,22 @@
+{
+  "ckpt_sha256": "baeee13f1864b926489bb186587ec65152fa8a935806fdf491971899db37ca7d",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_conditions": 1,
+  "n_records_appended": 48000,
+  "n_records_skipped": 0,
+  "run_id": "e2r_vits_mixup_baseline_s2",
+  "split_name": "sub2k",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "stage": "s11_out",
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "work_package": "I5_readout"
+}

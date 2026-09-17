@@ -1,0 +1,34 @@
+{
+  "alignment": {
+    "10": "in_b10",
+    "11": "s11_out"
+  },
+  "arch": "vit_small",
+  "blocks": [
+    10,
+    11
+  ],
+  "capture_mechanism": "saga.attn_extract.capture_attention \u2014 the explicit post-softmax map is recomputed alongside the fused forward, which still produces the output; no fused_attn flag is toggled and none exists in saga/vit.py",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "a482f5286b2c43ffa8d9f6606b1af24d06962421b808babfdd6b123a56b0f9ee",
+  "exceedance_primary": "mad",
+  "fused_attn_flags": {},
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_images": 1000,
+  "n_prefix": 1,
+  "n_records_appended": 1000,
+  "outputs": {
+    "incoming_mass.npz": 4264556
+  },
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "legacy_e2_vit_small_nomixdir_saga",
+  "split_name": "sub1k",
+  "split_sha256": "6a38d1000b32f2ca0c5bcfd1187cde86258b2d45a4b1e4b47cfd5580fe088ef3",
+  "state_hash_after": "714d05c42e877497aadd6510c661e84a0e7fbaf7dbb43e916e2fac3e0179bf94",
+  "state_hash_before": "714d05c42e877497aadd6510c661e84a0e7fbaf7dbb43e916e2fac3e0179bf94",
+  "state_restored": true,
+  "tau_cal_s11_out": 18.698548316955566,
+  "variant": "saga",
+  "work_package": "I7_attention"
+}

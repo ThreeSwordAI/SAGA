@@ -1,0 +1,22 @@
+{
+  "ckpt_sha256": "8d980da27a4b571a117e82451c8c9deff126e437206faee5120e069d3667e10d",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_conditions": 1,
+  "n_records_appended": 48000,
+  "n_records_skipped": 0,
+  "run_id": "legacy_e2_vit_small_nomixdir_baseline",
+  "split_name": "sub2k",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "stage": "s11_out",
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ],
+  "work_package": "I5_readout"
+}

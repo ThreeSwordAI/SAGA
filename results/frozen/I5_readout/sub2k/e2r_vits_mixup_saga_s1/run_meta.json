@@ -1,0 +1,74 @@
+{
+  "ckpt_sha256": "5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5",
+  "conditions": {
+    "native": {
+      "edit_type": "native",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_type": "terminal_gate_override",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I5_readout.yaml",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "device": "cuda",
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_records": 96000,
+  "n_skipped": 0,
+  "out_dir": "results/frozen/I5_readout/sub2k/e2r_vits_mixup_saga_s1",
+  "outputs": {
+    "corr_records.done.json": {
+      "bytes": 539,
+      "sha256": "b38df8644826a6239e26e5ec46d9f734684978daeb176d783831d5bd746ca4fe"
+    },
+    "corr_records.parquet": {
+      "bytes": 989969,
+      "sha256": "8db5ad53cf2530829f75466bde3625f984eda3cfdc76cbacafb74cbe7c94486d"
+    }
+  },
+  "run_id": "e2r_vits_mixup_saga_s1",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/sub2k.json",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "state_hash_after": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+  "state_hash_before": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+  "state_restored": true,
+  "t0_matches_plain_forward": {
+    "hist": 0.0,
+    "n_images": 64,
+    "pair_members_identical": true,
+    "s11_out": 0.0,
+    "s12_post_norm": 0.0
+  },
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ]
+}

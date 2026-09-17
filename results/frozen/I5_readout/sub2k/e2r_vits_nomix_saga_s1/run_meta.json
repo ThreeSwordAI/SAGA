@@ -1,0 +1,74 @@
+{
+  "ckpt_sha256": "88f72869bae5882f6b8c0791c69ffea51ae55247276106e60d817f27e2a646ce",
+  "conditions": {
+    "native": {
+      "edit_type": "native",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    },
+    "term_1.00": {
+      "edit_type": "terminal_gate_override",
+      "rows_per_transform": {
+        "T0": 12000,
+        "T1": 12000,
+        "T2": 12000,
+        "T3": 12000
+      },
+      "stages": [
+        "s11_out",
+        "hist",
+        "s12_post_norm"
+      ]
+    }
+  },
+  "conditions_file": "configs/frozen/I5_readout.yaml",
+  "descriptors": [
+    "l2",
+    "centred_l2"
+  ],
+  "device": "cuda",
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_records": 96000,
+  "n_skipped": 0,
+  "out_dir": "results/frozen/I5_readout/sub2k/e2r_vits_nomix_saga_s1",
+  "outputs": {
+    "corr_records.done.json": {
+      "bytes": 539,
+      "sha256": "3a56818665cc0d06560fa32fa50a8d922b5501f1f6d1b02fffdad0cd7d190fa7"
+    },
+    "corr_records.parquet": {
+      "bytes": 884071,
+      "sha256": "839f691e8323236cbaf08988c652799c6ebff1106a8fa82080cc0de884cd8aae"
+    }
+  },
+  "run_id": "e2r_vits_nomix_saga_s1",
+  "seed": 0,
+  "skipped_conditions": [],
+  "split": "results/frozen/splits/sub2k.json",
+  "split_sha256": "d2fc8b5b4c5ab40928c1ea861f21a3b561c0654a93479048773802568d338117",
+  "state_hash_after": "61cc4ae360b4e702f1b707adb643b55f870221b687192ae7ced54e986724619f",
+  "state_hash_before": "61cc4ae360b4e702f1b707adb643b55f870221b687192ae7ced54e986724619f",
+  "state_restored": true,
+  "t0_matches_plain_forward": {
+    "hist": 0.0,
+    "n_images": 64,
+    "pair_members_identical": true,
+    "s11_out": 0.0,
+    "s12_post_norm": 0.0
+  },
+  "transforms": [
+    "T0",
+    "T1",
+    "T2",
+    "T3"
+  ]
+}

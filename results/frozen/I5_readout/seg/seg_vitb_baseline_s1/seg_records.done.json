@@ -1,0 +1,11 @@
+{
+  "ckpt_sha256": "d3aeca644c10b9b255a15371c9e79a10e553ecd0ffd6f650075f6861ef109100",
+  "conditions": [
+    "native"
+  ],
+  "git_sha": "195467c2ad0d8930e7d24174bb02f25b43d22f87",
+  "n_images": 2000,
+  "run_id": "seg_vitb_baseline_s1",
+  "state_restored": true,
+  "work_package": "I5b_seg"
+}
