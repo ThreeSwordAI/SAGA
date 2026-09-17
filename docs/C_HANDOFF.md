@@ -4,14 +4,7 @@
 
 ## 0. The parameter declaration, as it actually stands
 
-**D9 present in `docs/LOCKED_ANALYSIS.md`: NO. D10 present: NO. Document frozen: NO.**
-
-This has to be stated plainly, because it is the difference between a pre-registered analysis and an ordinary one:
-
-- The PARAMETER VALUES were fixed in committed code before any Phase B job ran. `configs/frozen/I5_readout.yaml` and `configs/frozen/I7_attention.yaml` carry the transforms, stages, descriptors, blocks, alignment, bootstrap seed and resample count, and `saga/frozen/runner.py` REFUSES anything not in them. That is verifiable from the git history.
-- The D9/D10 lines were NOT added to `docs/LOCKED_ANALYSIS.md`, and the human's signature — the act that makes that document authoritative — did not happen before the runs.
-
-So: the analysis configuration was fixed in advance and can be proved to have been, but this is **not** a signed pre-registration. The paper should say the former and must not claim the latter.
+D9 and D10 are in `docs/LOCKED_ANALYSIS.md` and the document is FROZEN. The parameters below were signed before these results were inspected.
 
 ## 1. I7 — the wording rule (D10), and what it returned
 

@@ -14,11 +14,13 @@ the evaluation outcomes were inspected" a property of the repository:
                                    and a git sha, and must close D5 with a
                                    sha256 that matches that file
 
-Neither exists yet. D5 is still OPEN and the LOCKED document is still a
-DRAFT, so `load_masks` refuses today and will keep refusing until the human
-closes both. That refusal IS the deliverable: the loader, the guard and
-their tests are written now, against a schema TASK A §8 fixed, so that
-closing D5 is the only thing left to do.
+Both are now in place. D5 was closed and the document signed on 2026-09-17
+at git `5c1b737`, and `load_masks` opens. Until then it refused, and that
+refusal was the deliverable — the loader, the guard and their tests were
+written against a schema TASK A §8 had fixed, before the file existed, so
+that closing D5 was the only thing left to do. The refusal path is still
+live and still tested: it is what a later rebuild of the masks, or an edit
+to the signed document, would run into.
 
 THE TWO FILES ARE CHECKED AGAINST EACH OTHER, NOT JUST READ
 ------------------------------------------------------------
@@ -74,6 +76,23 @@ STAGE_FOR_LAYER = {v: k for k, v in BLOCK_INPUT_STAGES.items()}
 #: The header line the freeze writes. Matched case-sensitively: `FROZEN` is
 #: a state, and a file that says `frozen` in prose has not been signed.
 FROZEN_MARKER = "STATUS: FROZEN"
+
+#: ...but the document is MARKDOWN, and `**` is presentation. The draft head
+#: was `STATUS: **DRAFT — NOT YET FROZEN**`, so a freeze written in the same
+#: style would say `STATUS: **FROZEN**` — which does NOT contain the literal
+#: above, because the asterisks sit between the colon and the word.
+#:
+#: That bit on 2026-09-17: this module accepted `STATUS: FROZEN` while
+#: `analysis/build_C_handoff.py` tested for `STATUS: **FROZEN**`, so one of
+#: the two had to be wrong about a frozen document no matter which style the
+#: human used. Detection is now emphasis-insensitive in both places; the
+#: STATE is what matters and the asterisks are not part of it.
+FROZEN_RE = re.compile(r"STATUS:\s*(?:\*+\s*)?FROZEN")
+
+
+def says_frozen(text: str) -> bool:
+    """True when the document's header declares the freeze, in either style."""
+    return bool(FROZEN_RE.search(text))
 
 #: The document's own convention for a CLOSED decision — a struck-through id,
 #: as D1/D2/D3/D4/D6/D7/D8 already use it. `tests/test_I3_permutations.py`
@@ -155,7 +174,7 @@ def locked_state(locked_path=LOCKED_FILE, *, masks_path=MASKS_FILE) -> dict:
         return state
     text = p.read_text(encoding="utf-8")
 
-    state["frozen"] = FROZEN_MARKER in text
+    state["frozen"] = says_frozen(text)
     if not state["frozen"]:
         state["missing"].append(
             f"{p} does not carry the header line '{FROZEN_MARKER}' — it is "

@@ -189,8 +189,8 @@ def test_the_handoff_reports_the_d9_d10_status_truthfully():
         pytest.skip("handoff not present")
     locked = (REPO / "docs" / "LOCKED_ANALYSIS.md").read_text(encoding="utf-8")
     text = HANDOFF.read_text(encoding="utf-8")
-    signed = ("D9" in locked and "D10" in locked
-              and "STATUS: **FROZEN**" in locked)
+    from saga.frozen.masks import says_frozen
+    signed = ("D9" in locked and "D10" in locked and says_frozen(locked))
     if signed:
         assert "signed before these results were inspected" in text
     else:

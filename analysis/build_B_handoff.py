@@ -140,6 +140,17 @@ def _fmt(v, nd=5):
         return str(v)
 
 
+def _is_true(v) -> bool:
+    """A boolean cell as `fmt()` writes it.
+
+    `analysis/build_I2_tables.fmt` renders a bool as `1`/`0`, not
+    `True`/`False`. Checking for the word silently dropped EVERY deciding
+    checkpoint from the first render of this document — the tables were
+    right and the handoff was empty.
+    """
+    return str(v).strip().lower() in ("1", "true", "yes")
+
+
 def contrast_rows(rows, contrast, role=None):
     out = [r for r in rows if r.get("contrast") == contrast]
     if role is not None:
@@ -197,23 +208,44 @@ def build(*, locked_path=None, masks_path=None, allow_unfrozen=False,
     if not i3b and not i4b:
         A.append("> **PENDING.** Neither `T_I3b_contrasts.csv` nor "
                  "`T_I4b_contrast.csv` is present; Phase C has not run.")
-    for label, rows, cname in (("C1", i3b, "C1"), ("C2", i3b, "C2"),
-                               ("C3", i4b, "C3")):
+    # PER LAYER. The two layers are two separate experiments on the same
+    # checkpoints — a row that does not say which one it belongs to reads as
+    # a duplicate of its neighbour, and a sign summary pooled over both hides
+    # a pattern that holds in one and not the other.
+    for cname, rows in (("C1", i3b), ("C2", i3b), ("C3", i4b)):
         sel = contrast_rows(rows, cname)
         if not sel:
-            A.append(f"- **{label}** — MISSING (no rows in the table).")
+            A.append(f"- **{cname}** — MISSING (no rows in the table).")
             continue
-        deciding = [r for r in sel if str(r.get("decides")).lower() == "true"]
-        verdict = sorted({r.get("verdict", MISSING) for r in sel})
-        branch = sorted({r.get("branch", MISSING) for r in sel
+        layers = sorted({r.get("layer") for r in sel}, key=lambda x: str(x))
+        verdicts = sorted({r.get("verdict", MISSING) for r in sel})
+        A.append(f"- **{cname}** — verdict {', '.join(verdicts) or MISSING}")
+        for layer in layers:
+            at = [r for r in sel if r.get("layer") == layer]
+            deciding = [r for r in at if _is_true(r.get("decides"))]
+            if not deciding:
+                continue
+            A.append(f"    - **layer {layer}** ({len(deciding)} deciding):")
+            for r in deciding:
+                A.append(f"        - `{r.get('run_id')}` "
+                         f"{_fmt(r.get('mean_nats'))} nats "
+                         f"[{_fmt(r.get('ci_lo'))}, {_fmt(r.get('ci_hi'))}], "
+                         f"Δtop-1 {_fmt(r.get('delta_top1_points'), 3)} pts")
+            signs = {("negative" if float(r["mean_nats"]) < 0 else "positive")
+                     for r in deciding
+                     if r.get("mean_nats") not in ("", MISSING)}
+            excl = sum(1 for r in deciding if _is_true(r.get("excludes_zero")))
+            line = (f"        - sign "
+                    f"{'consistent (' + signs.pop() + ')' if len(signs) == 1 else 'mixed'}"
+                    f"; {excl} of {len(deciding)} intervals exclude zero")
+            if cname == "C3":
+                inside = sum(1 for r in deciding
+                             if _is_true(r.get("primary_inside_band")))
+                line += (f"; θ(primary) inside the control band on "
+                         f"{inside} of {len(deciding)}")
+            A.append(line)
+        branch = sorted({r.get("branch") for r in sel
                          if r.get("branch") not in (None, "", MISSING)})
-        A.append(f"- **{label}** — verdict {', '.join(verdict) or MISSING}"
-                 f"; {len(deciding)} deciding checkpoint(s).")
-        for r in deciding:
-            A.append(f"    - `{r.get('run_id')}` "
-                     f"{_fmt(r.get('mean_nats'))} nats "
-                     f"[{_fmt(r.get('ci_lo'))}, {_fmt(r.get('ci_hi'))}], "
-                     f"Δtop-1 {_fmt(r.get('delta_top1_points'), 3)} pts")
         if branch:
             A.append(f"    - branch: **{', '.join(branch)}**")
     A.append("")
@@ -227,13 +259,15 @@ def build(*, locked_path=None, masks_path=None, allow_unfrozen=False,
              "(LOCKED §9, TASK B §4).")
     A.append("")
     if sec:
-        A.append("| contrast | run_id | nats | CI | verdict |")
-        A.append("|---|---|---|---|---|")
-        for r in sec:
-            if str(r.get("decides")).lower() != "true":
+        A.append("| contrast | layer | run_id | nats | CI | verdict |")
+        A.append("|---|---|---|---|---|---|")
+        for r in sorted(sec, key=lambda x: (x.get("contrast", ""),
+                                            str(x.get("layer")),
+                                            x.get("run_id", ""))):
+            if not _is_true(r.get("decides")):
                 continue
-            A.append(f"| {r.get('contrast')} | `{r.get('run_id')}` | "
-                     f"{_fmt(r.get('mean_nats'))} | "
+            A.append(f"| {r.get('contrast')} | {r.get('layer')} | "
+                     f"`{r.get('run_id')}` | {_fmt(r.get('mean_nats'))} | "
                      f"[{_fmt(r.get('ci_lo'))}, {_fmt(r.get('ci_hi'))}] | "
                      f"{r.get('verdict')} |")
     else:
@@ -253,8 +287,11 @@ def build(*, locked_path=None, masks_path=None, allow_unfrozen=False,
     A.append("")
     A.append(f"- I3 strata rows: {len(i3c) or MISSING}")
     worst = i4meta.get("energy_rel_error_max", MISSING)
+    # scientific notation: the achieved match is ~1e-07, and six decimals
+    # renders that as "0.000000", which reads as "not measured"
     A.append(f"- I4 largest `energy_rel_error` observed: "
-             f"**{_fmt(worst, 6)}** (tolerance 0.01)")
+             f"**{MISSING if worst in (None, MISSING) else f'{float(worst):.3e}'}** "
+             f"(tolerance 0.01)")
     A.append("- Unmatched controls (`*_e10f_*`) are reported beside the "
              "matched ones; the gap between them is the size of the energy "
              "confound, reported rather than removed.")
