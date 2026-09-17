@@ -256,10 +256,10 @@ def load_conditions(conditions_yaml, *, masks_path=None, locked_path=None):
             f"`diag: false`. Nothing is captured for them, so the stage list "
             f"would describe a measurement that never happens")
     doc.setdefault("precision", "fp32")
-    _resolve_permutations(conditions_yaml, doc)       # TASK B / I3 hook
+    _resolve_permutations(conditions_yaml, doc)
     _resolve_masks(conditions_yaml, doc, masks_path=masks_path,
-                   locked_path=locked_path)          # TASK B / I4 hook
-    _check_energy_match(conditions_yaml, doc)        # TASK B / I4 hook
+                   locked_path=locked_path)
+    _check_energy_match(conditions_yaml, doc)
     _c_check_readout_block(conditions_yaml, doc)      # TASK C / I5 hook
     _c_check_attention_block(conditions_yaml, doc)    # TASK C / I7 hook
     return doc
