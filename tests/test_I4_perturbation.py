@@ -66,28 +66,57 @@ HEADS = 3
 # A fake D5 mask file, and a fake freeze
 # ─────────────────────────────────────────────────────────────────────────────
 
+#: The discovery split's CANONICAL digest, which is what
+#: `analysis/build_D5_masks.py` stamps into the file. TASK A / I1 Phase C
+#: found that the discovery split predates `build_frozen_splits.py` and
+#: records no sha of its own, so the FILE digest (`0a686340…`) and this one
+#: differ; their allow-list accepts both.
+DISCOVERY_CANONICAL = (
+    "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5")
+
+
 def _fake_masks_doc(side=SIDE, k=PRIMARY_MASK_K, n_controls=N_CONTROL_MASKS):
-    """A schema-valid mask file. Ring-matched by construction.
+    """A fake mask file in the REAL `i4_masks_v1` schema.
+
+    Keyed by STAGE with `primary_mask.index` and `controls[j].index`, the
+    shape `analysis/build_D5_masks.py` actually writes — not the flat
+    `{mask_id: [...]}` this fixture used before the real file landed on
+    2026-09-17. A fixture in a schema nothing produces tests nothing.
 
     The primary takes the first `k` positions of ring 1 — the ring TASK-07
-    found the sinks on — and each control takes a different, disjoint slice
-    of the SAME ring, so every control has the primary's ring composition
-    without needing the real selection machinery.
+    found the sinks on — and each control takes a different slice of the SAME
+    ring, so every control is ring-matched without the selection machinery.
     """
     ring1 = ring_indices(side, 1).tolist()
     assert len(ring1) >= k * 2, "ring 1 is too small for this fixture"
     primary = sorted(ring1[:k])
+    rest = ring1[k:]
     masks = {}
     for layer in LAYERS:
-        masks[fmasks.primary_id(layer)] = primary
+        stage = fmasks.STAGE_FOR_LAYER[layer]
+        controls = []
         for j in range(n_controls):
-            start = (k + j * 2) % (len(ring1) - k)
-            masks[fmasks.control_id(j, layer)] = sorted(
-                ring1[k:][start:start + k]
-                + ring1[k:][:max(0, k - len(ring1[k:][start:start + k]))])
-    return {"grid_side": side, "masks": masks, "split_sha256": "d" * 64,
-            "basis": "fixed_cal", "git_sha": "c" * 40, "k": k,
-            "n_controls": n_controls}
+            start = (j * 2) % max(1, len(rest) - k)
+            take = rest[start:start + k]
+            take = take + rest[:k - len(take)] if len(take) < k else take
+            controls.append({"index": sorted(take), "seed": 200 + j,
+                             "overlap_with_primary": 0})
+        masks[stage] = {
+            "stage": stage, "grid_side": side,
+            "block_entered_0based": layer, "paper_block_1based": layer + 1,
+            "discovery_split_sha256": DISCOVERY_CANONICAL,
+            "tau_cal": 14.0, "n_images": 10000, "n_positions": side * side,
+            "n_prefix": 1, "source_run_ids": ["fake_baseline_s1"],
+            "primary_mask": {"index": primary,
+                             "ring_composition": {"1": k}},
+            "controls": controls,
+        }
+    return {"schema": fmasks.SCHEMA, "work_package": "I1_spatial",
+            "masks": masks, "cell": "vit_small|mixup", "basis": "fixed_cal",
+            "git_sha": "c" * 40, "k": k, "n_controls": n_controls,
+            "control_seeds": list(range(200, 200 + n_controls)),
+            "discovery_split_name": "val_diag_split",
+            "generated_by": "tests/test_I4_perturbation.py"}
 
 
 @pytest.fixture
@@ -96,6 +125,27 @@ def fake_masks(tmp_path):
     p.write_text(json.dumps(_fake_masks_doc(), indent=2, sort_keys=True),
                  encoding="utf-8", newline="\n")
     return p
+
+
+def _index_of(doc, mask_id):
+    """The `index` list of one mask id inside the nested `i4_masks_v1` doc."""
+    for stage, block in doc["masks"].items():
+        layer = fmasks.BLOCK_INPUT_STAGES[stage]
+        if mask_id == fmasks.primary_id(layer):
+            return block["primary_mask"]
+        for j, ctrl in enumerate(block["controls"]):
+            if mask_id == fmasks.control_id(j, layer):
+                return ctrl
+    raise KeyError(mask_id)
+
+
+def _rewrite(tmp_path, doc, name):
+    """Write a mutated doc and a matching frozen LOCKED for it."""
+    p = tmp_path / name
+    p.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8",
+                 newline="\n")
+    return p, _locked(tmp_path, frozen=True, masks_path=p,
+                      name=name + ".LOCKED.md")
 
 
 def _locked(tmp_path, *, frozen: bool, masks_path=None, name="LOCKED.md"):
@@ -155,8 +205,8 @@ def test_the_guard_refuses_a_mask_file_that_changed_after_the_freeze(
     """The failure this check exists for is not a missing file — it is a file
     quietly regenerated between the freeze and the run."""
     doc = json.loads(fake_masks.read_text(encoding="utf-8"))
-    doc["masks"][fmasks.primary_id(7)] = sorted(
-        doc["masks"][fmasks.primary_id(7)][:-1] + [195])
+    entry = _index_of(doc, fmasks.primary_id(7))
+    entry["index"] = sorted(entry["index"][:-1] + [195])
     fake_masks.write_text(json.dumps(doc, indent=2, sort_keys=True),
                           encoding="utf-8", newline="\n")
     with pytest.raises(fmasks.MaskError, match="does not record the digest"):
@@ -188,6 +238,98 @@ def test_frozen_eval_embargoes_I4_and_only_I4(tmp_path, fake_masks,
                              locked_path=_locked(tmp_path, frozen=False,
                                                  name="D.md"),
                              masks_path=fake_masks)
+
+
+REAL_MASKS = REPO / "configs" / "frozen" / "I4_masks.json"
+
+
+@pytest.mark.skipif(not REAL_MASKS.exists(),
+                    reason="D5's mask file is not in this checkout")
+def test_the_REAL_d5_file_satisfies_this_contract():
+    """The cross-track check. TASK A / I1 Phase C writes this file and I4
+    reads it; nothing else verifies that the two agree.
+
+    It landed on 2026-09-17 keyed by STAGE (`in_b07`, `in_b08`) with
+    `primary_mask.index` and `controls[j].index`, not by the flat
+    `{mask_id: [...]}` this loader first assumed — so `_flatten` exists, and
+    this test is what would have caught the mismatch before an HPC job did.
+    """
+    loaded = fmasks.load_masks(REAL_MASKS, require_freeze=False)
+    assert set(loaded["masks"]) == set(fmasks.expected_mask_ids())
+    assert loaded["grid_side"] == SIDE
+    for mask_id, idx in loaded["masks"].items():
+        assert idx.size == PRIMARY_MASK_K, mask_id
+        assert idx.min() >= 0 and idx.max() < N_POSITIONS, mask_id
+    # every control ring-matched to its primary — enforced by the loader,
+    # asserted here against the REAL draws
+    for layer in LAYERS:
+        primary = loaded["ring_composition"][fmasks.primary_id(layer)]
+        assert primary == {1: 14, 2: 2}, primary
+        for j in range(N_CONTROL_MASKS):
+            assert loaded["ring_composition"][
+                fmasks.control_id(j, layer)] == primary
+
+
+@pytest.mark.skipif(not REAL_MASKS.exists(),
+                    reason="D5's mask file is not in this checkout")
+def test_the_REAL_d5_file_reproduces_track_As_reported_numbers():
+    """Independent reproduction of the three numbers TASK A's Phase C log
+    reports for D5. Two modules built from the same file by different code
+    must agree, or one of them is wrong."""
+    loaded = fmasks.load_masks(REAL_MASKS, require_freeze=False)
+    # 1. the digest LOCKED will be signed against
+    assert loaded["sha256"] == (
+        "72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e")
+    # 2. both primaries are the SAME 16 coordinates, so I4's two sites differ
+    #    in DEPTH alone with the address held fixed
+    assert loaded["primaries_identical"] is True
+    assert loaded["masks"]["P_L7"].tolist() == [
+        15, 16, 17, 20, 25, 26, 29, 30, 39, 40, 43, 54, 166, 169, 179, 180]
+    # 3. control overlap with the primary sits in 2..6 around the analytic
+    #    expectation 4.566 — reported, never used to reject a draw (LOCKED §5)
+    for layer in LAYERS:
+        overlap = list(fmasks.mask_overlap(loaded["masks"], layer).values())
+        assert len(overlap) == N_CONTROL_MASKS
+        assert min(overlap) >= 2 and max(overlap) <= 6, overlap
+
+
+@pytest.mark.skipif(not REAL_MASKS.exists(),
+                    reason="D5's mask file is not in this checkout")
+def test_the_real_file_is_still_refused_while_locked_is_a_draft():
+    """The file existing is NOT the freeze. D5 must also be closed in
+    LOCKED_ANALYSIS with this digest, and the header signed."""
+    with pytest.raises(fmasks.MaskError, match="EMBARGOED"):
+        fmasks.load_masks(REAL_MASKS, require_freeze=True)
+
+
+def test_a_file_in_an_unknown_schema_is_refused(tmp_path, fake_masks):
+    doc = json.loads(fake_masks.read_text(encoding="utf-8"))
+    doc["schema"] = "i4_masks_v2"
+    p, locked = _rewrite(tmp_path, doc, "v2.json")
+    with pytest.raises(fmasks.MaskError, match="declares schema"):
+        fmasks.load_masks(p, locked_path=locked)
+
+
+def test_a_stage_that_disagrees_about_its_block_is_refused(tmp_path,
+                                                           fake_masks):
+    """The off-by-one that would silently perturb the wrong block."""
+    doc = json.loads(fake_masks.read_text(encoding="utf-8"))
+    doc["masks"]["in_b07"]["block_entered_0based"] = 8
+    p, locked = _rewrite(tmp_path, doc, "offby1.json")
+    with pytest.raises(fmasks.MaskError, match="says it enters block"):
+        fmasks.load_masks(p, locked_path=locked)
+
+
+def test_a_mask_file_built_from_reporting_data_is_refused(tmp_path,
+                                                          fake_masks):
+    """Masks are SELECTED on discovery. A file naming the evaluation split
+    is refused here as firmly as prevalence.py would refuse to build it."""
+    doc = json.loads(fake_masks.read_text(encoding="utf-8"))
+    doc["masks"]["in_b07"]["discovery_split_sha256"] = (
+        "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014")
+    p, locked = _rewrite(tmp_path, doc, "evalsplit.json")
+    with pytest.raises(fmasks.MaskError, match="EVALUATION"):
+        fmasks.load_masks(p, locked_path=locked)
 
 
 def test_the_real_repository_is_still_embargoed_today():
@@ -228,38 +370,29 @@ def test_every_control_is_ring_matched_to_its_primary(fake_masks,
 
 def test_a_control_that_is_not_ring_matched_is_refused(tmp_path, fake_masks):
     doc = json.loads(fake_masks.read_text(encoding="utf-8"))
-    centre = [p for p in range(N_POSITIONS)
-              if ring_composition([p], SIDE) == {6: 1}]
-    doc["masks"][fmasks.control_id(0, 7)] = sorted(
-        doc["masks"][fmasks.control_id(0, 7)][:-1] + centre[:1])
-    p = tmp_path / "bad_masks.json"
-    p.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8",
-                 newline="\n")
-    locked = _locked(tmp_path, frozen=True, masks_path=p, name="L2.md")
+    centre = [q for q in range(N_POSITIONS)
+              if ring_composition([q], SIDE) == {6: 1}]
+    entry = _index_of(doc, fmasks.control_id(0, 7))
+    entry["index"] = sorted(entry["index"][:-1] + centre[:1])
+    p, locked = _rewrite(tmp_path, doc, "bad_masks.json")
     with pytest.raises(fmasks.MaskError, match="not ring-matched"):
         fmasks.load_masks(p, locked_path=locked)
 
 
 def test_a_control_of_a_different_size_is_refused(tmp_path, fake_masks):
     doc = json.loads(fake_masks.read_text(encoding="utf-8"))
-    doc["masks"][fmasks.control_id(1, 8)] = \
-        doc["masks"][fmasks.control_id(1, 8)][:-1]
-    p = tmp_path / "short.json"
-    p.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8",
-                 newline="\n")
-    locked = _locked(tmp_path, frozen=True, masks_path=p, name="L3.md")
+    entry = _index_of(doc, fmasks.control_id(1, 8))
+    entry["index"] = entry["index"][:-1]
+    p, locked = _rewrite(tmp_path, doc, "short.json")
     with pytest.raises(fmasks.MaskError, match="coordinates but"):
         fmasks.load_masks(p, locked_path=locked)
 
 
 def test_a_missing_mask_id_is_refused(tmp_path, fake_masks):
     doc = json.loads(fake_masks.read_text(encoding="utf-8"))
-    del doc["masks"][fmasks.control_id(9, 8)]
-    p = tmp_path / "gap.json"
-    p.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8",
-                 newline="\n")
-    locked = _locked(tmp_path, frozen=True, masks_path=p, name="L4.md")
-    with pytest.raises(fmasks.MaskError, match="missing:"):
+    doc["masks"]["in_b08"]["controls"].pop()
+    p, locked = _rewrite(tmp_path, doc, "gap.json")
+    with pytest.raises(fmasks.MaskError, match="9 controls, expected 10"):
         fmasks.load_masks(p, locked_path=locked)
 
 
@@ -267,12 +400,9 @@ def test_a_token_indexed_mask_is_refused(tmp_path, fake_masks):
     """The exact bug the guard exists for: a mask written against TOKEN
     indices would silently perturb a CLS or register row."""
     doc = json.loads(fake_masks.read_text(encoding="utf-8"))
-    doc["masks"][fmasks.primary_id(7)] = sorted(
-        doc["masks"][fmasks.primary_id(7)][:-1] + [N_POSITIONS + 3])
-    p = tmp_path / "tok.json"
-    p.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8",
-                 newline="\n")
-    locked = _locked(tmp_path, frozen=True, masks_path=p, name="L5.md")
+    entry = _index_of(doc, fmasks.primary_id(7))
+    entry["index"] = sorted(entry["index"][:-1] + [N_POSITIONS + 3])
+    p, locked = _rewrite(tmp_path, doc, "tok.json")
     with pytest.raises(fmasks.MaskError, match="PATCH coordinates"):
         fmasks.load_masks(p, locked_path=locked)
 
