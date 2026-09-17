@@ -1,24 +1,36 @@
 # DRAFT — the freeze of docs/LOCKED_ANALYSIS.md.  NOT APPLIED.
 #
 # Prepared 2026-09-17 by Claude Code on task/B at the human's request.
-# Review, fill the three <PLACEHOLDER> values, then:
+# Review, fill the two <PLACEHOLDER> values, then:
 #
 #     git apply --check docs/LOCKED_FREEZE_DRAFT.patch   # dry run first
 #     git apply         docs/LOCKED_FREEZE_DRAFT.patch
 #
-# THREE PLACEHOLDERS, all of which only the human can fill:
-#   <DATE>          the date of the freeze, e.g. 2026-09-18
-#   <GIT_SHA>       the commit the freeze is signed at
-#   <MASKS_SHA256>  sha256 of configs/frozen/I4_masks.json, LF-normalised,
-#                   which does not exist yet. Get it with:
-#                     python -c "from saga.frozen.masks import file_sha256; \
-#                                print(file_sha256('configs/frozen/I4_masks.json'))"
+# TWO PLACEHOLDERS, both of which only the human can fill:
+#   <DATE>      the date of the freeze, e.g. 2026-09-18
+#   <GIT_SHA>   the commit the freeze is signed at
 #
-# PRECONDITION: this patch closes D5, so TASK A / I1 Phase C must have
-# written configs/frozen/I4_masks.json FIRST. Applying it before that file
-# exists produces a document that claims a digest for nothing, and
-# saga/frozen/masks.py will refuse the mismatch — loudly, which is the
-# intended behaviour, but it is better not to get there.
+# THE THIRD IS NO LONGER A PLACEHOLDER. It was drafted as <MASKS_SHA256>
+# because configs/frozen/I4_masks.json did not exist. TASK A / I1 Phase C
+# landed it later the same day, so the digest below is the real one:
+#
+#   72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e
+#
+# VERIFIED three ways, not copied from Track A's log:
+#   * saga.frozen.masks.file_sha256 computes it from the committed file and
+#     it equals the value Track A's Phase C log reports;
+#   * tests/test_I4_perturbation.py::test_the_REAL_d5_file_satisfies_this_contract
+#     loads the real file through this task's contract — 22 masks, 16
+#     coordinates each, every control ring-matched at {ring 1: 14, ring 2: 2};
+#   * ..._reproduces_track_As_reported_numbers independently reproduces the
+#     digest, the identical primaries and the 2..6 control overlap.
+# Re-check before signing, in case the file is rebuilt:
+#     python -c "from saga.frozen.masks import file_sha256; \
+#                print(file_sha256('configs/frozen/I4_masks.json'))"
+#
+# PRECONDITION — NOW MET. The mask file exists on main. D5 is still OPEN in
+# §12 and the header is still DRAFT, so `saga/frozen/masks.py` correctly
+# refuses today; a test asserts that too. This patch is what closes both.
 #
 # ── WHAT IS IN HERE, AND WHY ────────────────────────────────────────────────
 #  1. STATUS: FROZEN header with the date and sha placeholders.
@@ -135,7 +147,7 @@
 
  @@ §12 — the decision table @@
 -| D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | **OPEN** — blocks I4; no default. I1 owns it |
-+| ~~D5~~ | 5 | ~~The discovery map at the INPUT to block 7/8 does not exist~~ | **CLOSED** — `configs/frozen/I4_masks.json`, sha256 (LF-normalised) `<MASKS_SHA256>`. Built by TASK A / I1 Phase C from the DISCOVERY split: `cell_mean_map` over the four ViT-S/mixup baselines at `in_b07` and `in_b08`, `fixed_cal` basis (D4), `topk_mask(k=16)` and `ring_matched_controls(n=10)`. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
++| ~~D5~~ | 5 | ~~The discovery map at the INPUT to block 7/8 does not exist~~ | **CLOSED** — `configs/frozen/I4_masks.json`, sha256 (LF-normalised) `72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e`. Built by TASK A / I1 Phase C from the DISCOVERY split: `cell_mean_map` over the four ViT-S/mixup baselines at `in_b07` and `in_b08`, `fixed_cal` basis (D4), `topk_mask(k=16)` and `ring_matched_controls(n=10)`. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
 +| D9 | — | I5 secondary endpoints | **CLOSED** — see below. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
 +| D10 | — | I7 wording rule | **CLOSED** — see below. Signed Mahfuzur Rahman Chowdhury, <DATE>, <GIT_SHA>. |
 
@@ -178,6 +190,19 @@
 +    assert state["date"] not in ("PENDING", "MISSING", "")
 +    assert state["git_sha"] not in ("PENDING", "MISSING", "")
 +    assert state["masks_sha"] == fmasks.file_sha256(fmasks.MASKS_FILE)
++
++
++# A SECOND test inverts at the freeze, added 2026-09-17 once D5's real file
++# landed. It asserted that the real mask file EXISTING is not the freeze.
++-def test_the_real_file_is_still_refused_while_locked_is_a_draft():
++-    with pytest.raises(fmasks.MaskError, match="EMBARGOED"):
++-        fmasks.load_masks(REAL_MASKS, require_freeze=True)
+++def test_the_real_file_loads_now_that_locked_is_frozen():
+++    """The file existed before the freeze and was refused anyway. Now both
+++    halves hold: the digest in LOCKED matches it and the header is signed."""
+++    loaded = fmasks.load_masks(REAL_MASKS, require_freeze=True)
+++    assert set(loaded["masks"]) == set(fmasks.expected_mask_ids())
+++    assert loaded["sha256"] == fmasks.file_sha256(REAL_MASKS)
 +
 +
 +def test_the_real_conditions_file_now_parses():
