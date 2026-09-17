@@ -840,15 +840,25 @@ def test_duplicate_rows_are_refused():
         ic.by_condition(recs + recs[:1])
 
 
-def test_c3_is_not_implemented_in_this_phase():
-    """I4's contrast reads columns and mask ids D5 has not defined. A
-    substitute contract here would be a guess written into the decision
-    module."""
-    with pytest.raises(NotImplementedError) as exc:
-        ic.c3()
-    assert str(exc.value) == "C3 is I4 Phase A′"
-    with pytest.raises(NotImplementedError):
-        ic.interpret_i4()
+def test_c3_belongs_to_i4_and_is_no_longer_a_stub():
+    """Through I3 Phase A this asserted `NotImplementedError("C3 is I4 Phase
+    A′")`: C3 reads columns and mask ids D5 had not defined, and a
+    substitute contract would have been a guess written into the decision
+    module. I4 Phase A′ implemented it, so the assertion is inverted rather
+    than deleted — the phase boundary was real and this records that it has
+    been crossed.
+
+    C3 is exercised in `tests/test_I4_perturbation.py`; what belongs HERE is
+    only that I3's two contrasts do not depend on it.
+    """
+    assert not isinstance(ic.c3, type(NotImplemented))
+    with pytest.raises(TypeError):
+        ic.c3()                       # it now REQUIRES records and a layer
+    # and I3's own contrasts still stand entirely on their own
+    recs = _synthetic_records("x", 0.2, 0.1, n=40)
+    grouped = ic.by_condition(recs)
+    assert ic.c1(grouped, 7, resamples=100)["contrast"] == "C1"
+    assert ic.c2(grouped, 7, resamples=100)["contrast"] == "C2"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
