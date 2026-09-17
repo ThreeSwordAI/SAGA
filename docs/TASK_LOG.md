@@ -5229,3 +5229,168 @@ which is exactly why the original bug escaped).
 
 Five array tasks: `--array=0` on the I1 discovery split, `--array=4,5,8` on
 I6. `--skip-if-done` leaves the 43 that landed untouched.
+
+## 2026-09-17 — TASK B — I4 PHASE A (mask contract, energy matching, freeze guard, C3, tables, tests)
+
+Worktree `../SAGA-B`, branch `task/B`, tag `[I4]`. Six commits, `5ca8938`
+through the log entry. No push. Nothing ran on the HPC, and **nothing can**:
+I4 Phase B is embargoed and the guard that enforces it is part of this phase.
+
+### Precondition (Prompt B2 step 1)
+
+`git rebase origin/main` onto `7f444ae`: **clean, no conflicts.** Track A's
+newer work does not touch `runner.py`, `records.py`, `edits.py`,
+`tests/test_I0_frozen.py` or `docs/I0_HANDOFF.md`; its `saga/frozen/stages.py`
+change is additive (I6's external analog stages) and leaves `model_blocks`
+and `num_prefix_tokens` alone, which are what `reference.py` uses.
+
+`saga/frozen/prevalence.py` **exists on `main` and imports**, with
+`topk_mask`, `ring_matched_controls`, `mask_coordinates`,
+`assert_selection_split` and the `PrevalenceMap` contract. The gating
+precondition passes.
+
+**`pytest -q` was NOT green on the rebased branch**, and the step-1 check
+asks for green. Two failures, and `task/B` was byte-identical to
+`origin/main` at that moment, so both are **main's own**, introduced by Track
+A's `4019071`:
+
+- `tests/test_I1_spatial.py::test_the_committed_tables_regenerate_from_the_committed_i2_maps`
+- `tests/test_I6_external.py::test_the_download_tool_writes_a_sha_without_touching_anything_else`
+
+Neither touches anything I4 depends on, and neither is Track B's to fix —
+Track A's Phase B is in flight and its committed tables have not been
+regenerated against its new results. I proceeded on the module precondition,
+which is the one the step ties its STOP to, and record the discrepancy here.
+
+### The mask contract, and why it refuses today
+
+`saga/frozen/masks.py` is new. It does not merely read
+`configs/frozen/I4_masks.json`; it **checks that file against
+`docs/LOCKED_ANALYSIS.md`**. A masks file with no LOCKED entry is an unfixed
+mask; a LOCKED entry whose sha does not match the file is a mask that changed
+after it was fixed. Both are refused by name, and the refusal says which.
+The failure this guards against is not a missing file — it is a file quietly
+regenerated between the freeze and the run.
+
+Neither file is in the state it needs to be, so **`load_masks` refuses
+today**, and `test_the_real_repository_is_still_embargoed_today` asserts that
+it does. That test will fail, deliberately, on the day the human freezes the
+document; that is the signal to run I4 Phase B.
+
+It also enforces the two invariants that make a control a control: the same
+NUMBER of coordinates as its primary (16, LOCKED §5) and the same RING
+COMPOSITION. A control failing either would differ from the primary in two
+ways at once and I4 could not say which one moved the loss.
+
+### B2b — the extension asked for was already there
+
+The prompt says "if `energy_target` is scalar today, extend it additively to
+a per-image tensor". **It is not scalar and never was.**
+`receiver_perturbation` has accepted a per-image tensor since I0 —
+`kappa.numel() not in (1, norm.numel())`, then
+`kappa.expand_as(norm) if kappa.numel() == 1 else kappa` — so
+`saga/frozen/edits.py` is UNCHANGED by this phase and a test pins that it
+stays so.
+
+What was missing was the plumbing, and that is what B2b actually delivered:
+
+- `mask: <id>` resolved out of the committed file at parse time, the digest
+  on every record row, the 16 coordinates kept OUT of `edit_params` (which is
+  serialised onto each of 650,000 rows);
+- `energy_match: <primary id>`, checked at parse time to name a condition
+  declared EARLIER — the target is the primary's measured norm, so the
+  primary has to run first, and declaration order is what guarantees it;
+- a per-batch cache of that measured norm, read by the matched controls.
+  **This one IS cacheable where `delta_update_norm` was not**: it is one
+  float per image, so 10,000 images × 4 primaries × 4 B is 160 kB and the
+  condition-major loop can hold every batch. No restructuring, and the
+  numbers are identical to the batch-major order TASK B §5 describes — only
+  the caching strategy differs.
+
+Measured on a fake model: a per-image target is achieved with **max relative
+error < 1%**, and the unmatched control at the same ε misses that same target
+by more than 1% — so the tolerance is not being met trivially by two masks of
+equal size. Matched and unmatched controls are shown to differ ONLY in
+energy: same mask, same site, same native masked norm, and the ratio of their
+injected norms equals the ratio of their alphas exactly.
+
+### A second instance of the I3 parquet bug, caught before it could run
+
+`epsilon`, `measured_perturbation_norm`, `energy_target` and
+`energy_rel_error` each mix a real value with the literal MISSING inside one
+I4 sweep — `native` has no epsilon, an unmatched control has no target. That
+is exactly the mixed-type column that cost I3 its first write attempt
+(`ArrowTypeError: Expected bytes, got a 'int' object`). `num_cell()`, the
+sibling of I3's `layer_cell()`, makes all four string columns. Predicted in
+the I3 log entry, fixed here before a job existed to lose.
+
+### C3, and the branch that is deliberately NOT stretched
+
+C3 = θ(primary) − the mean θ of the 10 matched controls, each side averaged
+within image before the contrast (LOCKED §8). It also returns the **control
+band** — min and max of the 10 individual control θ — because TASK B §6's
+first branch turns on whether the primary sits inside it, which is a
+statement about the band and not about the CI.
+
+Four branches are reachable and all four are exercised on synthetic records:
+`inside_band`, `all_methods`, `method_specific`, and `unanticipated`.
+**Opposite consistent signs in the two methods lands in `unanticipated` on
+purpose.** §6 names "consistent sign in baseline but not in SAGA (or the
+reverse)", which is not the same pattern; stretching it to fit would be the
+module exercising discretion it is not allowed. The numbers and both
+intervals are reported and the human interprets.
+
+The method a checkpoint belongs to comes from the record rows' own `variant`
+column, never from a substring of the run_id. `..._saga_s1` happens to be
+greppable; a run named otherwise would be silently dropped from its own
+method, and a null built from a missing checkpoint is the one output this
+module must never produce. Registers are labelled n = 2 and never vote.
+
+### Conditions and cohort
+
+65 per checkpoint: `native`, then per layer ℓ ∈ {7, 8} the primary mask at
+ε = 0.10 and 0.25, ten ring-matched controls energy-matched to each, and the
+same ten at fixed ε and UNMATCHED. The unmatched block is not redundant:
+reported beside the matched one, the gap between them is the size of the
+energy confound, which this task reports rather than removes silently.
+
+Every condition applies to every variant — a receiver perturbation needs no
+gate — so the ViT-S/mixup cell's 4 baseline, 4 SAGA and 2 register
+checkpoints run the same 65. D5's masks are defined for that cell and no
+other, so no other cell is in I4. Array order, from the manifest: 0–1 legacy
+baselines, 2–3 the fresh baselines that decide, 4–5 registers, 6–7 legacy
+SAGA, 8–9 the fresh SAGA that decide.
+
+### Tests
+
+`pytest -q`: **1059 passed, 2 failed, 30 skipped.** Track B contributes +44
+(the new I4 file) and rewrites one. **Both failures are Track A's**, are on
+`main` without a line of Track B's code, and are named above.
+
+One I3 test was INVERTED rather than deleted:
+`test_c3_is_not_implemented_in_this_phase` asserted the Phase-A stub, and
+Phase A′ implemented C3. It is now
+`test_c3_belongs_to_i4_and_is_no_longer_a_stub`, which records that the phase
+boundary was real and has been crossed, and still asserts that I3's two
+contrasts stand without C3.
+
+### Pending
+
+- **I4 Phase B is EMBARGOED and the guard enforces it.** Two things, neither
+  of them code: D5 must be closed (TASK A / I1 Phase C writes
+  `configs/frozen/I4_masks.json` from the discovery split), and
+  `docs/LOCKED_ANALYSIS.md` must carry `STATUS: FROZEN` with a date and a git
+  sha. `tools/frozen_eval.py` and `scripts/jobs/frozen_I4.sbatch` both refuse
+  until then, before staging anything.
+- **The three I3 reconciliations belong in that same freeze** (I3 Phase A log
+  entry, discrepancies 2–4): LOCKED §9 names different I3 contrasts than the
+  task file's D7 table; §3 item 7 still lists the energy-matched edit the
+  task file replaced with decile stratification; §3 item 1 makes `original`
+  the replacement-module control that `dihedral0` now is.
+- **Phase C needs both sweeps.** I3's results are on `main`; I4's do not
+  exist. One decision for Phase C, raised on 2026-09-17: I3's raw
+  `records.parquet` was pushed to the remote by accident (113 MiB, 16 files),
+  so Phase C can build T_I3a–d from the repository directly and
+  `figures_data/frozen/I3_primary.npz` is arguably redundant. I would still
+  build it — it is what the bootstrap resamples and it keeps I3 and I4
+  symmetric — but the human decides.
