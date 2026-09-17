@@ -5229,3 +5229,167 @@ which is exactly why the original bug escaped).
 
 FOUR array tasks — 47 submitted, 43 landed: `--array=0` on the I1 discovery
 split and `--array=4,5,8` on I6. `--skip-if-done` leaves the 43 that landed untouched.
+
+---
+
+## 2026-09-17 — TASK A — PHASE C (all tables, D5 built, figure data, handoff)
+
+Worktree `../SAGA-A`, branch `task/A`. Commits `202a712` (code) and
+`dd8e0ec` (artifacts), plus this entry. No push. **D5 is built but NOT
+closed** — closing it and freezing `LOCKED_ANALYSIS.md` are the human's acts.
+
+### Phase B verified before anything was tabulated
+
+- 336 I1 map entries and 36 I6 entries validate through
+  `saga.frozen.prevalence`, with the packbits indicators matching the
+  per-position counts exactly.
+- I1's evaluation `tau_cal` is **bit-identical** to I2's at `s11_out` and
+  `hist` — 0.000e+00, not merely within the tolerance §5 asks for.
+- `T_I1h_agreement` (new): I1 recaptured `s11_out` and `hist` in the same
+  passes that produced the block-input stages, so both work packages
+  measured them independently. **92 of 92 rows agree bit-for-bit; the worst
+  per-position count difference anywhere is 0.**
+
+### Two bugs found in my own Phase-A code
+
+1. **The selection guard would have BLOCKED D5.** The discovery split
+   predates `tools/build_frozen_splits.py` and records no `sha256` of its
+   own, so `LOCKED_ANALYSIS` §11 quotes the digest of the FILE
+   (`0a686340…`) while `load_split` stamps the digest of the CANONICAL
+   SERIALIZATION (`bcb2a4c5…`) into every artifact. The allow-list held only
+   the first. Both are now accepted, each derived from the file by test, plus
+   a test that drives the guard with a map Phase B actually wrote. The four
+   reporting splits record their own canonical digest, so the two coincide
+   there and nothing is widened.
+2. **`build_D5_masks` wrote a timestamp.** D5 is SIGNED with the file's
+   sha256; a `generated_at` gave a different digest on every run and the
+   signature would have meant nothing. Removed, and a test forbids it.
+
+### D5
+
+| | |
+|---|---|
+| file | `configs/frozen/I4_masks.json` |
+| **sha256** | **`72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e`** |
+| cell | `vit_small\|mixup`, four baselines, `fixed_cal` (D4 = canon basis) |
+| split | `val_diag_split` (discovery), sha `bcb2a4c5…` |
+
+**Both primary masks are the SAME 16 coordinates** — ring 1: 14, ring 2: 2,
+indices 15, 16, 17, 20, 25, 26, 29, 30, 39, 40, 43, 54, 166, 169, 179, 180.
+Verified not to be a bug: the two cell mean maps are distinct arrays (masses
+11.3692 and 12.8149, largest per-position difference 0.014275, and their
+internal ranking of those 16 differs) that simply correlate at ρ = 0.9985.
+**I4 therefore perturbs one coordinate set at two depths, so the comparison
+between its two sites is a comparison of DEPTH alone with the address held
+fixed.** That belongs in the I4 design, so `D5_note.md` §4 says it plainly.
+
+The question D5 existed to answer — is the perturbed address the reported
+address? Spearman between each source run's DISCOVERY block-input map and
+the SAME run's `s11_out` map on EVALUATION:
+
+| stage | ρ | ring-adjusted ρ |
+|---|---|---|
+| `in_b07` | 0.9653–0.9877 | 0.9484–0.9773 |
+| `in_b08` | 0.9802–0.9901 | 0.9484–0.9803 |
+
+all at p = 1/1568, the minimum the reference can return. The ring-adjusted
+column is the one that matters: a high raw ρ could be "both maps are
+bordered", and this says it is not.
+
+Control overlap 2–6 against the analytic expectation **4.566**
+(Σ_r n_r²/N_r) — at chance, which is what LOCKED §5's requirement to REPORT
+the overlap actually needs. The control seeds, the overlap policy and the
+amended task-file clause are all recorded in the JSON.
+
+### I1 headlines, evaluation split, `fixed_cal`
+
+**The recipe contrast (T_I1c) is the strongest result.** Baseline map ρ:
+
+| stage | within-recipe (mixup) | cross-recipe (mixup vs true-nomix) |
+|---|---|---|
+| `s11_out` | 0.923 | 0.465 |
+| `in_b07` | 0.910 | 0.169 |
+| `in_b08` | 0.918 | 0.324 |
+| `hist` | 0.915 | 0.331 |
+
+Ring-1 minus ring-0 at `s11_out`, with image-level bootstrap CIs (10,000
+resamples, seed 0): the four mixup baselines run **+0.0752 to +0.0894**, CIs
+clear of zero; the two true-nomix baselines are **−0.0008** (CI spans zero)
+and **−0.0051** (CI below zero). η² is 0.020–0.045 for mixup and
+0.0018–0.0116 for nomix.
+
+Seed stability (T_I1d) holds at the block inputs: mean ρ 0.79–0.92 with
+ring-adjusted 0.57–0.80, comparable to `s11_out`.
+
+**T_I1g sharpens at the block inputs.** SAGA's map stays close to its
+same-provenance baseline everywhere (ρ 0.79–0.89, ring-adjusted 0.43–0.71).
+The registers variant does not, and at the block inputs its correlation with
+its own baseline collapses to about zero — `vit_small|mixup` at `in_b07` is
+**ρ = −0.086**, `vit_base|mixup` at `in_b08` is 0.127. Registers also drop
+ring-1 share (−0.05 to −0.24) while SAGA raises it slightly. Descriptive
+only: these are residual map correlations between two checkpoints.
+
+### I6 — the pre-registered prediction, and its two misses
+
+13 met, 3 not met, 2 not applicable over 18 (model × stage) rows. The
+outcome is computed by `saga.frozen.external.prediction_outcome` from the
+rule registered beside the claim; nobody typed it.
+
+- **`vit_base_patch16_clip_224_openai` — NOT MET at both stages.** It is in
+  the no-mixing group and it shows a ring-1 peak (Gini excess 0.35 / 0.38).
+  A genuine counterexample to the prediction.
+- **`deit3_small_patch16_224` — NOT MET at `ext_s11_out`**, met at
+  `ext_hist`. Its peak moves to ring 6 one block earlier.
+- The other seven predicted models met the prediction at both stages, and
+  the register variant is "not applicable" exactly as registered.
+
+Three of the nine are natively 518-pixel DINOv2 models run at 224 with the
+position embedding interpolated; `resolution_deviation` marks them and the
+handoff says their rows are results about those models AT 224.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| A5 | `results/frozen/I1_spatial/tables/T_I1a,c,d,e,f,g,h*.csv` (reporting) and `tables_discovery/` (selection, every row labelled) |
+| A6 | `configs/frozen/I4_masks.json`, `results/frozen/I1_spatial/D5_note.md` |
+| A7 | `figures_data/frozen/F3_spatial.npz`, `F1_prevalence_draft.npz` |
+| A9 | `results/frozen/I6_external/tables/T_I6a_external.csv`, `figures_data/frozen/F3_external.npz` |
+| A12 | `analysis/build_A_handoff.py` → `docs/A_HANDOFF.md` |
+| — | `analysis/frozen_I1_stats.py`, `analysis/build_D5_masks.py`, `analysis/build_A_figures.py`, `analysis/frozen_I1_scale_null.py` |
+
+### The one thing Phase C could NOT produce locally
+
+**`T_I1b_scale_null.csv`.** The scale null rescales a per-token NORM FIELD
+and re-thresholds; `norms_*.npz` is git-ignored and lives only on the
+cluster. There is no way round it from committed artifacts — scaling norms
+by c and thresholding at τ is equivalent to thresholding at τ/c, and only
+one τ per (cell, stage) was ever measured.
+
+This is a gap in the task file, not a choice: §7 gives T_I1b's data as the
+norms, §10 puts T_I1b in a local phase, §4 keeps the norms on the cluster.
+`analysis/frozen_I1_scale_null.py` runs where they are — a LOGIN NODE, numpy
+only, no GPU:
+
+    python analysis/frozen_I1_scale_null.py --split evaluation
+
+The empty table is deleted rather than committed, so the artifact set never
+implies a result that does not exist.
+
+### Tests
+
+`pytest -q`: **1028 passed, 30 skipped**. Two of my own Phase-A tests were
+wrong rather than the code: they used the replaced `build()` signature and
+table set, and one asserted "has rows" when an empty table is now a
+legitimate state. A third rebuilt every real table mid-suite — seven minutes
+for determinism a fixture already proves — and is now an integrity check only
+the REAL tables can give.
+
+### Pending
+
+1. The human merges `task/A` into `main` and pushes.
+2. One login-node command on Alex for `T_I1b`; commit and push the CSV.
+3. I regenerate `docs/A_HANDOFF.md` with T_I1b filled in.
+4. **The human closes D5 in `docs/LOCKED_ANALYSIS.md` §5 with sha256
+   `72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e` and
+   freezes the document.** That unblocks I4.
