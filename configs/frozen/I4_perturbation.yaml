@@ -1,0 +1,448 @@
+# configs/frozen/I4_perturbation.yaml — TASK B / I4's conditions, and the only
+# place they are defined
+# =============================================================================
+# I4 asks whether the coordinates where high-norm tokens form respond
+# differently to a perturbation than other coordinates of the SAME RING
+# COMPOSITION and the SAME INJECTED ENERGY — in the baseline, in SAGA and in
+# the register model, on the same mask.
+#
+# The masks come from D5, are selected on the DISCOVERY split, and are read
+# from configs/frozen/I4_masks.json by sha256. Nothing here selects a
+# coordinate: saga/frozen/prevalence.py refuses to build a mask from any
+# split but discovery, and saga/frozen/masks.py refuses to load a mask file
+# that docs/LOCKED_ANALYSIS.md has not frozen against its digest.
+#
+# 65 conditions per checkpoint:
+#
+#     native                              1
+#     per layer l in {7, 8}:
+#       prim_e10_L{l}                     1
+#       prim_e25_L{l}                     1
+#       ctrl{j}_e10m_L{l},  j = 0..9     10   energy-matched to prim_e10
+#       ctrl{j}_e25m_L{l},  j = 0..9     10   energy-matched to prim_e25
+#       ctrl{j}_e10f_L{l},  j = 0..9     10   fixed epsilon, UNMATCHED
+#                                     ------
+#                          1 + 2 x 32 =   65
+#
+# THE INTERVENTION (LOCKED section 6, plan section 5.5): the patch attention
+# output at the masked coordinates is multiplied by (1 - alpha), after any
+# native SAGA gate and BEFORE the attention residual addition, with the
+# projection bias excluded from U so that the edit is (1-alpha)*U + b. Prefix
+# rows are excluded using the model's own count — 1 for baseline and SAGA, 5
+# for the timm 4-register models.
+#
+# ENERGY MATCHING IS PER IMAGE, WITHIN CHECKPOINT (LOCKED section 6). A
+# control declares `energy_match: <primary id>`; the runner reads that
+# primary's MEASURED injected norm for the same image and passes it as
+# `energy_target`, so alpha_i = kappa_i / ||M .* U_i||_F and every candidate
+# mask injects the same Frobenius energy for that image. The achieved norm
+# and its relative error are recorded per image for every condition, matched
+# or not, and a tolerance check (< 1%) is written beside them.
+#
+# Zero-norm images receive zero perturbation and their FREQUENCY IS REPORTED;
+# they are never discarded (LOCKED section 6).
+#
+# Nothing below is selectable from the command line.
+
+work_package: I4_perturbation
+
+# D1 is CLOSED at `s11_out` (docs/LOCKED_ANALYSIS.md section 1). Recorded for
+# `native`, `prim_e10_L7` and `prim_e10_L8` only; the other 62 conditions
+# record the functional response alone.
+stage: s11_out
+
+precision: fp32
+
+# CONSUMED, NOT RECOMPUTED, exactly as I3 does it: tau_cal[s11_out] for this
+# split was computed by TASK I2 from each cell's canon-designated baseline.
+# There is deliberately no `calibration_stages` key — that is what
+# tools/frozen_I2_thresholds.py reads, and pointing it at this file would
+# make it write into I2's directory.
+thresholds_canon: results/diagsplit/fixed_thresholds_canon.json
+thresholds_cal: results/frozen/I2_terminal/{split_name}/thresholds_cal.json
+
+# ── The masks: read by digest, never built here ──────────────────────────────
+# D5. Written by TASK A / I1 Phase C from the discovery split; the runner
+# resolves every `mask: <id>` out of this file at parse time, verifies its
+# sha256 against the D5 line in docs/LOCKED_ANALYSIS.md, and writes the
+# digest onto EVERY record row. The file does not exist yet and D5 is still
+# OPEN, so tools/frozen_eval.py refuses to run this document today. That
+# refusal is deliberate: I4 Phase B is embargoed until the human closes D5
+# and freezes the LOCKED file (TASK B section 7, section 10).
+masks_file: configs/frozen/I4_masks.json
+
+# Image-level bootstrap (LOCKED section 8: 10,000 resamples; D6 = seed 0).
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# The per-image energy-match tolerance TASK B section 5 fixes. Recorded per
+# image as `energy_rel_error`; the tables report the maximum observed.
+energy_rel_error_tol: 0.01
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# `applies_to` is every variant: unlike I3's gate edits, a receiver
+# perturbation needs no gate, so the ViT-S/mixup cell's 4 baseline, 4 SAGA and
+# 2 register checkpoints all run the same 65 (TASK B section 2). D5's masks
+# are defined for that cell and for no other, so no other cell is in I4.
+#
+# ORDER MATTERS HERE, unlike in I3. A control that declares `energy_match`
+# reads the measured injected norm of the condition it names, so that
+# condition must be declared BEFORE it; the runner refuses a document where
+# it is not.
+conditions:
+  # 1. The reference. A plain forward: the source of the cached native
+  #    logits every `max_abs_logit_diff_vs_native` is measured against, and
+  #    the reference of every theta in TASK B section 6.
+  - id: native
+    edit_type: native
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out]
+    diag: true
+  # ---- block 7 (0-based) = paper block 8; masks selected on in_b07 ----
+  # PRIMARY at the fixed primary epsilon. The per-image injected norm this
+  # condition MEASURES is the energy target every `*_e10m_L7` control below
+  # is then matched to, image by image.
+  - id: prim_e10_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: P_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out]
+    diag: true
+
+  # The sensitivity point (LOCKED section 6): a stability test, NOT an
+  # operating point to optimise.
+  - id: prim_e25_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: P_L7, epsilon: 0.25}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The 10 ring-matched controls, ENERGY-MATCHED to prim_e10_L7 per image.
+  - id: ctrl0_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K0_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K1_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K2_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K3_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K4_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K5_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K6_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K7_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K8_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e10m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K9_L7, epsilon: 0.10, energy_match: prim_e10_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The same 10 controls, matched to prim_e25_L7.
+  - id: ctrl0_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K0_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K1_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K2_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K3_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K4_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K5_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K6_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K7_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K8_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e25m_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K9_L7, epsilon: 0.25, energy_match: prim_e25_L7}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The same 10 controls at FIXED epsilon and NOT matched. Reported beside
+  # the matched ones: the difference between these two blocks is the size of
+  # the energy confound, which is a number this task reports rather than
+  # removes silently.
+  - id: ctrl0_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K0_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K1_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K2_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K3_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K4_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K5_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K6_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K7_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K8_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e10f_L7
+    edit_type: receiver_perturbation
+    params: {layer: 7, mask: K9_L7, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # ---- block 8 (0-based) = paper block 9; masks selected on in_b08 ----
+  # PRIMARY at the fixed primary epsilon. The per-image injected norm this
+  # condition MEASURES is the energy target every `*_e10m_L8` control below
+  # is then matched to, image by image.
+  - id: prim_e10_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: P_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out]
+    diag: true
+
+  # The sensitivity point (LOCKED section 6): a stability test, NOT an
+  # operating point to optimise.
+  - id: prim_e25_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: P_L8, epsilon: 0.25}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The 10 ring-matched controls, ENERGY-MATCHED to prim_e10_L8 per image.
+  - id: ctrl0_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K0_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K1_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K2_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K3_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K4_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K5_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K6_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K7_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K8_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e10m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K9_L8, epsilon: 0.10, energy_match: prim_e10_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The same 10 controls, matched to prim_e25_L8.
+  - id: ctrl0_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K0_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K1_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K2_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K3_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K4_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K5_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K6_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K7_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K8_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e25m_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K9_L8, epsilon: 0.25, energy_match: prim_e25_L8}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  # The same 10 controls at FIXED epsilon and NOT matched. Reported beside
+  # the matched ones: the difference between these two blocks is the size of
+  # the energy confound, which is a number this task reports rather than
+  # removes silently.
+  - id: ctrl0_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K0_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl1_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K1_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl2_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K2_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl3_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K3_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl4_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K4_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl5_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K5_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl6_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K6_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl7_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K7_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl8_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K8_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
+  - id: ctrl9_e10f_L8
+    edit_type: receiver_perturbation
+    params: {layer: 8, mask: K9_L8, epsilon: 0.10}
+    applies_to: [baseline, registers, saga]
+    diag: false
