@@ -52,6 +52,21 @@ stages are that input, for those two blocks.
 `in_b08 == blocks[7](x)` on a fake model by comparing TENSORS, so the
 convention cannot drift from this docstring.
 
+A THIRD ONE (TASK C / I7 §5 — added for the attention alignment)
+----------------------------------------------------------------
+    in_b10         the residual stream entering blocks[10]
+                   == output of blocks[9]
+
+Same convention, same capture path, added for one reason: the attention
+INSIDE `blocks[10]` is computed from that block's INPUT tokens, so the
+exceedance it must be compared against is the exceedance of those tokens —
+not of the block's output. I7 pairs `blocks[10]` with `in_b10` and
+`blocks[11]` with `s11_out` (which IS the output of `blocks[10]` on a
+12-block model, i.e. the input to `blocks[11]`). Comparing a block's
+incoming attention with the norms of its own OUTPUT would put the effect one
+block after its cause. `tests/test_I7_attention.py` pins
+`in_b10 == blocks[9](x)` by comparing TENSORS.
+
 THE HISTORICAL STAGE (TASK I0 §2.5 — identified, not assumed)
 -------------------------------------------------------------
 Every historical patch diagnostic in this project was computed on the
@@ -91,10 +106,10 @@ from saga.metrics import infer_num_prefix_tokens
 # shallow. The new names live in BLOCK_INPUT_STAGES and in ALL_STAGES.
 STAGES = ("s11_out", "s12_pre_norm", "s12_post_norm", "hist")
 
-#: The block-input stages (TASK A / I1), as {name: the 0-based index of the
-#: block whose INPUT this is}. `in_b07` enters blocks[7]; see the module
-#: docstring for both numbering conventions.
-BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8}
+#: The block-input stages (TASK A / I1; `in_b10` added by TASK C / I7), as
+#: {name: the 0-based index of the block whose INPUT this is}. `in_b07`
+#: enters blocks[7]; see the module docstring for both numbering conventions.
+BLOCK_INPUT_STAGES = {"in_b07": 7, "in_b08": 8, "in_b10": 10}
 
 #: Which real stage the historical diagnostics used. See the module docstring
 #: for the code citation; a test pins it.
