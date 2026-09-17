@@ -1,0 +1,97 @@
+{
+  "arch": "vit_small",
+  "cell": "vit_small|mixup",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5",
+  "conditions": {
+    "native": {
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "in_b07",
+        "in_b08",
+        "hist"
+      ]
+    },
+    "term_1.00": {
+      "n_images": 10000,
+      "stages": [
+        "hist"
+      ]
+    }
+  },
+  "files": [
+    "maps_hist.npz",
+    "norms_hist.npz",
+    "norms_hist.npz",
+    "maps_in_b07.npz",
+    "norms_in_b07.npz",
+    "maps_in_b08.npz",
+    "norms_in_b08.npz",
+    "maps_s11_out.npz",
+    "norms_s11_out.npz"
+  ],
+  "generated_by": "tools/frozen_I1_norms.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "mad_k": 5.0,
+  "n_conditions": 2,
+  "n_prefix": 1,
+  "outputs": {
+    "maps_hist.npz": {
+      "bytes": 2741646,
+      "sha256": "cb6eb4faad3bbca36e4d925fd4b5c373488bf561937c63f3d1c781d0750f35f4"
+    },
+    "maps_in_b07.npz": {
+      "bytes": 2232642,
+      "sha256": "abf2ca3c07faee89d794ef159f459994f4208ed70e6dda23544e4ad8556a5c8c"
+    },
+    "maps_in_b08.npz": {
+      "bytes": 2232642,
+      "sha256": "31c7e186bc119cce808c117e65d27e19416865908faf3fd772ec79caf6c3c587"
+    },
+    "maps_s11_out.npz": {
+      "bytes": 2232650,
+      "sha256": "9d5f06d456f067025c305ae423cfad02030204a4b3af291e3fc6ab9331db00ce"
+    },
+    "norms_hist.npz": {
+      "bytes": 9643848,
+      "sha256": "6577aaa8122f8f0285e0188de6e4328e1c7f561093c38c107634ddc26665e10b"
+    },
+    "norms_in_b07.npz": {
+      "bytes": 9643844,
+      "sha256": "c0389c15c4b4e596624c7736be65e32ba616735084bec5d7b16d0750eec78931"
+    },
+    "norms_in_b08.npz": {
+      "bytes": 9643844,
+      "sha256": "fe141ef6f6d496af0dee3a16d81ff6c2182c36daf73eaa462bdc4b460f377471"
+    },
+    "norms_s11_out.npz": {
+      "bytes": 9643848,
+      "sha256": "baae9f7dbb6f74b71e103e6a54d226c4ed16b3b4973b61ac64141e423d37c420"
+    }
+  },
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "e2r_vits_mixup_saga_s1",
+  "seed": 0,
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stages": [
+    "hist",
+    "in_b07",
+    "in_b08",
+    "s11_out"
+  ],
+  "state_hash_after": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+  "state_hash_before": "0c6cd342697e346ccaf931282b318abf4c193c5be6a60db5460d6dfec2cb6083",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.907052993774414,
+    "in_b07": 14.173239707946777,
+    "in_b08": 15.895103454589844,
+    "s11_out": 18.698548316955566
+  },
+  "thresholds_cal_file": "results/frozen/I1_spatial/evaluation/thresholds_cal.json",
+  "variant": "saga",
+  "work_package": "I1_spatial"
+}

@@ -1,0 +1,69 @@
+{
+  "ckpt_sha256": "bd92e16e57f6c81452ab795c9578bbdd2bd31b6df601964d7df697d5dd8fe974",
+  "files": [
+    "maps_ext_s11_out.npz",
+    "maps_ext_hist.npz"
+  ],
+  "generated_by": "tools/frozen_I6_maps.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "mad_k": 5.0,
+  "model_citation": "Touvron et al., \"DeiT III: Revenge of the ViT\", ECCV 2022 \u2014 3-Augment with Mixup 0.8 and CutMix 1.0.",
+  "model_crop_pct": 0.9,
+  "model_depth": 12,
+  "model_grid_side": 14,
+  "model_group": "supervised_mixing",
+  "model_hub_id": "timm/deit3_small_patch16_224.fb_in1k",
+  "model_id": "deit3_small_patch16_224",
+  "model_input_size": 224,
+  "model_interpolation": "bicubic",
+  "model_mixing": "yes",
+  "model_model_id": "deit3_small_patch16_224",
+  "model_n_patches": 196,
+  "model_n_prefix": 1,
+  "model_native_input_size": 224,
+  "model_norm_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "model_norm_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "model_patch_size": 16,
+  "model_pretrained": true,
+  "model_resolution_deviation": false,
+  "model_timm_name": "deit3_small_patch16_224.fb_in1k",
+  "model_timm_version": "1.0.26",
+  "model_weight_sha256": "bd92e16e57f6c81452ab795c9578bbdd2bd31b6df601964d7df697d5dd8fe974",
+  "n_images": 10000,
+  "outputs": {
+    "maps_ext_hist.npz": {
+      "bytes": 2236138,
+      "sha256": "f8c3416e3baf43cdf853ca48411b161cc7e5aa0bccddd68ebcb21164d0ce563d"
+    },
+    "maps_ext_s11_out.npz": {
+      "bytes": 2236130,
+      "sha256": "2602c62c29333f6c13c0c4c79c405d13ac0d6185870352721ef806a36b27bc0d"
+    }
+  },
+  "run_id": "deit3_small_patch16_224",
+  "seed": 0,
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stages": [
+    "ext_s11_out",
+    "ext_hist"
+  ],
+  "tau_cal": {
+    "ext_hist": 579.5591125488281,
+    "ext_s11_out": 440.2575988769531
+  },
+  "tau_canon": "MISSING",
+  "threshold_split_name": "calibration",
+  "threshold_split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "thresholds_cal_file": "results/frozen/I6_external/thresholds_cal.json",
+  "weight_sha256": "bd92e16e57f6c81452ab795c9578bbdd2bd31b6df601964d7df697d5dd8fe974",
+  "work_package": "I6_external"
+}

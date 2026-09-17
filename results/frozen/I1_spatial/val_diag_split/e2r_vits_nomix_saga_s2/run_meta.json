@@ -1,0 +1,97 @@
+{
+  "arch": "vit_small",
+  "cell": "vit_small|nomix",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "68d64007a4bcae2335cf7ead1fe698e1df73e48ef538f9727c46ddc186ffd5ab",
+  "conditions": {
+    "native": {
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "in_b07",
+        "in_b08",
+        "hist"
+      ]
+    },
+    "term_1.00": {
+      "n_images": 10000,
+      "stages": [
+        "hist"
+      ]
+    }
+  },
+  "files": [
+    "maps_hist.npz",
+    "norms_hist.npz",
+    "norms_hist.npz",
+    "maps_in_b07.npz",
+    "norms_in_b07.npz",
+    "maps_in_b08.npz",
+    "norms_in_b08.npz",
+    "maps_s11_out.npz",
+    "norms_s11_out.npz"
+  ],
+  "generated_by": "tools/frozen_I1_norms.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "mad_k": 5.0,
+  "n_conditions": 2,
+  "n_prefix": 1,
+  "outputs": {
+    "maps_hist.npz": {
+      "bytes": 2741654,
+      "sha256": "57a71858625c9653f64d8396055bc76a99327c7a39d3440f9a52da9fe04fb03f"
+    },
+    "maps_in_b07.npz": {
+      "bytes": 2232666,
+      "sha256": "f6ac77ce5c9a7a4c2b857807ac4908097fe2e13195c634921cb1e13b3aa31a54"
+    },
+    "maps_in_b08.npz": {
+      "bytes": 2232666,
+      "sha256": "51d88edd7a2a254f975cb44867e8ae2ac998e0c9158dbf3180c43ac6dfb5ec92"
+    },
+    "maps_s11_out.npz": {
+      "bytes": 2232674,
+      "sha256": "3e6eada56a0d11ebdb41a4232fcda887b784cdcabc25cf79147d3ddc41b102ca"
+    },
+    "norms_hist.npz": {
+      "bytes": 9643872,
+      "sha256": "1f3826335cd9d3d4cc0f042211fd057123160efc0a3bd4414ffd8f0a3ab3216e"
+    },
+    "norms_in_b07.npz": {
+      "bytes": 9643876,
+      "sha256": "cfcf1b17dadc3f6fc0665e6e0bcdf942929b0fb9cb9e0b7e23bd0f4694430e2b"
+    },
+    "norms_in_b08.npz": {
+      "bytes": 9643876,
+      "sha256": "0b54fa467e5f3993e7fcab14cd75e6eedd06e3274a6bf1f8f03b73b98bd3d7e8"
+    },
+    "norms_s11_out.npz": {
+      "bytes": 9643880,
+      "sha256": "24a7667f86a7dc763a68cda72801cb3f8580f20c880c5c76ce910e5ffaa43807"
+    }
+  },
+  "precision": "fp32",
+  "recipe_actual": "nomix",
+  "run_id": "e2r_vits_nomix_saga_s2",
+  "seed": 0,
+  "split_name": "val_diag_split",
+  "split_sha256": "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5",
+  "stages": [
+    "hist",
+    "in_b07",
+    "in_b08",
+    "s11_out"
+  ],
+  "state_hash_after": "e2cca08e584b892ea0b33840d75f7bb2741f3aaba991fe51bdde5130f26b805b",
+  "state_hash_before": "e2cca08e584b892ea0b33840d75f7bb2741f3aaba991fe51bdde5130f26b805b",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 22.8547306060791,
+    "in_b07": 17.453816413879395,
+    "in_b08": 20.123014450073242,
+    "s11_out": 19.975540161132812
+  },
+  "thresholds_cal_file": "results/frozen/I1_spatial/val_diag_split/thresholds_cal.json",
+  "variant": "saga",
+  "work_package": "I1_spatial"
+}

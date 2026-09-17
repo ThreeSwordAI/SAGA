@@ -1,0 +1,56 @@
+{
+  "arch": "vit_small",
+  "cell": "vit_small|mixup",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "8d980da27a4b571a117e82451c8c9deff126e437206faee5120e069d3667e10d",
+  "conditions": {
+    "native": {
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "in_b07",
+        "in_b08",
+        "hist"
+      ]
+    }
+  },
+  "files": [
+    "maps_hist.npz",
+    "norms_hist.npz",
+    "maps_in_b07.npz",
+    "norms_in_b07.npz",
+    "maps_in_b08.npz",
+    "norms_in_b08.npz",
+    "maps_s11_out.npz",
+    "norms_s11_out.npz"
+  ],
+  "generated_by": "tools/frozen_I1_norms.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "mad_k": 5.0,
+  "n_conditions": 1,
+  "n_prefix": 1,
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "legacy_e2_vit_small_nomixdir_baseline",
+  "seed": 0,
+  "split_name": "val_diag_split",
+  "split_sha256": "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5",
+  "stages": [
+    "hist",
+    "in_b07",
+    "in_b08",
+    "s11_out"
+  ],
+  "state_hash_after": "500a375d7065cb6104a49d84d2c3ccaf97e58029b25ff4f508a4a4ce7f4d5982",
+  "state_hash_before": "500a375d7065cb6104a49d84d2c3ccaf97e58029b25ff4f508a4a4ce7f4d5982",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.84629249572754,
+    "in_b07": 14.219008445739746,
+    "in_b08": 15.935407638549805,
+    "s11_out": 18.662434577941895
+  },
+  "thresholds_cal_file": "results/frozen/I1_spatial/val_diag_split/thresholds_cal.json",
+  "variant": "baseline",
+  "work_package": "I1_spatial"
+}

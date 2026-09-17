@@ -1,0 +1,81 @@
+{
+  "ckpt_sha256": "04d27f3400d059fc0cfd7d17dd1909a75bf3ea8fb3eeb48b97cb99e57ee20081",
+  "files": [
+    "maps_ext_s11_out.npz",
+    "maps_ext_hist.npz"
+  ],
+  "generated_by": "tools/frozen_I6_maps.py",
+  "git_sha": "7420014c9226dedaa32c040888b5eb4c02202244",
+  "mad_k": 5.0,
+  "model_citation": "Oquab et al., \"DINOv2: Learning Robust Visual Features without Supervision\", TMLR 2024 \u2014 self-supervised; no Mixup or CutMix.",
+  "model_crop_pct": 1.0,
+  "model_depth": 12,
+  "model_grid_side": 16,
+  "model_group": "no_mixing",
+  "model_hub_id": "timm/vit_small_patch14_dinov2.lvd142m",
+  "model_id": "vit_small_patch14_dinov2",
+  "model_input_size": 224,
+  "model_interpolation": "bicubic",
+  "model_mixing": "no",
+  "model_model_id": "vit_small_patch14_dinov2",
+  "model_n_patches": 256,
+  "model_n_prefix": 1,
+  "model_native_input_size": 518,
+  "model_norm_mean": [
+    0.485,
+    0.456,
+    0.406
+  ],
+  "model_norm_std": [
+    0.229,
+    0.224,
+    0.225
+  ],
+  "model_patch_size": 14,
+  "model_pretrained": true,
+  "model_resolution_deviation": true,
+  "model_timm_name": "vit_small_patch14_dinov2.lvd142m",
+  "model_timm_version": "1.0.26",
+  "model_weight_sha256": "04d27f3400d059fc0cfd7d17dd1909a75bf3ea8fb3eeb48b97cb99e57ee20081",
+  "n_images": 10000,
+  "outputs": {
+    "maps_ext_hist.npz": {
+      "bytes": 2378742,
+      "sha256": "b984a90b2b72c68da14618b43dbfcbd98a36ad374af06751dbc3393784d56873"
+    },
+    "maps_ext_s11_out.npz": {
+      "bytes": 2378734,
+      "sha256": "ed2232789545183eef29fc5188d8b6394c464fdc79d7e6c838c76b4d4ff7730d"
+    }
+  },
+  "run_id": "vit_small_patch14_dinov2",
+  "seed": 0,
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stages": [
+    "ext_s11_out",
+    "ext_hist"
+  ],
+  "tau_cal": {
+    "ext_hist": 25.23940658569336,
+    "ext_s11_out": 9.386887550354004
+  },
+  "tau_canon": "MISSING",
+  "threshold_split_name": "calibration",
+  "threshold_split_sha256": "6b707eb39f934274a5ea753d613af54dc9aad01510808f246b70506a96003003",
+  "thresholds_cal_file": "results/frozen/I6_external/thresholds_cal.json",
+  "transform_crop_pct": 1.0,
+  "transform_interpolation": "bicubic",
+  "transform_published_input_size": [
+    3,
+    518,
+    518
+  ],
+  "transform_transform_input_size": [
+    3,
+    224,
+    224
+  ],
+  "weight_sha256": "04d27f3400d059fc0cfd7d17dd1909a75bf3ea8fb3eeb48b97cb99e57ee20081",
+  "work_package": "I6_external"
+}

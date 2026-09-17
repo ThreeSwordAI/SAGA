@@ -1,0 +1,82 @@
+{
+  "baseline_run_ids": [
+    "e2r_vitb_mixup_baseline_s1",
+    "e2r_vits_mixup_baseline_s1",
+    "e2r_vits_nomix_baseline_s1"
+  ],
+  "canon_file": "results/diagsplit/fixed_thresholds_canon.json",
+  "canon_file_sha256": "c30f2b9947cf035ee3e7f18265edc97ea5759524be84a2aaab3461d39a617ba0",
+  "canon_file_sha256_lf": "c30f2b9947cf035ee3e7f18265edc97ea5759524be84a2aaab3461d39a617ba0",
+  "canon_stage": "s12_pre_norm",
+  "definition": "per (arch, recipe_actual) cell and per STAGE, on the split named below: tau_cal = lower median over images of (median(v_i) + k*MAD(v_i)) on the PATCH-row L2 norms at that stage of the cell's DESIGNATED BASELINE last checkpoint \u2014 the same checkpoint results/diagsplit/fixed_thresholds_canon.json names in its source_run block. Medians are LOWER medians via tools/compute_fixed_thr.per_image_mad_thresholds, the function that produced every canon value. At stage hist this is the canon recipe on a different split; it is a NEW KEY in a NEW file and the canon file is never rewritten.",
+  "generated_at": "2026-09-16T22:38:36.365143+00:00",
+  "generated_by": "tools/frozen_I2_thresholds.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "k": 5.0,
+  "precision": "fp32",
+  "seed": 0,
+  "sources": {
+    "vit_base|mixup": {
+      "arch": "vit_base",
+      "canon_source_run": "e2r_vitb_mixup_baseline_s1",
+      "ckpt_kind": "last",
+      "ckpt_sha256": "316211c719c41113c1f9bffa7f500e158d727c0f0998e41869796209a3fd1339",
+      "n_images": 10000,
+      "recipe_actual": "mixup",
+      "run_id": "e2r_vitb_mixup_baseline_s1",
+      "tau_canon": 127.3125,
+      "variant": "baseline"
+    },
+    "vit_small|mixup": {
+      "arch": "vit_small",
+      "canon_source_run": "e2r_vits_mixup_baseline_s1",
+      "ckpt_kind": "last",
+      "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+      "n_images": 10000,
+      "recipe_actual": "mixup",
+      "run_id": "e2r_vits_mixup_baseline_s1",
+      "tau_canon": 20.8515625,
+      "variant": "baseline"
+    },
+    "vit_small|nomix": {
+      "arch": "vit_small",
+      "canon_source_run": "e2r_vits_nomix_baseline_s1",
+      "ckpt_kind": "last",
+      "ckpt_sha256": "207a5e907fab6e3bf23abafce51b2bc55687b10ae70e65bf72c84b78fbe63c95",
+      "n_images": 10000,
+      "recipe_actual": "nomix",
+      "run_id": "e2r_vits_nomix_baseline_s1",
+      "tau_canon": 22.859375,
+      "variant": "baseline"
+    }
+  },
+  "split_name": "val_diag_split",
+  "split_sha256": "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5",
+  "stages": [
+    "s11_out",
+    "in_b07",
+    "in_b08",
+    "hist"
+  ],
+  "tau_cal": {
+    "vit_base|mixup": {
+      "hist": 127.26476287841797,
+      "in_b07": 41.90098762512207,
+      "in_b08": 45.624473571777344,
+      "s11_out": 96.1695556640625
+    },
+    "vit_small|mixup": {
+      "hist": 20.84629249572754,
+      "in_b07": 14.219008445739746,
+      "in_b08": 15.935407638549805,
+      "s11_out": 18.662434577941895
+    },
+    "vit_small|nomix": {
+      "hist": 22.8547306060791,
+      "in_b07": 17.453816413879395,
+      "in_b08": 20.123014450073242,
+      "s11_out": 19.975540161132812
+    }
+  },
+  "work_package": "I1_spatial"
+}

@@ -1,0 +1,90 @@
+{
+  "arch": "vit_small",
+  "cell": "vit_small|mixup",
+  "ckpt_kind": "last",
+  "ckpt_sha256": "3aa41a7225b69146a419c618049d7a9f348d259d3ae750749755e0addc2759ac",
+  "conditions": {
+    "native": {
+      "n_images": 10000,
+      "stages": [
+        "s11_out",
+        "in_b07",
+        "in_b08",
+        "hist"
+      ]
+    }
+  },
+  "files": [
+    "maps_hist.npz",
+    "norms_hist.npz",
+    "maps_in_b07.npz",
+    "norms_in_b07.npz",
+    "maps_in_b08.npz",
+    "norms_in_b08.npz",
+    "maps_s11_out.npz",
+    "norms_s11_out.npz"
+  ],
+  "generated_by": "tools/frozen_I1_norms.py",
+  "git_sha": "e3a2b46f4ab3f802094b002e7ec893888e06051b",
+  "mad_k": 5.0,
+  "n_conditions": 1,
+  "n_prefix": 1,
+  "outputs": {
+    "maps_hist.npz": {
+      "bytes": 2232714,
+      "sha256": "4c6413a4fd7b5373b75345e4e45edaf9b43215a2b33417d9a50446d4d8e0bdb3"
+    },
+    "maps_in_b07.npz": {
+      "bytes": 2232702,
+      "sha256": "e5645342270332f7a3fd0718b26acff817ddae5ab71eaae9cb3986ab17fadbfa"
+    },
+    "maps_in_b08.npz": {
+      "bytes": 2232702,
+      "sha256": "b25af88ab74ccbbdbeba9365e5c1147b56895cb43b2ca7bd3e6900082037516d"
+    },
+    "maps_s11_out.npz": {
+      "bytes": 2232710,
+      "sha256": "4a34cf95435c6269e603084f6d322a191370fe7349460b939dec97062657b490"
+    },
+    "norms_hist.npz": {
+      "bytes": 9643896,
+      "sha256": "4a4f22f64bde25785f16c2e1f559012260f9b9912bb2149d06de46f0e4322bd7"
+    },
+    "norms_in_b07.npz": {
+      "bytes": 9643908,
+      "sha256": "b415394984efa1519a0842d7854f509662b216bd01268994236a8b5561e00825"
+    },
+    "norms_in_b08.npz": {
+      "bytes": 9643908,
+      "sha256": "42701f5cefc4fd71a820ff9a221aa33b92207467a66f3de51a69b0e35c5405b4"
+    },
+    "norms_s11_out.npz": {
+      "bytes": 9643912,
+      "sha256": "f421280b6630f6f0a5cac7ca45ef6d65b59b1b0f27b25e07edffb644b6d1d639"
+    }
+  },
+  "precision": "fp32",
+  "recipe_actual": "mixup",
+  "run_id": "e2r_vits_mixup_baseline_s1",
+  "seed": 0,
+  "split_name": "val_diag_split",
+  "split_sha256": "bcb2a4c5a8f5335a71f7abef3c3a5dc028acd4b96aa76177e66360422186f8a5",
+  "stages": [
+    "hist",
+    "in_b07",
+    "in_b08",
+    "s11_out"
+  ],
+  "state_hash_after": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+  "state_hash_before": "0864eb975c7cfe2de211121f90503814377c10c852852a57f1fb54b1566f9d50",
+  "state_restored": true,
+  "tau_cal": {
+    "hist": 20.84629249572754,
+    "in_b07": 14.219008445739746,
+    "in_b08": 15.935407638549805,
+    "s11_out": 18.662434577941895
+  },
+  "thresholds_cal_file": "results/frozen/I1_spatial/val_diag_split/thresholds_cal.json",
+  "variant": "baseline",
+  "work_package": "I1_spatial"
+}

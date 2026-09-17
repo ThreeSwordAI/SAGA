@@ -1,5 +1,14 @@
 {
-  "absent": {
+  "absent": {},
+  "complete": true,
+  "generated_at": "2026-09-17T04:20:27.778151+00:00",
+  "generated_by": "tools/frozen_manifest_hashes.py",
+  "manifest": "results/frozen/I0_manifest/manifest.csv",
+  "n_absent": 0,
+  "n_hashed": 117,
+  "n_remaining": 0,
+  "n_targets": 117,
+  "no_longer_in_manifest": {
     "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/det_vitb_baseline_s1/ckpt/best.pth": "file not found on this filesystem",
     "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/det_vitb_registers_s1/ckpt/best.pth": "file not found on this filesystem",
     "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/det_vitb_saga_s1/ckpt/best.pth": "file not found on this filesystem",
@@ -7,14 +16,6 @@
     "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/seg_vitb_registers_s1/ckpt/best.pth": "file not found on this filesystem",
     "/home/woody/iwi5/iwi5359h/SAGA/dense_ckpt/seg_vitb_saga_s1/ckpt/best.pth": "file not found on this filesystem"
   },
-  "complete": true,
-  "generated_at": "2026-09-16T10:16:41.622177+00:00",
-  "generated_by": "tools/frozen_manifest_hashes.py",
-  "manifest": "results/frozen/I0_manifest/manifest.csv",
-  "n_absent": 6,
-  "n_hashed": 117,
-  "n_remaining": 0,
-  "n_targets": 117,
   "sha256_by_path": {
     "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA/best.pth": "bbfbc1d843e819910d68f660bcdb038510b4bf2e4ae8f6428c6a705e7c0e165e",
     "/home/vault/iwi5/iwi5359h/SAGA/e2/checkpoints/ViT-B_SAGA/last.pth": "c10af1fd55c4c39b44a0be7adc6527e3b0619c9db6a2dc7072d98d9adc9246f5",
