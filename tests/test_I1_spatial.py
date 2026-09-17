@@ -715,30 +715,10 @@ def test_the_job_file_takes_the_split_as_an_argument_with_no_default():
 JOB_FILES = sorted((REPO / "scripts" / "jobs").glob("frozen_*.sbatch"))
 
 
-def _working_bash():
-    """A bash that can actually run, or None.
-
-    `shutil.which("bash")` on Windows finds WSL's stub first, which on this
-    machine cannot start at all (`execvpe(/bin/bash) failed`). Git Bash is
-    the one that works. Probe rather than trust the PATH, so the test skips
-    where there is no usable bash instead of failing on a broken one.
-    """
-    candidates = [shutil.which("bash"), r"C:\Program Files\Git\bin\bash.exe",
-                  "/bin/bash", "/usr/bin/bash"]
-    for candidate in candidates:
-        if not candidate or not Path(candidate).exists():
-            continue
-        try:
-            probe = subprocess.run([candidate, "-c", "exit 0"],
-                                   capture_output=True, text=True, timeout=60)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if probe.returncode == 0:
-            return candidate
-    return None
-
-
-BASH = _working_bash()
+# The bash probe lives in tests/_bash.py, shared with
+# tests/test_task10_ttr.py, which had the same problem and trusted
+# the PATH until 2026-09-17.
+from tests._bash import BASH  # noqa: E402
 
 
 @pytest.mark.skipif(BASH is None, reason="no usable bash on this machine")

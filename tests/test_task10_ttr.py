@@ -1252,14 +1252,21 @@ def test_live_env_script_tolerates_the_module_rename(rel):
 
 @pytest.mark.parametrize("rel", LIVE_ENV_SCRIPTS)
 def test_live_env_script_is_syntactically_valid(rel):
-    """These are sourced by every job; a syntax error here kills all of them."""
-    import shutil
+    """These are sourced by every job; a syntax error here kills all of them.
+
+    The bash comes from `tests/_bash.py`, which PROBES its candidates.
+    `shutil.which("bash")` used to be good enough here and is not: on the
+    Windows box it finds WSL's stub, which cannot start, and `bash -n` then
+    reports a syntax error for a check that never ran (measured 2026-09-17,
+    four failures in PowerShell that passed under Git Bash).
+    """
     import subprocess
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("no bash available")
-    proc = subprocess.run([bash, "-n", str(REPO / rel)],
-                          capture_output=True, text=True)
+
+    from tests._bash import BASH
+    if BASH is None:
+        pytest.skip("no usable bash on this machine")
+    proc = subprocess.run([BASH, "-n", str(REPO / rel)],
+                          capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, f"{rel}: {proc.stderr}"
 
 
