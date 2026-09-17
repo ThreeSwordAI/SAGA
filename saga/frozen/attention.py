@@ -89,6 +89,7 @@ import numpy as np
 import torch
 
 from saga.frozen.correspondence import exceedance_flags
+from saga.frozen.features import model_device, to_device
 from saga.frozen.stages import capture_stages, model_blocks, resolve_stage
 
 MISSING = "MISSING"
@@ -347,13 +348,17 @@ def run_attention_package(*, row, conditions, dataset, out_dir, image_ids,
     acc = {q: {b: [] for b in blocks} for q in QUANTITIES}
     exc = {basis: {b: [] for b in blocks} for basis in EXCEEDANCE_BASES}
     seen = 0
+    # Read off the MODEL, not from the `device` argument. The two can
+    # disagree, and when they did the first I5a array failed 19 of 19 on a
+    # CPU batch meeting CUDA weights (saga/frozen/features.py::model_device).
+    where = model_device(model)
     for images, _targets in loader:
         if max_images is not None:
             if seen >= max_images:
                 break
             if seen + images.shape[0] > max_images:
                 images = images[:max_images - seen]
-        images = images.to(device)
+        images = to_device(images, where)
         summaries = attention_summaries(model, images, blocks,
                                         n_prefix=n_prefix, tau_cal=tau_cal)
         for b in blocks:
