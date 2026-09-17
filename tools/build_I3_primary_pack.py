@@ -56,6 +56,18 @@ from saga.frozen.records import records_path  # noqa: E402
 MISSING = "MISSING"
 REFERENCE = "original"
 
+#: One builder, two work packages. The reference condition and the extra
+#: per-image columns are all that differ: I3 measures how big its edit was,
+#: I4 measures how much energy it injected and whether it hit its target.
+#: A second tool would be a second place for the (image, condition) ordering
+#: to drift, and the ordering is what makes a pack comparable to a parquet.
+PACKS = {
+    "I3": {"reference": "original",
+           "extra": ("delta_update_norm",)},
+    "I4": {"reference": "native",
+           "extra": ("measured_perturbation_norm", "energy_rel_error")},
+}
+
 #: Provenance carried per run, from the records themselves.
 PROVENANCE = ("run_id", "arch", "recipe_actual", "variant", "ckpt_kind",
               "ckpt_sha256", "split_name", "split_sha256", "stage",
@@ -85,8 +97,9 @@ def read_rows(path):
         return list(csv.DictReader(f))
 
 
-def build_run(rows) -> dict:
+def build_run(rows, *, reference=REFERENCE, extra=("delta_update_norm",)) -> dict:
     """One checkpoint's arrays, keyed by condition, in the split's order."""
+    REFERENCE = reference
     by_cond = {}
     for r in rows:
         by_cond.setdefault(str(r["condition_id"]), {})[str(r["image_id"])] = r
@@ -102,7 +115,7 @@ def build_run(rows) -> dict:
     n_i, n_c = len(ids), len(conds)
     dnll = np.zeros((n_c, n_i), dtype=np.float32)
     dcorrect = np.zeros((n_c, n_i), dtype=np.int8)
-    dun = np.zeros((n_c, n_i), dtype=np.float32)
+    extras = {name: np.zeros((n_c, n_i), dtype=np.float32) for name in extra}
     max_logit = np.zeros(n_c, dtype=np.float32)
 
     ref_nll = np.asarray([_num(ref[i]["nll"]) for i in ids], dtype=np.float64)
@@ -120,18 +133,21 @@ def build_run(rows) -> dict:
                               dtype=np.float64) - ref_nll).astype(np.float32)
         dcorrect[k] = (np.asarray([_num(got[i]["correct"]) for i in ids],
                                   dtype=np.float64) - ref_cor).astype(np.int8)
-        dun[k] = np.asarray([_num(got[i].get("delta_update_norm"))
-                             for i in ids], dtype=np.float64).astype(np.float32)
+        for name, arr in extras.items():
+            arr[k] = np.asarray([_num(got[i].get(name)) for i in ids],
+                                dtype=np.float64).astype(np.float32)
         mal = np.asarray([_num(got[i].get("max_abs_logit_diff_vs_native"))
                           for i in ids], dtype=np.float64)
         max_logit[k] = np.nanmax(mal) if mal.size else np.nan
 
-    return {"image_ids": np.asarray(ids), "conditions": np.asarray(conds),
-            "dnll": dnll, "dcorrect": dcorrect, "dun": dun,
-            "max_abs_logit_diff": max_logit,
-            "native_nll": ref_nll.astype(np.float32),
-            "provenance": {k: str(rows[0].get(k, MISSING))
-                           for k in PROVENANCE}}
+    out = {"image_ids": np.asarray(ids), "conditions": np.asarray(conds),
+           "dnll": dnll, "dcorrect": dcorrect}
+    out.update(extras)
+    out.update({"max_abs_logit_diff": max_logit,
+                "native_nll": ref_nll.astype(np.float32),
+                "provenance": {k: str(rows[0].get(k, MISSING))
+                               for k in PROVENANCE}})
+    return out
 
 
 def main():
@@ -140,7 +156,9 @@ def main():
     p.add_argument("--results",
                    default="results/frozen/I3_gate_edits/evaluation")
     p.add_argument("--out", default="figures_data/frozen/I3_primary.npz")
+    p.add_argument("--work-package", default="I3", choices=sorted(PACKS))
     args = p.parse_args()
+    spec = PACKS[args.work_package]
 
     root = Path(args.results)
     runs = sorted(d for d in root.iterdir() if d.is_dir()) if root.exists() \
@@ -149,19 +167,23 @@ def main():
         print(f"no run directories under {root}", file=sys.stderr)
         return 1
 
-    payload, meta = {}, {"runs": [], "generated_by": __file__.replace("\\", "/"),
+    payload, meta = {}, {"runs": [], "work_package": args.work_package,
+                         "reference": spec["reference"],
+                         "extra": list(spec["extra"]),
+                         "generated_by": __file__.replace("\\", "/"),
                          "generated_at": datetime.now(timezone.utc).isoformat(
                              timespec="seconds"),
-                         "results": str(root), "reference": REFERENCE}
+                         "results": str(root)}
     for d in runs:
         path = records_path(d, "records")
         if not path.exists():
             print(f"  SKIP {d.name}: no records file", file=sys.stderr)
             continue
-        built = build_run(read_rows(path))
+        built = build_run(read_rows(path), reference=spec["reference"],
+                          extra=spec["extra"])
         run = d.name
-        for key in ("image_ids", "conditions", "dnll", "dcorrect", "dun",
-                    "max_abs_logit_diff", "native_nll"):
+        for key in (("image_ids", "conditions", "dnll", "dcorrect",
+                     "max_abs_logit_diff", "native_nll") + spec["extra"]):
             payload[f"{run}__{key}"] = built[key]
         meta["runs"].append(dict(built["provenance"], run_dir=run,
                                  n_images=int(built["dnll"].shape[1]),
