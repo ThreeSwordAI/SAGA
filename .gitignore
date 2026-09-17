@@ -42,6 +42,25 @@ results/frozen/I2_terminal/evaluation/*/records.parquet
 results/frozen/I2_terminal/evaluation/*/diag.parquet
 results/frozen/I2_terminal/evaluation/*/records.csv
 results/frozen/I2_terminal/evaluation/*/diag.csv
+# [TASK-B/I3, I4] the SAME policy, named per work package rather than by a
+# `results/frozen/**/records.parquet` wildcard, so that a small sweep on a
+# small split stays committable by default and dropping a raw record file out
+# of git is always a deliberate line in this file.
+#
+# It was NOT here when I3 Phase B landed, and 113 MiB of I3 parquet went to
+# the remote on 2026-09-17 as a result (16 files; the blobs are in history and
+# stay there). These lines exist so I4 — another ~130 MiB — does not repeat
+# it. The committed run_meta.json records each file's sha256 and byte size,
+# and figures_data/frozen/I3_primary.npz / I4_primary.npz carry the per-image
+# values every reported number is resampled from.
+results/frozen/I3_gate_edits/*/*/records.parquet
+results/frozen/I3_gate_edits/*/*/diag.parquet
+results/frozen/I3_gate_edits/*/*/records.csv
+results/frozen/I3_gate_edits/*/*/diag.csv
+results/frozen/I4_perturbation/*/*/records.parquet
+results/frozen/I4_perturbation/*/*/diag.parquet
+results/frozen/I4_perturbation/*/*/records.csv
+results/frozen/I4_perturbation/*/*/diag.csv
 # [TASK-A/I1] the per-token norm fields stay on the cluster: float32
 # [10 000 x 196] per stage per run is ~8 MB, ~1 GB over 19 runs x 4 stages x
 # two splits. Everything derived from them — the frequency maps, the packed
