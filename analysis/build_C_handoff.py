@@ -482,13 +482,33 @@ def section_not_settled(lines):
     ]
 
 
-def build():
+#: The provenance line's shape. The sha in it is the one HEAD was at when the
+#: document was generated, so it legitimately changes on the next commit —
+#: which is why `build()` accepts it and `sha_in()` reads it back out. Every
+#: other byte of the document is pinned by `test_the_handoff_is_byte_identical
+#: _to_its_generator`; without this seam that test would fail on every commit
+#: that followed the one which wrote the file, and a test that fails for a
+#: reason nobody acts on is a test people learn to ignore.
+PROVENANCE_PREFIX = "**GENERATED** by `analysis/build_C_handoff.py` at git `"
+
+
+def sha_in(text):
+    """The git sha recorded in an existing handoff, or None."""
+    for line in text.splitlines():
+        if line.startswith(PROVENANCE_PREFIX):
+            rest = line[len(PROVENANCE_PREFIX):]
+            return rest.split("`", 1)[0]
+    return None
+
+
+def build(sha=None):
+    sha = git_sha() if sha is None else sha
     lines = [
         "# TASK C handoff — the correspondence readout (I5) and incoming "
         "attention (I7)",
         "",
-        f"**GENERATED** by `analysis/build_C_handoff.py` at git "
-        f"`{git_sha()}`. Every number is read from a committed file under "
+        f"{PROVENANCE_PREFIX}{sha}`. Every number is read from a committed "
+        f"file under "
         f"`results/frozen/I5_readout/`, `results/frozen/I7_attention/` or "
         f"`results/ttr*/`; none is typed by hand. The surrounding prose is "
         f"fixed text. Re-run the script after new results land and this "
@@ -514,15 +534,19 @@ def main():
                    help="exit 1 if the file on disk differs from what this "
                         "script would write (byte identity)")
     args = p.parse_args()
-    text = build()
     out = Path(args.out)
     if args.check:
         current = out.read_text(encoding="utf-8") if out.exists() else ""
-        if current != text:
+        # Regenerate at the sha the file itself records, so the check pins
+        # every number and every word and tolerates only the one value that
+        # legitimately moves with HEAD.
+        if current != build(sha=sha_in(current)):
             print(f"{out} is NOT what build_C_handoff.py would write")
             return 1
-        print(f"{out} is byte-identical to its generator's output")
+        print(f"{out} is byte-identical to its generator's output "
+              f"(at the sha it records)")
         return 0
+    text = build()
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {out} ({len(text)} bytes)")

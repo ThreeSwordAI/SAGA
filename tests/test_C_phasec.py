@@ -148,12 +148,38 @@ def test_the_wording_verdict_matches_the_table_it_was_computed_from():
 
 def test_the_handoff_is_byte_identical_to_its_generator():
     """A generated file under docs/ is REGENERATED, never hand-edited
-    (I0 handoff §8.6). If someone improved a sentence by hand, this fails."""
+    (I0 handoff §8.6). If someone improved a sentence by hand, this fails.
+
+    Regenerated at the sha the DOCUMENT records, not at HEAD: the provenance
+    line legitimately moves with every later commit, and a test that went red
+    on every unrelated commit is one people learn to ignore. Every other byte
+    — every number, every word — is pinned exactly.
+    """
     if not HANDOFF.exists():
         pytest.skip("handoff not present")
-    from analysis.build_C_handoff import build
+    from analysis.build_C_handoff import build, sha_in
 
-    assert HANDOFF.read_text(encoding="utf-8") == build()
+    text = HANDOFF.read_text(encoding="utf-8")
+    recorded = sha_in(text)
+    assert recorded and len(recorded) >= 7, "no git sha in the handoff"
+    assert text == build(sha=recorded)
+
+
+def test_the_handoff_provenance_line_is_the_only_thing_that_may_move():
+    """The seam above must not be a hole: regenerating at a DIFFERENT sha has
+    to change the document, or the byte-identity test is checking nothing."""
+    if not HANDOFF.exists():
+        pytest.skip("handoff not present")
+    from analysis.build_C_handoff import build, sha_in
+
+    text = HANDOFF.read_text(encoding="utf-8")
+    other = build(sha="0" * 40)
+    assert other != text
+    # and they differ on exactly one line — the provenance line
+    diff = [(a, b) for a, b in zip(text.splitlines(), other.splitlines())
+            if a != b]
+    assert len(diff) == 1, f"{len(diff)} lines moved, expected 1"
+    assert sha_in(text) in diff[0][0]
 
 
 def test_the_handoff_reports_the_d9_d10_status_truthfully():
