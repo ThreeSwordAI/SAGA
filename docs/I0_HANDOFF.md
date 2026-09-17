@@ -161,7 +161,7 @@ The epochs are read from `coco_eval_best.json` and `log.csv` on every build; a r
 
 ## 7. What I0 did NOT settle
 
-`docs/LOCKED_ANALYSIS.md` is a **DRAFT**. It carries three `PENDING` lines (signed by / date frozen / git sha at freeze); until the human fills them in, nothing in it is locked and **no I3/I4 Phase-B job may run**. 1 of 8 decisions is still open.
+`docs/LOCKED_ANALYSIS.md` is **FROZEN**, signed 2026-09-17 at git `5c1b737`. Every value in it is fixed, and `saga/frozen/masks.py` enforces that at run time. 10 of 10 decisions are closed.
 
 | # | § | question | resolution / default if unanswered |
 |---|---|---|---|
@@ -169,14 +169,14 @@ The epochs are read from `coco_eval_best.json` and `log.csv` on every build; a r
 | ~~D2~~ | 3 | ~~Which dihedral subset — all 8, or a smaller prespecified set?~~ | **CLOSED — all 8**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | ~~D3~~ | 4 | ~~The ten fixed permutation index lists are not yet generated or committed~~ | **CLOSED** — `configs/frozen/permutations_14x14.json`, sha256 `75149f36329e480e192e23a25ac39c88b9a77d6b230ad40938d043525ddfa460`. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | ~~D4~~ | 5 | ~~Map basis for the I4 prevalence mask: `canon` or `mad`?~~ | **CLOSED — `canon`**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
-| D5 | 5 | The discovery map at the INPUT to block 7/8 does not exist — the committed `*_addr.json` maps are last-block. I1 must produce it before I4 Phase B | **OPEN** — blocks I4; no default. I1 owns it |
+| ~~D5~~ | 5 | ~~The discovery map at the INPUT to block 7/8 does not exist~~ | **CLOSED** — `configs/frozen/I4_masks.json`, sha256 (LF-normalised) `72612357be7dde3925b3a312b20964c826234396c165580d55f21e10e6bfe96e`. Built by TASK A / I1 Phase C from the DISCOVERY split: `cell_mean_map` over the four ViT-S/mixup baselines at `in_b07` and `in_b08`, `fixed_cal` basis (D4), `topk_mask(k=16)` and `ring_matched_controls(n=10)`. Signed Mahfuzur Rahman Chowdhury, 2026-09-17, 5c1b737. |
+| ~~D9~~ | 13 | ~~I5 secondary endpoints (Track C)~~ | **CLOSED** — see §13. Signed Mahfuzur Rahman Chowdhury, 2026-09-17, 5c1b737. |
+| ~~D10~~ | 13 | ~~I7 wording rule (Track C)~~ | **CLOSED** — see §13. Signed Mahfuzur Rahman Chowdhury, 2026-09-17, 5c1b737. |
 | ~~D6~~ | 8 | ~~Bootstrap seed~~ | **CLOSED — `0`**, default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | ~~D7~~ | 9 | ~~Multiplicity correction across the three primary contrasts~~ | **CLOSED — none**, all three named in advance; default accepted. Signed Mahfuzur Rahman Chowdhury, 2026-09-16, a120f4f. |
 | ~~D8~~ | 11 | ~~The five split shas~~ | **CLOSED** — filled in from the Phase-B build, 2026-09-16 |
 
-7 of the 8 are now closed (D1, D2, D3, D4, D6, D7, D8); `docs/LOCKED_ANALYSIS.md` records who closed each one and when. I0 Phase C itself closed only D8, by filling the split shas in §11 from the Phase-B build.
-
-**1 of the open decisions BLOCKS a work package.** D5: I4 needs a prevalence map at the INPUT to the edited block, and the committed `*_addr.json` maps are last-block, so I1 must produce it before I4 Phase B. The rest can be defaulted, and the defaults are written down so that defaulting is a visible decision rather than a silent one.
+10 of the 10 are now closed (D1, D2, D3, D4, D5, D9, D10, D6, D7, D8); `docs/LOCKED_ANALYSIS.md` records who closed each one and when. I0 Phase C itself closed only D8, by filling the split shas in §11 from the Phase-B build.
 
 ## 8. Rules every later work package inherits
 

@@ -482,11 +482,24 @@ def build(git_sha: str) -> str:
     open_ds = [d for d in ds if not d["closed"]]
     closed_ds = [d for d in ds if d["closed"]]
     A("## 7. What I0 did NOT settle\n")
-    A(f"`docs/LOCKED_ANALYSIS.md` is a **DRAFT**. It carries three `PENDING` "
-      f"lines (signed by / date frozen / git sha at freeze); until the human "
-      f"fills them in, nothing in it is locked and **no I3/I4 Phase-B job may "
-      f"run**. {len(open_ds)} of {len(ds)} decisions "
-      f"{'is' if len(open_ds) == 1 else 'are'} still open.\n")
+    # The draft/frozen sentence is READ from the document, not asserted. It
+    # said "is a DRAFT ... three PENDING lines" unconditionally until
+    # 2026-09-17, when the freeze made it a false statement sitting directly
+    # above a generated count of zero open decisions.
+    from saga.frozen.masks import locked_state
+    _lock = locked_state(REPO / "docs" / "LOCKED_ANALYSIS.md")
+    if _lock["missing"]:
+        A(f"`docs/LOCKED_ANALYSIS.md` is a **DRAFT**. It carries three "
+          f"`PENDING` lines (signed by / date frozen / git sha at freeze); "
+          f"until the human fills them in, nothing in it is locked and **no "
+          f"I3/I4 Phase-B job may run**. {len(open_ds)} of {len(ds)} "
+          f"decisions {'is' if len(open_ds) == 1 else 'are'} still open.\n")
+    else:
+        A(f"`docs/LOCKED_ANALYSIS.md` is **FROZEN**, signed "
+          f"{_lock['date']} at git `{_lock['git_sha']}`. Every value in it is "
+          f"fixed, and `saga/frozen/masks.py` enforces that at run time. "
+          f"{len(closed_ds)} of {len(ds)} decisions are closed"
+          f"{'' if not open_ds else f'; {len(open_ds)} still open'}.\n")
     A("| # | § | question | resolution / default if unanswered |")
     A("|---|---|---|---|")
     for d in ds:
