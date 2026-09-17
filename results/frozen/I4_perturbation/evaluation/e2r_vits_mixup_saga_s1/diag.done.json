@@ -1,0 +1,20 @@
+{
+  "cell": "vit_small|mixup",
+  "ckpt_sha256": "5afe5394ddb2b3b926d60d03c63462c5778fc39fa9eacb23a1d2655e80f6f5d5",
+  "git_sha": "f1dcac340d8c474de6deead9c84f21c4ac581fba",
+  "hist_stage": "s12_pre_norm",
+  "n_conditions": 65,
+  "n_records_appended": 30000,
+  "n_records_skipped": 0,
+  "permutations_file": "MISSING",
+  "permutations_sha256": "MISSING",
+  "run_id": "e2r_vits_mixup_saga_s1",
+  "split_name": "evaluation",
+  "split_sha256": "7fdf5f9f2ace98ef03a6267455daa1104b92b6689c510ab8b1e5420340f27014",
+  "stage": "s11_out",
+  "tau_cal": {
+    "s11_out": 18.698548316955566
+  },
+  "tau_canon": 20.8515625,
+  "work_package": "I4_perturbation"
+}
