@@ -35,6 +35,8 @@ import torch
 import torch.nn.functional as F
 
 from saga.frozen import records as rec
+from saga.frozen.features import \
+    check_readout_block as _c_check_readout_block            # TASK C / I5
 from saga.frozen.edits import (TERMINAL_GATE_VALUES, EditError, gate_edit,
                                receiver_perturbation, state_hash,
                                terminal_gate_override)
@@ -252,10 +254,11 @@ def load_conditions(conditions_yaml, *, masks_path=None, locked_path=None):
             f"`diag: false`. Nothing is captured for them, so the stage list "
             f"would describe a measurement that never happens")
     doc.setdefault("precision", "fp32")
-    _resolve_permutations(conditions_yaml, doc)
+    _resolve_permutations(conditions_yaml, doc)       # TASK B / I3 hook
     _resolve_masks(conditions_yaml, doc, masks_path=masks_path,
-                   locked_path=locked_path)
-    _check_energy_match(conditions_yaml, doc)
+                   locked_path=locked_path)          # TASK B / I4 hook
+    _check_energy_match(conditions_yaml, doc)        # TASK B / I4 hook
+    _c_check_readout_block(conditions_yaml, doc)      # TASK C / I5 hook
     return doc
 
 

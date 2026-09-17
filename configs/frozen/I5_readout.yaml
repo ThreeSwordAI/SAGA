@@ -1,0 +1,96 @@
+# configs/frozen/I5_readout.yaml — TASK C / I5a's conditions, and the only
+# place they are defined
+# =============================================================================
+# The paper's thesis is that outlier counts and cosine do not tell you what
+# changed for a CONSUMER of the features. I5a supplies a consumer that needs
+# no training at all: after a transform whose patch correspondence is known
+# exactly, a patch's descriptor should still identify the same patch.
+# Nearest-neighbour accuracy against that answer key is a per-image,
+# chance-calibrated readout of local feature usefulness.
+#
+# Nothing below is selectable from the command line. `tools/frozen_I5_corr.py`
+# takes WHICH run, WHICH split, WHERE the data is and how many images — never
+# a transform, a stage, a descriptor or a condition. `load_conditions` in
+# saga/frozen/runner.py REFUSES a name that is not in this file and not in D9
+# (the hook calls saga/frozen/features.py::check_readout_block), which is what
+# makes "the analysis configuration was fixed before the outcomes were
+# inspected" a property of this repository rather than a promise.
+#
+# EVERY I5 COMPARISON IS A SECONDARY ENDPOINT UNDER D7. The three primary
+# contrasts of the paper are C1-C3 in Track B; nothing measured here decides
+# a primary claim, and analysis/frozen_I5_analysis.py stamps `secondary` on
+# every table it writes.
+
+work_package: I5_readout
+
+# The readout this file declares. `check_readout_block` accepts exactly one
+# value and refuses anything else, so a second readout cannot appear without
+# a new declared name.
+readout: correspondence
+
+# The DECLARED reporting stage carried on every row's `stage` provenance
+# column is per-condition below; this is the document-level default D1 fixed
+# (I2 handoff §0: "every new patch diagnostic in I1, I3, I4 and I5 is
+# reported at that stage").
+stage: s11_out
+
+# fp32 everywhere: tools/eval.py recorded amp='off' for every historical
+# number, and a cosine COMPARISON in bf16 would be dominated by the cast.
+precision: fp32
+
+# ── Transforms (task file §3, D9) ────────────────────────────────────────────
+# Exact grid correspondence ONLY. T0 is the reference forward and the
+# identity control; T1-T3 carry the answer keys. §11 forbids scale, rotation
+# and sub-patch shifts — their correspondence is not exact, so "the nearest
+# neighbour is the corresponding patch" would have no defined right answer.
+# The geometry, the shared-set sizes (196 / 182 / 168) and the chance values
+# are derived in saga/frozen/transforms.py and pinned by
+# tests/test_I5_readout.py against a synthetic image with unique patches.
+transforms: [T0, T1, T2, T3]
+
+# ── Descriptors (D9) ─────────────────────────────────────────────────────────
+# PRIMARY FIRST. `l2` is the raw patch token L2-normalized; `centred_l2`
+# subtracts the image's mean patch token first, which removes a shared
+# component that would otherwise inflate every cosine equally. Which one is
+# primary was fixed here, in advance, not chosen from the result.
+descriptors: [l2, centred_l2]
+
+# Image-level bootstrap (LOCKED_ANALYSIS §8: 10,000 resamples; D6 seed 0,
+# closed at its written default). Recorded in every output so that the
+# parameter is visible in the artifact and not only in this file.
+bootstrap_seed: 0
+bootstrap_resamples: 10000
+
+# ── Conditions ───────────────────────────────────────────────────────────────
+# `native` first and on every variant: `max_abs_s11_diff_vs_native` is
+# measured against it, so the runner refuses a condition list that does not
+# declare it first.
+#
+# `stages` is captured in ONE forward per side per condition, so s11_out,
+# hist and s12_post_norm under the same edit are three readouts of one
+# computation rather than three passes that could differ:
+#
+#   s11_out        D1 — the stage every new patch diagnostic is reported at
+#   hist           where every historical number in results/ was computed
+#   s12_post_norm  what a dense head actually consumes
+conditions:
+  - id: native
+    edit_type: native
+    applies_to: [baseline, registers, saga]
+    stages: [s11_out, hist, s12_post_norm]
+
+  # The terminal-gate BYPASS, on the 8 SAGA checkpoints. I2 established that
+  # a CLS-only classifier cannot see this gate at all (max abs logit
+  # difference exactly 0 on 8 of 8). I5 asks the next question: can a FEATURE
+  # CONSUMER see it? T_I5c_terminal is that comparison.
+  #
+  # The bypass swaps the LAST block's gate, so it CANNOT change `s11_out` —
+  # the output of the second-to-last block. That stage is captured under this
+  # condition anyway, and every row carries the MEASURED
+  # `max_abs_s11_diff_vs_native`, so Phase C asserts the identity on the real
+  # records instead of trusting the argument.
+  - id: term_1.00
+    edit_type: terminal_gate_override
+    params: {value: 1.00}
+    applies_to: [saga]
+    stages: [s11_out, hist, s12_post_norm]
