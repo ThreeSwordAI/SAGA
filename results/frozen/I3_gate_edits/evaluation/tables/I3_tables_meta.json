@@ -1,0 +1,35 @@
+{
+  "bootstrap_resamples": 10000,
+  "bootstrap_seed": 0,
+  "decisions": {
+    "7": {
+      "C1": "null",
+      "C2": "null",
+      "branch": "no_arrangement",
+      "branch_text": "the frozen model does not use its gate arrangement beyond the per\u2011head mean"
+    },
+    "8": {
+      "C1": "null",
+      "C2": "null",
+      "branch": "no_arrangement",
+      "branch_text": "the frozen model does not use its gate arrangement beyond the per\u2011head mean"
+    }
+  },
+  "generated_at": "2026-09-17T16:09:12+00:00",
+  "generated_by": "analysis/frozen_I3_analysis.py",
+  "git_sha": "b3aa4d8421982a2feb9da7f7c00cc12cb6fef393",
+  "n_strata": 10,
+  "results": "results\\frozen\\I3_gate_edits\\evaluation",
+  "runs_absent": [],
+  "runs_loaded": [
+    "e2r_vitb_mixup_saga_s1",
+    "e2r_vits_mixup_saga_s1",
+    "e2r_vits_mixup_saga_s2",
+    "e2r_vits_nomix_saga_s1",
+    "e2r_vits_nomix_saga_s2",
+    "legacy_e2_vit_base_nomixdir_saga",
+    "legacy_e2_vit_small_mixupdir_saga",
+    "legacy_e2_vit_small_nomixdir_saga"
+  ],
+  "work_package": "I3_gate_edits"
+}
