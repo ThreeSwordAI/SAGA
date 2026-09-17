@@ -6142,3 +6142,77 @@ after the document is frozen.
 after the rebase onto Tracks B and C. Their `stages.py` additions — I7's
 `in_b10` capture-only stage and I4's `MASK_LAYERS` contract — leave I1's two
 block-input stages and I6's two analog stages untouched.
+
+---
+
+## 2026-09-17 — TASK C — I5a PHASE B, ATTEMPT 1 FAILED (one bug, mine; nothing written)
+
+Job `4266049`, `--array=0-18` on a100. **19 of 19 FAILED**, exit `1:0`, ~2–3
+minutes each. Nothing was written: no `corr_records.parquet`, no completion
+marker, no `run_meta.json` anywhere under
+`results/frozen/I5_readout/sub2k/`. The writers behaved correctly — the
+completion marker is written last, so a job that dies mid-run leaves nothing
+that a later reader could mistake for a result.
+
+### What did work, before it died
+
+The `.log` of array task 0 shows the whole preflight chain passing: the
+interpreter check (torch / timm / torchvision), the pyarrow check, the
+cohort-drift check against the manifest, ImageNet val staged and verified
+(50,000 images, 1,000 classes), the manifest row loaded, and
+
+    ckpt_sha256=2a7f8c84dc32571e…  split=sub2k sha=d2fc8b5b4c5ab409… n=2000
+    transforms=['T0','T1','T2','T3'] descriptors=['l2','centred_l2']
+
+So the checkpoint identity, the split sha and the conditions contract were
+all verified on the cluster. It died on the FIRST FORWARD.
+
+### The bug
+
+    RuntimeError: Input type (torch.FloatTensor) and weight type
+    (torch.cuda.FloatTensor) should be the same
+
+`run_correspondence_package` accepted `device=` and handed it to the model
+builder, but `correspondence_rows` and `_t0_control` never applied it to the
+images. The model was on the A100; every batch stayed on the CPU. The shared
+runner's `run_work_package` does `images = images.to(device)` one line into
+its loop — mine did not.
+
+### Why 54 green tests missed it
+
+On a CPU-only machine the model and the batch are BOTH `cpu`, so a missing
+`.to(device)` changes nothing: every forward succeeds and every assertion
+passes. The entire I5 suite was green, twice over, against a bug that could
+only appear on a GPU.
+
+The fix therefore does not add a device test — it adds a seam test. The
+device is now read off the MODEL (`features.model_device`, so it cannot
+disagree with where the weights are) and both members of every pair go
+through `features.to_device`. The new test counts calls to that seam:
+34 with the fix, **2 without it**, which is the assertion that fails.
+Verified by reverting the fix and watching the test go red.
+
+### Swept for the same class of bug before resubmitting
+
+- `saga/frozen/attention.py` (I7) DID move its batch, but from the same
+  `device=` argument. Hardened to `model_device` before I7 runs.
+- `tools/frozen_I5b_seg_eval.py` moves images and masks correctly.
+- Every `.numpy()` in Track C code is now preceded by `.cpu()`. The two in
+  `split_by_exceedance` were already operating on CPU tensors, but the
+  omission is invisible on a CPU box and fatal on a GPU, so they are explicit
+  now.
+
+### Cost, and the lesson
+
+19 A100 allocations, ~3 minutes each including a full ImageNet val stage per
+task — roughly an hour of GPU time for a one-line omission. The next
+submission is **`--array=0` alone**; the rest of the array only after that
+single run lands clean. That ordering was the human's call and it is the
+right one for any first run of a new driver on the cluster.
+
+`pytest -q`: **1204 passed, 30 skipped.**
+
+### Pending
+
+Re-submission of I5a after this fix is merged to `main` and pushed. I7 and
+I5b have not been submitted.
