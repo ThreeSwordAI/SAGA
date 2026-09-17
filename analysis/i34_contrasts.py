@@ -299,17 +299,100 @@ def c2(grouped: dict, layer: int, *, resamples=BOOTSTRAP_RESAMPLES,
     return out
 
 
-def c3(*_args, **_kwargs):
-    """C3 — I4's primary contrast: theta(primary mask) minus the mean theta of
-    the 10 ring-matched, energy-matched controls at eps = 0.10.
+#: I4 condition ids (TASK B §5). `native` is the reference of every theta.
+I4_REFERENCE = "native"
+I4_PRIMARY = "prim_e{eps}_L{layer}"
+I4_CONTROL = "ctrl{j}_e{eps}{kind}_L{layer}"
 
-    Not implemented in I3 Phase A. C3 reads `measured_perturbation_norm` and
-    the mask ids that `configs/frozen/I4_masks.json` (D5) will define, and D5
-    is still OPEN in `docs/LOCKED_ANALYSIS.md`. Writing a substitute contract
-    for it here — guessing the mask naming, the control count or the energy
-    columns — is exactly the failure mode the phase split exists to prevent.
+#: The energy regimes a control can be in: `m` = per-image energy-matched to
+#: the primary, `f` = fixed epsilon and UNMATCHED. Both are reported; the
+#: difference between them is the size of the energy confound.
+I4_MATCHED, I4_FIXED = "m", "f"
+
+
+def i4_condition_ids(layer: int, eps: str = "10", kind: str = I4_MATCHED,
+                     n_controls: int = 10) -> tuple:
+    """`(primary id, [control ids])` for one layer and one epsilon."""
+    primary = I4_PRIMARY.format(eps=eps, layer=int(layer))
+    controls = [I4_CONTROL.format(j=j, eps=eps, kind=kind, layer=int(layer))
+                for j in range(int(n_controls))]
+    return primary, controls
+
+
+def theta(grouped: dict, condition: str, *, reference=I4_REFERENCE,
+          resamples=BOOTSTRAP_RESAMPLES, seed=BOOTSTRAP_SEED) -> dict:
+    """theta for ONE I4 condition: mean paired Delta-NLL vs `native`.
+
+    LOCKED §7: the primary endpoint is the paired per-image NLL difference.
+    A positive theta means the perturbation at those coordinates worsens the
+    loss.
     """
-    raise NotImplementedError("C3 is I4 Phase A′")
+    _ids, d = paired_delta(grouped, condition, reference, "nll")
+    _ids2, dtop = paired_delta(grouped, condition, reference, "correct")
+    out = _summary(d, dtop, resamples=resamples, seed=seed)
+    out.update(condition=condition, reference=reference)
+    return out
+
+
+def c3(grouped: dict, layer: int, *, eps: str = "10", kind: str = I4_MATCHED,
+       n_controls: int = 10, resamples=BOOTSTRAP_RESAMPLES,
+       seed=BOOTSTRAP_SEED) -> dict:
+    """C3 — theta(primary) minus the mean theta of the matched controls.
+
+    LOCKED §7: theta_m = E_i[ Delta_i^high - (1/R) sum_r Delta_i^control(r) ].
+    The R = 10 controls are averaged WITHIN IMAGE before the contrast
+    (LOCKED §8: repeated interventions on one checkpoint are never
+    replication), so the resampling unit stays the image.
+
+    Also returns the CONTROL BAND — the min and max of the 10 individual
+    control thetas — because TASK B §6's interpretation turns on whether the
+    primary sits inside it, not on the contrast alone.
+    """
+    layer = int(layer)
+    primary, controls = i4_condition_ids(layer, eps, kind, n_controls)
+    missing = [c for c in [primary] + controls if c not in grouped]
+    if missing:
+        raise ContrastError(
+            f"C3 at layer {layer} (eps {eps}, kind {kind!r}) needs "
+            f"{primary!r} and {n_controls} controls; missing {missing}. The "
+            f"condition list is fixed in configs/frozen/I4_perturbation.yaml "
+            f"and a partial sweep is not a contrast.")
+    ids = sorted(set.intersection(
+        *[set(grouped[c]) for c in [primary, I4_REFERENCE] + controls]))
+    if not ids:
+        raise ContrastError(
+            f"C3 at layer {layer}: the conditions share no image")
+
+    def _delta(cond, field):
+        return np.asarray([float(grouped[cond][i][field])
+                           - float(grouped[I4_REFERENCE][i][field])
+                           for i in ids], dtype=np.float64)
+
+    d_primary = _delta(primary, "nll")
+    per_control = [_delta(c, "nll") for c in controls]
+    d = d_primary - np.mean(per_control, axis=0)
+    dtop = (_delta(primary, "correct")
+            - np.mean([_delta(c, "correct") for c in controls], axis=0))
+
+    out = _summary(d, dtop, resamples=resamples, seed=seed)
+    band = [float(np.mean(x)) for x in per_control]
+    theta_primary = float(np.mean(d_primary))
+    out.update(
+        contrast="C3", layer=layer, epsilon=eps, control_kind=kind,
+        condition=primary, reference="+".join(controls),
+        n_controls=len(controls),
+        theta_primary=theta_primary,
+        theta_control_mean=float(np.mean(band)),
+        control_band_lo=min(band), control_band_hi=max(band),
+        theta_control_per_mask={c: b for c, b in zip(controls, band)},
+        # TASK B §6's first branch is "theta(primary) inside the control
+        # band", which is a statement about the BAND and not about the CI —
+        # so it is computed here, beside the interval, rather than inferred
+        # from it later.
+        primary_inside_band=bool(min(band) <= theta_primary <= max(band)),
+        definition="mean_i[ (nll(primary) - nll(native)) - mean_r (nll(ctrl r)"
+                   " - nll(native)) ], paired per image")
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -390,10 +473,117 @@ def interpret_i3(c1_verdict: str, c2_verdict: str) -> dict:
     }
 
 
-def interpret_i4(*_args, **_kwargs):
-    """The TASK B §6 branch an I4 result lands in. Completed in I4 Phase A′,
-    with C3."""
-    raise NotImplementedError("C3 is I4 Phase A′")
+#: The method groups C3 decides SEPARATELY (TASK B §6, LOCKED §10.1).
+#: Registers are n = 2 and never decide; they are labelled in every table.
+FRESH_BASELINE = ("e2r_vits_mixup_baseline_s1", "e2r_vits_mixup_baseline_s2")
+REGISTERS = ("legacy_e2_vit_small_mixupdir_registers",
+             "legacy_e2_vit_small_nomixdir_registers")
+
+
+def interpret_i4(per_method: dict) -> dict:
+    """The TASK B §6 branch an I4 result lands in, with its VERBATIM text.
+
+    `per_method` is `{"baseline": decision, "saga": decision}` from `decide`,
+    each carrying the per-checkpoint C3 summaries. The guide turns on TWO
+    things, and both are read from the data rather than inferred from the
+    verdict alone:
+
+      * whether theta(primary) sits INSIDE the control band, per checkpoint;
+      * whether the sign is consistent in one method but not the other.
+
+    Branches, from §6:
+      inside the band for every method          -> `inside_band`
+      outside, consistent in one method only    -> `method_specific`
+      outside, same sign in all methods         -> `all_methods`
+
+    Anything else — outside the band with inconsistent signs everywhere, or a
+    method that could not be decided — is `unanticipated`, which says so
+    rather than borrowing the nearest named sentence, exactly as
+    `interpret_i3` does.
+    """
+    methods = sorted(per_method)
+    if not methods:
+        raise ContrastError("interpret_i4 needs at least one method")
+
+    inside, verdicts, signs = {}, {}, {}
+    for m, dec in per_method.items():
+        votes = [dec["per_checkpoint"][r] for r in dec["deciding"]
+                 if r in dec["per_checkpoint"]]
+        inside[m] = bool(votes) and all(
+            v.get("primary_inside_band") for v in votes)
+        verdicts[m] = dec["verdict"]
+        signs[m] = {v["direction"] for v in votes}
+
+    decided = {m: v for m, v in verdicts.items()
+               if v in ("positive", "negative")}
+    if all(inside.values()):
+        branch = "inside_band"
+    elif not decided:
+        branch = "unanticipated"
+    elif len(decided) == len(methods) and len({tuple(sorted(signs[m]))
+                                               for m in decided}) == 1:
+        branch = "all_methods"
+    elif len(decided) < len(methods):
+        branch = "method_specific"
+    else:
+        branch = "unanticipated"
+
+    text = I4_BRANCHES.get(branch)
+    if text is None:
+        text = ("the theta/control-band pattern is not one of the three "
+                "branches TASK B §6 names; it is reported with the band, the "
+                "intervals and no interpretation supplied")
+    return {
+        "branch": branch, "text": text, "close": I4_GUIDE_CLOSE,
+        "anticipated": branch != "unanticipated",
+        "verdicts": verdicts, "primary_inside_band": inside,
+        "source": "docs/TASK_B_I3_I4.md §6",
+    }
+
+
+def i4_contrasts(records_by_run: dict, *, layers=(7, 8), eps="10",
+                 kind=I4_MATCHED, resamples=BOOTSTRAP_RESAMPLES,
+                 seed=BOOTSTRAP_SEED) -> dict:
+    """C3 at each layer, per checkpoint, decided per METHOD.
+
+    `records_by_run` is `{run_id: [record rows]}`. The fresh baselines and
+    the fresh SAGA checkpoints are decided SEPARATELY (TASK B §6): the
+    question is whether the methods differ in how those coordinates are used,
+    and pooling them would answer a different one.
+    """
+    grouped = {run: by_condition(rows) for run, rows in records_by_run.items()}
+    # The METHOD comes from the record rows' own `variant` column, which the
+    # manifest wrote — never from a substring of the run_id. `..._saga_s1`
+    # and `..._baseline_s1` happen to be greppable; a run named otherwise
+    # would be silently dropped from its own method, and a null built from a
+    # missing checkpoint is the one failure this module must not produce.
+    variant = {}
+    for run, rows in records_by_run.items():
+        seen = {str(r.get("variant", MISSING)) for r in rows}
+        if len(seen) != 1:
+            raise ContrastError(
+                f"{run}: record rows carry {sorted(seen)} in `variant`; one "
+                f"checkpoint is one variant")
+        variant[run] = seen.pop()
+
+    out = {}
+    for layer in layers:
+        per_run = {run: c3(g, layer, eps=eps, kind=kind, resamples=resamples,
+                           seed=seed)
+                   for run, g in grouped.items()}
+        per_method = {
+            m: decide({r: s for r, s in per_run.items() if variant[r] == m},
+                      deciding=d)
+            for m, d in (("baseline", FRESH_BASELINE), ("saga", FRESH_SAGA))
+        }
+        out[int(layer)] = {
+            "C3": per_method, "per_checkpoint": per_run,
+            "variant": dict(variant),
+            "registers": sorted(r for r, v in variant.items()
+                                if v == "registers"),
+            "interpretation": interpret_i4(per_method),
+        }
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
