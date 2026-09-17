@@ -25,7 +25,8 @@ import torch
 from saga.frozen import attention as ATT
 from saga.frozen.edits import state_hash
 from saga.frozen.runner import load_conditions
-from saga.frozen.stages import (ALL_STAGES, BLOCK_INPUT_STAGES,
+from saga.frozen.stages import (ALL_BLOCK_INPUT_STAGES, ALL_STAGES,
+                                BLOCK_INPUT_STAGES, EXTRA_BLOCK_INPUT_STAGES,
                                 capture_stages, stage_block_index)
 from saga.metrics import infer_num_prefix_tokens, sink_counts_mad, token_norms
 from saga.vit import build_saga_vit
@@ -104,14 +105,28 @@ def test_in_b10_is_the_output_of_block_nine(saga_model, images):
     assert stage_block_index(saga_model, "in_b10") == 9
 
 
-def test_in_b10_was_added_additively():
-    """The I0 four and TASK A's two are untouched; `in_b10` is a new key."""
-    assert BLOCK_INPUT_STAGES["in_b10"] == 10
-    for name in ("in_b07", "in_b08"):
-        assert name in BLOCK_INPUT_STAGES
-    for name in ("s11_out", "s12_pre_norm", "s12_post_norm", "hist"):
-        assert name in ALL_STAGES
+def test_in_b10_was_added_without_widening_i4s_contract():
+    """`in_b10` is capturable, and TASK B's I4 mask contract is UNCHANGED.
+
+    `saga/frozen/masks.py` derives the layers I4 EDITS from
+    `BLOCK_INPUT_STAGES`, so putting `in_b10` there silently demanded a
+    `*_L10` mask family that was never drawn — measured, 15 of Track B's I4
+    tests failed. A capture-only stage belongs in `EXTRA_BLOCK_INPUT_STAGES`,
+    and this test is what keeps the two apart.
+    """
+    from saga.frozen.masks import MASK_LAYERS
+
+    assert EXTRA_BLOCK_INPUT_STAGES["in_b10"] == 10
+    assert "in_b10" not in BLOCK_INPUT_STAGES
+    assert BLOCK_INPUT_STAGES == {"in_b07": 7, "in_b08": 8}
+    assert MASK_LAYERS == (7, 8), "TASK C must not change what I4 edits"
+
+    # and it IS resolvable and capturable
+    assert ALL_BLOCK_INPUT_STAGES["in_b10"] == 10
     assert "in_b10" in ALL_STAGES
+    for name in ("s11_out", "s12_pre_norm", "s12_post_norm", "hist",
+                 "in_b07", "in_b08"):
+        assert name in ALL_STAGES
 
 
 def test_the_declared_alignment_is_input_not_output():
