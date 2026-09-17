@@ -212,7 +212,7 @@ T_B_FIELDS = ("contrast", "role", "layer", "run_id", "arch", "recipe_actual",
               "scope", "decides", "n_images", "mean_nats", "ci_lo", "ci_hi",
               "excludes_zero", "direction", "delta_top1_points",
               "frac_positive", "verdict", "verdict_reason", "branch",
-              "branch_text", "guide_conflict", "definition",
+              "branch_text", "c2_note", "definition",
               "bootstrap_resamples",
               "bootstrap_seed", "split_sha256", "permutations_sha256",
               "ckpt_sha256", "git_sha")
@@ -266,8 +266,11 @@ def build_b(loaded, *, layers=(7, 8), resamples=BOOTSTRAP_RESAMPLES,
                                else MISSING),
                     "branch_text": (interp["text"] if role == "primary"
                                     else MISSING),
-                    "guide_conflict": (interp.get("guide_conflict") or MISSING
-                                       if role == "primary" else MISSING),
+                    # §4, amended: when C1 is null, C2 carries no reading of
+                    # its own. The column says so rather than leaving a
+                    # reader to infer a decomposition that is not there.
+                    "c2_note": (interp.get("c2_note") or MISSING
+                                if role == "primary" else MISSING),
                     "definition": s["definition"],
                     "bootstrap_resamples": resamples, "bootstrap_seed": seed,
                     "split_sha256": p["split_sha256"],

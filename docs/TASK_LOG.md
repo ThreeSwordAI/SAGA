@@ -6142,3 +6142,109 @@ after the document is frozen.
 after the rebase onto Tracks B and C. Their `stages.py` additions — I7's
 `in_b10` capture-only stage and I4's `MASK_LAYERS` contract — leave I1's two
 block-input stages and I6's two analog stages untouched.
+
+## 2026-09-17 — TASK B — §4 AMENDED to the signed contrasts, with a recorded deviation
+
+`docs/TASK_B_I3_I4.md` §4's interpretation guide now reads the SIGNED pair —
+C1 = `permute` − `original`, C2 = `permute` − `permute_within_ring` — instead
+of the pair the D7 table of §0 named. Committed BEFORE the freeze, so the
+guide in force when I4 runs is the one the code returns.
+
+### The four patterns
+
+| pattern | reading |
+|---|---|
+| C1 ≈ 0 | the frozen model does not use its gate arrangement beyond the per‑head mean. C2 is reported **without a reading**: with no effect to decompose, the split between ring profile and within‑ring arrangement is not interpretable. |
+| C1 > 0 and C2 > 0 | it uses the ring profile, and within‑ring permutation hurts less. |
+| C1 > 0 and C2 ≈ 0 | it uses the arrangement within rings, and ring membership adds nothing beyond it. |
+| C1 < 0 or C2 < 0 | anomaly. Both intervals are reported and no mechanism statement is made. |
+
+`mean` − `original` and `permute` − `dihedral` are named in the same section
+as pre‑declared SECONDARY contrasts, reported beside the primaries with no
+branch of their own.
+
+**Order of evaluation, and a case §4 leaves ambiguous.** A negative on either
+side is flagged as `anomaly` even when C1 is null, where the first pattern
+would otherwise absorb it into "C2 reported without a reading". The two are
+not in conflict — the anomaly branch is strictly more informative and still
+makes no mechanism statement — and flagging a sign nobody predicted is the
+safer reading. A fifth slot, `insufficient`, covers a missing deciding
+checkpoint; it is a statement about the RECORDS rather than about the model,
+so it is deliberately not one of §4's four and does not appear in the task
+file.
+
+The superseded guide is kept in §4, **struck through**, labelled "superseded
+2026‑09‑17, reconciliation to LOCKED §9", because it was the pre‑registered
+text and the paper trail matters more than a clean page.
+`analysis/i34_contrasts.py` holds the guide IN FORCE only — a module that
+carried both would let a caller pick — and a test asserts the superseded
+sentence cannot be returned.
+
+### Recorded deviation — what had been computed when this guide was written
+
+*(The paragraph below is the one §4 carries verbatim, and the one
+`analysis/build_B_handoff.py` must copy into `docs/B_HANDOFF.md` under the
+heading "recorded deviation". §11 of the task file now says so.)*
+
+The §4 inversion was identified, and its corrected reading committed, at
+**`3a030f6` (11:03:27)**, before any contrast had been computed on real
+records. Between that commit and **`3b0ca2f` (11:14:13)**, C1 and C2 MEANS
+were computed **at layer 7 only**, on three checkpoints, as the
+`figures_data/frozen/I3_primary.npz` reproduction check, and appear in the
+session record:
+
+| checkpoint | C1 | C2 |
+|---|---|---|
+| `e2r_vits_mixup_saga_s1` | +0.00002289 | −0.00027491 |
+| `e2r_vits_mixup_saga_s2` | −0.00013621 | −0.00007828 |
+| `legacy_e2_vit_small_mixupdir_saga` | −0.00034356 | −0.00004071 |
+
+Bootstrap CIs at 50 resamples were computed INTERNALLY by `_summary` and were
+never printed or inspected. No verdict was computed, no decision rule
+applied, no secondary contrast evaluated, and layer 8 was not touched.
+
+The four‑pattern mapping is a completion of a logical correction, not a
+response to those values — the corrected middle branch predates them. It is
+nevertheless disclosed as written with them known, because the alternative is
+an attestation that is not true. A reader can judge it.
+
+**An attestation was requested and refused.** The instruction for this commit
+was to attest that no I3 contrast had been evaluated on real records, "not in
+code, not by hand, not while building I3_primary.npz". That is exactly when
+it happened, so the attestation would have been false and this disclosure
+replaces it. Recorded here because a refusal that leaves no trace is worth
+little.
+
+### Standing rule, effective 2026‑09‑17
+
+**A reproduction check compares per‑condition means, never contrasts, and
+only for conditions selected by a fixed rule stated in the log BEFORE the
+check runs.**
+
+For I4, stated here in advance: verify `figures_data/frozen/I4_primary.npz`
+against the parquet on **`native`, `prim_e10_L7` and `ctrl0_e10m_L7`**, for
+the **first three run_ids in manifest order**, and nothing else, before
+`analysis/i34_contrasts.py` is invoked. This rule goes into the Phase C
+prompt.
+
+The I3 check that produced the deviation above compared CONTRASTS, which is
+what this rule now forbids. Comparing per-condition means would have verified
+the pack just as well — a pack that reproduces every condition's mean
+reproduces every contrast built from them — without anyone seeing a contrast.
+
+### Tests
+
+`pytest -q` on I3 + I4: **121 passed.** The branch-name changes rippled into
+eight tests, all updated: four patterns parametrised, the byte-identity test
+now checks all four texts plus the "no reading" sentence, and three new tests
+pin the amendment itself — that the superseded sentence cannot be returned,
+that a null C1 leaves C2 unread, and that the recorded deviation (both shas,
+both timestamps, the six values, the layer, the 50-resample statement, the
+standing rule) is present in the task file.
+
+### Pending
+
+The freeze. `docs/LOCKED_ANALYSIS.md` is edited by hand from
+`docs/LOCKED_FREEZE_DRAFT.patch`; **both embargo-test replacements go into
+that same commit** so `main` never goes red between the freeze and the test
+flip. `pytest -q` must be green on the frozen sha before the I4 array runs.

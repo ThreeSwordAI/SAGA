@@ -763,23 +763,26 @@ def _decide(mean_shift, perm_shift, layer=7, resamples=400, **kw):
 
 
 @pytest.mark.parametrize("perm_shift,ring_shift,branch", [
-    (0.0, 0.0, "neither"),
-    (0.25, 0.25, "ring_only"),
-    (0.25, 0.10, "arrangement"),
-    (-0.25, -0.25, "unanticipated"),
-    (0.0, -0.12, "unanticipated"),
+    (0.0, 0.0, "no_arrangement"),
+    (0.25, 0.25, "within_ring"),
+    (0.25, 0.10, "ring_profile"),
+    (-0.25, -0.25, "anomaly"),      # C1 < 0
+    (0.0, 0.12, "anomaly"),         # C1 ~ 0 but C2 < 0: anomaly WINS over
+                                    # §4's first pattern, which would
+                                    # otherwise absorb it into "no reading"
 ])
 def test_every_interpretation_branch_is_reachable(perm_shift, ring_shift,
                                                   branch):
-    """TASK B §4's three branches, plus the pattern it does not name.
+    """All four patterns of the AMENDED §4 guide.
 
     Driven on the LOCKED §9 contrasts: C1 = perm - original, C2 = perm -
     ringperm. `ring_shift == perm_shift` makes C2 exactly 0 in expectation.
+    A negative on either side is the anomaly slot, even when C1 is null.
     """
     got = _decide(0.30, perm_shift, ring_shift=ring_shift)
     assert got["interpretation"]["branch"] == branch, (
         got["C1"]["verdict"], got["C2"]["verdict"])
-    assert got["interpretation"]["anticipated"] is (branch != "unanticipated")
+    assert got["interpretation"]["anticipated"] is True
 
 
 def test_the_primary_pair_is_LOCKED_section_9_and_the_old_pair_is_secondary():
@@ -801,19 +804,50 @@ def test_the_primary_pair_is_LOCKED_section_9_and_the_old_pair_is_secondary():
         "definition"]
 
 
-def test_the_section_4_middle_branch_is_flagged_not_reused():
-    """§4's guide was written against S2. Under §9's C2, `C2 ~ 0` means ring
-    membership adds NOTHING beyond the within-ring arrangement — the reverse
-    of what §4's sentence says. The module flags it instead of handing back a
-    sentence that would mean the opposite of the measurement."""
-    ring_only = _decide(0.30, 0.25, ring_shift=0.25)
-    assert ring_only["interpretation"]["branch"] == "ring_only"
-    assert ring_only["interpretation"]["guide_conflict"] == ic.GUIDE_CONFLICT
-    assert "does not transfer" in ic.GUIDE_CONFLICT
-    # every other branch is unaffected
-    for branch_case in (_decide(0.0, 0.0), _decide(0.30, 0.25,
-                                                   ring_shift=0.10)):
-        assert branch_case["interpretation"]["guide_conflict"] is None
+def test_the_amended_guide_replaced_the_inverted_branch():
+    """§4 was amended on 2026-09-17: its middle branch had been written
+    against S2 and read backwards under §9's C2. The module now returns the
+    AMENDED text and must not be able to return the superseded sentence."""
+    within = _decide(0.30, 0.25, ring_shift=0.25)
+    assert within["interpretation"]["branch"] == "within_ring"
+    assert within["interpretation"]["text"] == ic.I3_BRANCHES["within_ring"]
+    assert "ring membership adds nothing beyond it" in \
+        within["interpretation"]["text"]
+    # the superseded sentence survives ONLY struck through in the task file
+    superseded = ("it uses the ring/symmetry structure but not the "
+                  "within‑ring arrangement")
+    assert all(superseded not in v for v in ic.I3_BRANCHES.values())
+    text = TASK_FILE.read_text(encoding="utf-8")
+    assert f"~~{'Interpretation guide, fixed now'}" in text
+    assert "Superseded 2026‑09‑17" in text
+
+
+def test_a_null_c1_means_c2_carries_no_reading():
+    """§4, first pattern: with no effect to decompose, the split between ring
+    profile and within-ring arrangement is not interpretable."""
+    got = _decide(0.0, 0.0)["interpretation"]
+    assert got["branch"] == "no_arrangement"
+    assert got["c2_note"] == ic.I3_C2_NOT_READ
+    # and every other branch leaves it unset
+    for case in (_decide(0.30, 0.25, ring_shift=0.25),
+                 _decide(0.30, 0.25, ring_shift=0.10)):
+        assert case["interpretation"]["c2_note"] is None
+
+
+def test_the_recorded_deviation_is_in_the_task_file():
+    """The §4 amendment was written with three real C1/C2 means already seen.
+    That is disclosed in the task file rather than attested away, and the
+    disclosure must survive any later edit of §4."""
+    text = TASK_FILE.read_text(encoding="utf-8")
+    assert "Recorded deviation" in text
+    for token in ("3a030f6", "11:03:27", "3b0ca2f", "11:14:13",
+                  "+0.00002289", "−0.00027491", "−0.00034356"):
+        assert token in text, token
+    assert "at layer 7 only" in text
+    assert "50 resamples were computed INTERNALLY" in text or \
+        "at 50 resamples were computed INTERNALLY" in text
+    # and the standing rule the incident produced
+    assert "per‑condition means, never contrasts" in text
 
 
 def test_the_branch_text_is_byte_identical_to_the_task_file():
@@ -821,12 +855,13 @@ def test_the_branch_text_is_byte_identical_to_the_task_file():
     branch is ever softened, the task file has to be edited and the diff
     shows it."""
     text = TASK_FILE.read_text(encoding="utf-8")
-    for key in ("neither", "ring_only", "arrangement"):
-        assert ic.I3_BRANCHES[key] in text, key
+    for key, v in ic.I3_BRANCHES.items():
+        assert v in text, key
     assert ic.I3_GUIDE_CLOSE in text
-    # the unanticipated branch is NOT in the task file, and says so
-    assert ic.I3_BRANCHES["unanticipated"] not in text
-    assert "TASK B §4 names" in ic.I3_BRANCHES["unanticipated"]
+    assert ic.I3_C2_NOT_READ in text
+    # `insufficient` is a statement about the RECORDS, not one of §4's four
+    # patterns, so it is deliberately absent from the task file
+    assert ic.I3_INSUFFICIENT not in text
 
 
 def test_only_the_fresh_pair_decides():
@@ -838,7 +873,7 @@ def test_only_the_fresh_pair_decides():
         "legacy_e2_vit_small_mixupdir_saga", 5.0, 5.0, seed=9)
     got = ic.i3_contrasts(recs, layers=(7,), resamples=400)[7]
     assert got["C1"]["verdict"] == "null"
-    assert got["interpretation"]["branch"] == "neither"
+    assert got["interpretation"]["branch"] == "no_arrangement"
     assert got["C1"]["reported_not_deciding"] == [
         "legacy_e2_vit_small_mixupdir_saga"]
     assert "legacy_e2_vit_small_mixupdir_saga" in got["C1"]["per_checkpoint"]
@@ -852,7 +887,8 @@ def test_a_missing_fresh_checkpoint_is_insufficient_not_null():
     got = ic.i3_contrasts(recs, layers=(7,), resamples=200)[7]
     assert got["C1"]["verdict"] == "insufficient"
     assert got["C1"]["missing_deciding"] == list(ic.FRESH_SAGA)
-    assert got["interpretation"]["branch"] == "unanticipated"
+    assert got["interpretation"]["branch"] == "insufficient"
+    assert got["interpretation"]["anticipated"] is False
 
 
 def test_a_direction_disagreement_between_the_fresh_pair_is_a_null():
