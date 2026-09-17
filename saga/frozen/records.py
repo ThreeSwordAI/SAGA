@@ -108,6 +108,26 @@ RECORD_UPDATE_COLUMNS = RECORD_COLUMNS + (
     "delta_update_norm", "permutations_sha256",
 )
 
+#: The functional response of a sweep that injects a MEASURED amount of
+#: energy (TASK B / I4 B2b). Selected the same way, for the same reason.
+#:
+#: `measured_perturbation_norm` is ||dY_i||_F as the hook actually subtracted
+#: it; `energy_target` is the per-image kappa_i a matched control was asked
+#: for (the primary condition's measured norm on the SAME image) and the
+#: literal MISSING for a fixed-epsilon condition; `energy_rel_error` is
+#: |measured - target| / target, which TASK B §5 requires to be under 1%.
+#: `mask_id` and `energy_match` name the D5 mask and the primary each row
+#: belongs to, so a row is interpretable without re-reading the YAML, and
+#: `masks_sha256` pins the file they were resolved from.
+#:
+#: All four numeric columns are STRING columns. They mix real values with the
+#: literal MISSING — `native` has no epsilon, an unmatched control has no
+#: target — and a parquet column cannot hold both a float and a string.
+RECORD_PERTURBATION_COLUMNS = RECORD_COLUMNS + (
+    "energy_target", "energy_rel_error", "mask_id", "energy_match",
+    "n_masked_coords", "masks_sha256",
+)
+
 SCHEMAS = {"records": RECORD_COLUMNS, "diag": DIAG_COLUMNS}
 
 #: Key for a per-stage diag file: one row per (condition, stage, image).

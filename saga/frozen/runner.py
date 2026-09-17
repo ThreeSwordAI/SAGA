@@ -179,7 +179,7 @@ def image_id_for(rel_path: str) -> str:
     return f"{p.parent.name}/{p.stem}"
 
 
-def load_conditions(conditions_yaml):
+def load_conditions(conditions_yaml, *, masks_path=None, locked_path=None):
     """The declared conditions for one work package.
 
     Shape:
@@ -253,7 +253,87 @@ def load_conditions(conditions_yaml):
             f"would describe a measurement that never happens")
     doc.setdefault("precision", "fp32")
     _resolve_permutations(conditions_yaml, doc)
+    _resolve_masks(conditions_yaml, doc, masks_path=masks_path,
+                   locked_path=locked_path)
+    _check_energy_match(conditions_yaml, doc)
     return doc
+
+
+def _check_energy_match(conditions_yaml, doc: dict):
+    """A control may only be matched to a primary DECLARED BEFORE IT.
+
+    `energy_match` names the condition whose per-image measured injected norm
+    becomes this one's `energy_target`. The runner fills that from the
+    primary's own pass, so the primary has to have run first — on every
+    batch, for every image. Declaration order is what guarantees it, and a
+    document that gets it wrong is refused here rather than silently
+    producing controls matched to nothing.
+    """
+    seen = []
+    for c in doc["conditions"]:
+        match = (c.get("params") or {}).get("energy_match")
+        if match is not None:
+            if match == c["id"]:
+                raise RunnerError(
+                    f"{conditions_yaml}: condition {c['id']!r} is energy-"
+                    f"matched to itself")
+            if match not in seen:
+                later = [x["id"] for x in doc["conditions"]]
+                where = ("declared later" if match in later
+                         else "not declared at all")
+                raise RunnerError(
+                    f"{conditions_yaml}: condition {c['id']!r} is energy-"
+                    f"matched to {match!r}, which is {where}. The target is "
+                    f"the primary's MEASURED per-image injected norm, so the "
+                    f"primary must be declared — and therefore run — first.")
+        seen.append(c["id"])
+
+
+def _resolve_masks(conditions_yaml, doc: dict, *, masks_path=None,
+                   locked_path=None):
+    """Turn every `mask: <id>` into the committed D5 coordinate array.
+
+    Resolved at parse time out of `masks_file` and nowhere else, with the
+    file's sha256 recorded on every record row — the same shape as the
+    permutation resolution above, and for the same reason. The resolved
+    coordinates go on the condition under `_mask`, NOT into `params`, which
+    is serialised into `edit_params` on every one of 650,000 rows.
+
+    `saga/frozen/masks.load_masks` refuses a file that
+    `docs/LOCKED_ANALYSIS.md` has not frozen against its digest, so a
+    document naming a mask cannot be parsed at all until D5 is closed. That
+    is the embargo (TASK B §7), and it fires HERE — on the login node, at
+    parse time — rather than after a job has staged 50,000 images.
+    """
+    named = [(c, (c.get("params") or {}).get("mask")) for c in doc["conditions"]]
+    named = [(c, m) for c, m in named if isinstance(m, str)]
+    if not named:
+        return
+    from saga.frozen import masks as fmasks
+
+    path = masks_path or doc.get("masks_file")
+    if not path:
+        raise RunnerError(
+            f"{conditions_yaml}: condition {named[0][0]['id']!r} names a mask "
+            f"but the document declares no `masks_file`. A mask that is not "
+            f"read from a committed file is a mask this project did not fix "
+            f"in advance.")
+    try:
+        loaded = fmasks.load_masks(
+            path, locked_path=locked_path or fmasks.LOCKED_FILE)
+    except fmasks.MaskError as exc:
+        raise RunnerError(f"{conditions_yaml}: {exc}") from exc
+
+    doc["masks_file"] = str(path)
+    doc["masks_sha256"] = loaded["sha256"]
+    doc["grid_side"] = loaded["grid_side"]
+    for c, mask_id in named:
+        if mask_id not in loaded["masks"]:
+            raise RunnerError(
+                f"{conditions_yaml}: condition {c['id']!r} asks for mask "
+                f"{mask_id!r}, which {path} does not define. It holds "
+                f"{sorted(loaded['masks'])}.")
+        c["_mask"] = loaded["masks"][mask_id]
 
 
 def _check_diag(conditions_yaml, c: dict):
@@ -298,6 +378,22 @@ def layer_cell(params: dict) -> str:
     if v is None or v == MISSING:
         return MISSING
     return str(int(v))
+
+
+def num_cell(v) -> str:
+    """A numeric record cell as a STRING — MISSING or a decimal float.
+
+    `layer_cell`'s sibling, for the columns that mix a real value with the
+    literal MISSING within one sweep: `epsilon` (I4's `native` has none),
+    `measured_perturbation_norm` (only a perturbation has one),
+    `energy_target` and `energy_rel_error` (only a MATCHED control has them).
+    Same parquet constraint, same resolution as `count_fixed_canon`: a string
+    column keeps MISSING a VALUE (I0 handoff §8.2) instead of a null that a
+    mean would silently skip.
+    """
+    if v is None or v is MISSING or v == MISSING:
+        return MISSING
+    return repr(float(v))
 
 
 #: A condition may name a permutation instead of spelling out 196 indices:
@@ -399,6 +495,34 @@ def _check_stages(conditions_yaml, c: dict):
             f"capture would be written as two rows")
 
 
+def _energy_cells(measured, target, n: int) -> dict:
+    """Per-image `energy_target` / `energy_rel_error` cells for one batch.
+
+    `measured` is what `receiver_perturbation` actually subtracted,
+    `target` the per-image kappa a matched control was asked for (None for a
+    fixed-epsilon condition and for anything that is not a perturbation).
+
+    rel_error = |measured - target| / target. A target of exactly 0 is a
+    ZERO-NORM image — the masked native update was zero, so no energy could
+    be injected and none was — and its rel_error is 0.0, not a division. Its
+    frequency is counted separately (`n_zero_norm_images`) because LOCKED §6
+    requires it reported rather than dropped.
+    """
+    out = {"target": [MISSING] * n, "rel_error": [MISSING] * n,
+           "max_rel_error": None}
+    if target is None or not measured:
+        return out
+    worst = 0.0
+    for i in range(min(n, len(measured), len(target))):
+        t, got = float(target[i]), float(measured[i])
+        out["target"][i] = t
+        err = 0.0 if t == 0.0 else abs(got - t) / t
+        out["rel_error"][i] = err
+        worst = max(worst, err)
+    out["max_rel_error"] = worst
+    return out
+
+
 def condition_stages(conditions: dict, c: dict) -> tuple:
     """The stages one condition is captured at: its own list, or the
     document's single `stage`."""
@@ -449,8 +573,15 @@ def build_from_row(row: dict, ckpt_path=None, device="cpu"):
 # One condition over one batch
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _edit_context(model, condition: dict):
-    """The context manager for one declared condition (or a null one)."""
+def _edit_context(model, condition: dict, energy_target=None):
+    """The context manager for one declared condition (or a null one).
+
+    `energy_target` is the PER-IMAGE kappa for this batch, supplied by the
+    caller from the primary condition's measured injected norm. It overrides
+    any static value in `params`: a matched control's target is a measurement
+    of the batch in front of it, not a constant anyone could have written
+    into the YAML (TASK B §5, LOCKED §6).
+    """
     from contextlib import nullcontext
 
     kind = condition["edit_type"]
@@ -475,10 +606,20 @@ def _edit_context(model, condition: dict):
         return fn(model, int(params["layer"]), params["mode"],
                   alpha=params.get("alpha"), perm=perm), params
     if kind == "receiver_perturbation":
-        mask = np.asarray(params["mask"])
-        return fn(model, int(params["layer"]), mask,
+        # `_mask` is the coordinate array `load_conditions` resolved out of
+        # the committed D5 file; a literal `mask` list is still accepted so
+        # that I0's smoke config and the tests keep working unchanged.
+        mask = condition.get("_mask", params.get("mask"))
+        if isinstance(mask, str):                        # pragma: no cover
+            raise RunnerError(
+                f"condition {condition['id']!r} still carries an unresolved "
+                f"mask id {mask!r} — load_conditions resolves these, so this "
+                f"document was not parsed through it")
+        target = (params.get("energy_target") if energy_target is None
+                  else energy_target)
+        return fn(model, int(params["layer"]), np.asarray(mask),
                   float(params["epsilon"]),
-                  energy_target=params.get("energy_target")), params
+                  energy_target=target), params
     raise RunnerError(f"no context for edit_type {kind!r}")   # pragma: no cover
 
 
@@ -546,7 +687,7 @@ def run_condition(model, images, targets, condition, stage, *,
 
 @torch.no_grad()
 def run_condition_multistage(model, images, targets, condition, stages, *,
-                             native_logits=None):
+                             native_logits=None, energy_target=None):
     """(response dict, {stage: patch tensor}, edit info, logits) — ONE forward.
 
     Every declared stage is captured in the SAME forward pass under the SAME
@@ -560,7 +701,7 @@ def run_condition_multistage(model, images, targets, condition, stages, *,
     own head output.
     """
     wanted = tuple(stages)
-    ctx, _params = _edit_context(model, condition)
+    ctx, _params = _edit_context(model, condition, energy_target=energy_target)
     with ctx as info, capture_stages(model, wanted) as store:
         logits = model(images).float()
         captured = {s: store[s] for s in wanted}
@@ -806,6 +947,31 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
     summary["measure_update_norm"] = want_update
     summary["permutations_sha256"] = perm_sha
 
+    # TASK B / I4 B2b — per-image energy matching. A control declares
+    # `energy_match: <primary id>`; the primary's MEASURED injected norm for
+    # the same image becomes that control's `energy_target`, so every
+    # candidate mask injects the same Frobenius energy on that image
+    # (LOCKED §6, plan §5.5).
+    #
+    # WHY THIS CACHE IS SMALL, unlike the one delta_update_norm could not
+    # have. The target is ONE FLOAT PER IMAGE, not a [196, D] update: 10,000
+    # images x 4 primaries x 4 B is 160 kB, so the condition-major loop can
+    # keep every batch's targets in memory and the controls read them back
+    # when their turn comes. `_check_energy_match` has already refused a
+    # document whose control is declared before its primary, so the value is
+    # always there by the time it is needed.
+    masks_sha = conditions.get("masks_sha256", MISSING)
+    want_energy = any((c.get("params") or {}).get("mask") is not None
+                      or c.get("_mask") is not None for c in declared)
+    if want_energy:
+        record_cols = rec.RECORD_PERTURBATION_COLUMNS
+    energy_by_cond: dict = {}
+    energy_tol = float(conditions.get("energy_rel_error_tol", 0.01))
+    summary["masks_sha256"] = masks_sha
+    summary["energy_rel_error_tol"] = energy_tol
+    summary["energy_rel_error_max"] = 0.0
+    summary["n_zero_norm_images"] = 0
+
     with fref.update_reference(model, conditions, enabled=want_update) as ref:
         if ref is not None:
             summary["update_reference"] = ref.info()
@@ -817,6 +983,8 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
             stages = (condition_stages(conditions, cond)
                       if condition_diag(conditions, cond) else ())
             layer_edited = fref.condition_layer(cond) if ref is not None else None
+            cparams = dict(cond.get("params") or {})
+            match_of = cparams.get("energy_match")
             cursor = 0
             edit_info = {}
             for b, (images, targets) in enumerate(loader):
@@ -830,32 +998,66 @@ def run_work_package_stages(*, row, conditions, dataset, out_dir, device="cpu",
 
                 if ref is not None:
                     ref.clear()
+                target = (energy_by_cond.get(match_of, {}).get(b)
+                          if match_of else None)
+                if match_of and target is None:          # pragma: no cover
+                    raise RunnerError(
+                        f"condition {cond['id']!r} is energy-matched to "
+                        f"{match_of!r} but no measured norm was cached for "
+                        f"batch {b} — the primary did not run over this batch")
                 resp, captured, info, logits = run_condition_multistage(
                     model, images, targets, cond, stages,
-                    native_logits=native_by_batch.get(b))
+                    native_logits=native_by_batch.get(b),
+                    energy_target=target)
                 if cond["edit_type"] == "native":
                     native_by_batch[b] = logits
                 edit_info = info or edit_info
 
                 n = images.shape[0]
+                measured = (info or {}).get("measured_perturbation_norm") or []
+                if measured:
+                    energy_by_cond.setdefault(cond["id"], {})[b] = list(measured)
+                    summary["n_zero_norm_images"] += int(
+                        (info or {}).get("n_zero_norm_images", 0))
+                energy = _energy_cells(measured, target, n)
+                if energy["max_rel_error"] is not None:
+                    summary["energy_rel_error_max"] = max(
+                        summary["energy_rel_error_max"],
+                        energy["max_rel_error"])
                 # AFTER the edit context has exited, so the recomputed branch is
                 # the native one (saga/frozen/reference.py).
                 deltas = (ref.delta_update_norm(layer_edited, n)
                           if ref is not None else None)
                 params = dict(cond.get("params") or {})
-                extra = ({} if deltas is None else
-                         {"permutations_sha256": perm_sha})
                 for i in range(n):
+                    extra = {}
+                    if deltas is not None:
+                        extra = {"permutations_sha256": perm_sha,
+                                 "delta_update_norm": deltas[i]}
+                    elif want_energy:
+                        # every one of these mixes a real value with the
+                        # literal MISSING inside one sweep, so every one is a
+                        # STRING column (see RECORD_PERTURBATION_COLUMNS)
+                        extra = {
+                            "energy_target": num_cell(energy["target"][i]),
+                            "energy_rel_error": num_cell(
+                                energy["rel_error"][i]),
+                            "mask_id": params.get("mask", MISSING),
+                            "energy_match": params.get("energy_match", MISSING),
+                            "n_masked_coords": layer_cell(
+                                {"layer": (info or {}).get("n_masked_coords")}),
+                            "masks_sha256": masks_sha,
+                        }
                     record_rows.append(dict(
                         base, image_id=ids[cursor + i], condition_id=cond["id"],
                         edit_type=cond["edit_type"],
                         edit_params=json.dumps(params, sort_keys=True,
                                                separators=(",", ":"), default=str),
                         layer=layer_cell(params),
-                        epsilon=params.get("epsilon", MISSING),
-                        measured_perturbation_norm=MISSING,
-                        **({} if deltas is None
-                           else dict(extra, delta_update_norm=deltas[i])),
+                        epsilon=num_cell(params.get("epsilon", MISSING)),
+                        measured_perturbation_norm=num_cell(
+                            measured[i] if i < len(measured) else MISSING),
+                        **extra,
                         **{k: v[i] for k, v in resp.items()}))
 
                 for stage in stages:
