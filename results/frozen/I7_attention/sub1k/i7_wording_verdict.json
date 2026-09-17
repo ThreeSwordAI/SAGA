@@ -1,0 +1,38 @@
+{
+  "checked": [
+    {
+      "cell": "e2r_vits_mixup_baseline_s1|block10",
+      "ci_hi": "7.110340701",
+      "ci_lo": 6.793104988,
+      "ratio": 6.948704481
+    },
+    {
+      "cell": "e2r_vits_mixup_baseline_s1|block11",
+      "ci_hi": "14.17555747",
+      "ci_lo": 13.32703356,
+      "ratio": 13.74562809
+    },
+    {
+      "cell": "e2r_vits_mixup_baseline_s2|block10",
+      "ci_hi": "6.288243299",
+      "ci_lo": 6.021882463,
+      "ratio": 6.151786782
+    },
+    {
+      "cell": "e2r_vits_mixup_baseline_s2|block11",
+      "ci_hi": "12.25208191",
+      "ci_lo": 11.46216458,
+      "ratio": 11.85061001
+    }
+  ],
+  "failures": [],
+  "min_ci_lo": 6.021882463,
+  "min_ratio": 6.151786782,
+  "missing": [],
+  "passed": true,
+  "rule": "D10: the paper uses 'attention sink' only if, in every fresh ViT-S/mixup baseline, at both blocks, for patch queries, mean incoming mass per exceedance token is at least 3x that per non-exceedance token with the bootstrap CI excluding 3. The 3x is conventional.",
+  "sentence": "Across both fresh ViT-S/mixup baseline checkpoints and both measured blocks, patch queries send at least 6.15x more attention mass to high-norm outlier tokens than to other tokens (smallest bootstrap CI lower bound 6.02, above the pre-declared and conventional threshold of 3x), so this paper calls these tokens attention sinks.",
+  "term": "attention sink",
+  "threshold": 3.0,
+  "verdict": "attention_sink"
+}

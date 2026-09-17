@@ -332,8 +332,12 @@ def build(out_dir=None, npz_path=None):
             and str(c.get("layer_range", "")).replace(" ", "")
             == str(p["layer_range"]).replace(" ", ""))
 
+    # ONE home for these tables. `analysis/frozen_I7_analysis.py` writes
+    # them beside the other I7 tables, and a different default here produced
+    # a second, byte-identical copy under `I7_attention/tables/` — two homes
+    # for one table is how a table and its duplicate drift apart.
     out_dir = Path(out_dir or REPO / "results" / "frozen" / "I7_attention"
-                   / "tables")
+                   / "sub1k" / "tables")
     curve_path = write_csv(out_dir / "T_I7d_ttr_curve.csv", CURVE_FIELDS,
                            points)
     cov = coverage(points)

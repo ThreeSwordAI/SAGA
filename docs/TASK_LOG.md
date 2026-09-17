@@ -6414,3 +6414,151 @@ tests added for each now cover the axis that was missing, not just the symptom.
 - D9/D10 are still absent from `docs/LOCKED_ANALYSIS.md`. The I5a and I7
   evidence has now landed, so the handoff will have to record that the runs
   preceded the signature.
+
+---
+
+## 2026-09-17 — TASK C — PHASE C (tables, the D10 verdict, figure data, C_HANDOFF)
+
+Worktree `../SAGA-C`, branch `task/C`. Rebased onto `origin/main` (`ecd1d0c`),
+which already carried every Track C commit and both Phase B result commits.
+No push.
+
+### Verification before any table was built
+
+`tools/frozen_C_verify.py` — new, and it refuses to let a table be built on
+evidence it has not checked. Against the manifest and the frozen splits:
+
+| check | result |
+|---|---|
+| I5a runs / rows | **19 / 1,296,000** (= 4 transforms x 3 stages x 2 descriptors x 2,000 images, doubled on the 8 SAGA runs) |
+| `T0` == the plain forward, max abs diff over all 19 | **0.0** |
+| `term_1.00` left `s11_out` unchanged, all 8 SAGA | **0.0** |
+| I7 runs / shapes | **10**; `[1000, 2, 197]` at 1 prefix, `[1000, 2, 201]` on the registers |
+| `in_mass_patchq` sums to 1 over keys | yes |
+| I5b | RUN, gate matched at `epochs_completed=80` |
+| every completion marker / ckpt sha / split sha | present and matching |
+
+Both §7 controls now hold on **real trained checkpoints**, not only on the
+fake models the Phase A tests use. That is the first time either has been
+measured on the cohort.
+
+One bug in the verifier itself, found and fixed before it could mislead:
+`isinstance(True, int)` is True in Python, so the boolean
+`pair_members_identical` was being read as a per-stage difference and all 19
+runs reported a false T0 failure. Bools and `n_images` are now excluded
+explicitly.
+
+### D9 and D10 were never added to `docs/LOCKED_ANALYSIS.md`
+
+The Phase C instruction says to stop if they are not signed. They are not —
+`grep` finds neither, and the document is still `STATUS: DRAFT — NOT YET
+FROZEN` with all three signature lines `PENDING`. The human was told this
+three times before Phase B was submitted and again before Phase C, and chose
+to proceed both times. **The work is therefore done and the sequence is
+recorded rather than hidden.**
+
+`docs/C_HANDOFF.md` §0 states it in the document itself, and a test
+(`test_the_handoff_reports_the_d9_d10_status_truthfully`) asserts the
+document says whichever is true:
+
+- The PARAMETER VALUES were fixed in committed code before any Phase B job
+  ran — `configs/frozen/I5_readout.yaml` and `configs/frozen/I7_attention.yaml`
+  carry every transform, stage, descriptor, block, alignment, seed and
+  resample count, and `load_conditions` refuses anything else. Verifiable
+  from git history.
+- The signature did not happen. So the analysis configuration was fixed in
+  advance and can be PROVED to have been, but this is **not** a signed
+  pre-registration, and the paper must not claim one.
+
+### D10 — the wording rule PASSES
+
+Run once, on the committed `T_I7a_incoming.csv`; the verdict and its sentence
+are copied into the handoff and never edited.
+
+| checkpoint | block | ratio | bootstrap CI |
+|---|---|---|---|
+| `e2r_vits_mixup_baseline_s1` | 10 | **6.95** | 6.79 – 7.11 |
+| `e2r_vits_mixup_baseline_s1` | 11 | **13.75** | 13.33 – 14.18 |
+| `e2r_vits_mixup_baseline_s2` | 10 | **6.15** | 6.02 – 6.29 |
+| `e2r_vits_mixup_baseline_s2` | 11 | **11.85** | 11.46 – 12.25 |
+
+All four required cells clear 3x with CIs excluding 3, by a wide margin.
+Verdict `attention_sink`: the paper has EARNED the term by measurement rather
+than by habit. The 3x remains a declared convention and the sentence says so.
+
+### The headline numbers
+
+**T_I5a.** `T0` = 1.0000 on every checkpoint (the matcher's ceiling, a
+control). T1-T3 run **157x to 195x chance** (chance = 1/196 = 0.005102), so
+the readout has room to move in both directions. Accuracies are 0.80-0.91 on
+the mixup cells and 0.95-0.99 on nomix.
+
+**T_I5b_methods at `s11_out`, descriptor `l2`.** Every interval excludes
+zero, and the magnitudes are small against accuracies near 0.89. Applying
+LOCKED_ANALYSIS §10's first condition to the two FRESH ViT-S/mixup pairs:
+
+- **T1 (flip)**: −0.0221, +0.0104 — **NOT consistent in sign**
+- **T2 (1 patch)**: +0.0115, +0.0052 — consistent
+- **T3 (2 patches)**: +0.0076, +0.0092 — consistent
+
+So SAGA − baseline is consistently positive on the two TRANSLATIONS and not
+on the flip. Registers − baseline is larger and positive throughout
+(+0.050 to +0.069 on ViT-S), but n = 2 and both are legacy repeats, so every
+register row is stamped `descriptive`.
+
+**T_I5c_terminal — can a feature consumer see the terminal constant?**
+**Yes, and by a small amount.** At `s11_out` the delta is exactly 0 with a
+zero-width CI on all 8 SAGA checkpoints (the control). At `hist` and
+`s12_post_norm` the bypass moves the readout by at most **0.0112** in
+accuracy — real and interval-excluding on most checkpoints, but one to two
+orders of magnitude smaller than the readout itself, and essentially zero on
+the nomix pair (+0.0003).
+
+**T_I5f / T_I5g — the frozen ADE20K heads.** SAGA − baseline is **−0.24
+mIoU_ss** (43.335 vs 43.577); the paired per-image difference is −0.0086
+[−0.0130, −0.0043]. Under the terminal-gate bypass the SAGA head goes
+43.335 → **41.139 mIoU_ss, a change of −2.20**, labelled EXPLORATORY because
+the head was TRAINED on gated features and the drop measures sensitivity to
+an input distribution it never saw.
+
+Read across the three consumers, the pattern is coherent and worth stating
+carefully: the CLS classifier sees the terminal constant **not at all** (I2,
+exactly 0), the training-free correspondence readout sees it **slightly**
+(≤ 0.011 accuracy), and the trained dense head sees it **most** (−2.2 mIoU).
+The more a consumer was fitted to the gated features, the more its removal
+costs — which is a statement about fitting, not about feature quality, and
+the handoff says so.
+
+**T_I7d — the TTR curve.** 32 points from committed files, no new runs. The
+`all` range ([0,12]) covers 1 of 4 cells — `e2r_vitb_mixup_baseline_s1`,
+`e2r_vits_nomix_baseline_s1` and `legacy_vits_baseline` are MISSING there —
+and `midlayer` ([3,12]) covers 4 of 4. The two were swept on different neuron
+grids, so they are not a crossed grid and the coverage table says so instead
+of inventing 56 MISSING cells. Zero disagreements against
+`T_ttr_sweep.csv`.
+
+### Deliverables
+
+| ID | file |
+|---|---|
+| C5 run | `results/frozen/I5_readout/sub2k/tables/T_I5a–e*.csv` + `T_I5f`/`T_I5g` |
+| C10 run | `results/frozen/I7_attention/sub1k/tables/T_I7a–c*.csv`, `T_I7d_ttr_curve.csv`, `T_I7d_ttr_coverage.csv` |
+| C8 run | `results/frozen/I7_attention/sub1k/i7_wording_verdict.json` |
+| C11 | `figures_data/frozen/{F5B_readout,F1C_readout_draft,F7_attention,F_ttr_curve}.npz` |
+| C13 | `analysis/build_C_handoff.py` → `docs/C_HANDOFF.md` |
+| — | `analysis/build_C_figures.py`, `tools/frozen_C_verify.py`, `tests/test_C_phasec.py` (30 tests) |
+
+`docs/C_HANDOFF.md` is GENERATED and pinned by a byte-identity test, as the
+I0 and I2 handoffs are. Every table is stamped `secondary`, `descriptive` or
+`exploratory` on every row; a test asserts none is stamped primary. Chance is
+a column on all four readout tables and a test checks it equals 1/196 on
+every row.
+
+`pytest -q`: **1240 passed, 30 skipped.**
+
+### Pending
+
+- D9/D10 signing remains the human's, and `C_HANDOFF.md` will regenerate to
+  say "signed before these results were inspected" the moment it is done and
+  the document is frozen. Until then it says the truth.
+- Track C is otherwise COMPLETE: I5 and I7, Phases A, A′, B and C.

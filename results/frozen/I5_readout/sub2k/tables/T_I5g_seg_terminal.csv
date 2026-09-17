@@ -1,0 +1,2 @@
+run_id,variant,backbone_matched,n_images_paired,miou_ss_native,miou_ss_term_1.00,miou_ss_delta,delta_miou_present_paired,ci_lo,ci_hi,endpoint_class,note
+seg_vitb_saga_s1,saga,1,2000,43.335,41.1391,-2.1959,-0.007020497868,-0.009501197641,-0.004525465027,descriptive,"EXPLORATORY: the head was trained on gated features, so this measures sensitivity to an unseen input distribution, not feature utility"
