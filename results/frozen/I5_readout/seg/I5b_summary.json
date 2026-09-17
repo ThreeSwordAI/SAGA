@@ -1,0 +1,35 @@
+{
+  "gate_reason": "matched at epochs_completed=80: baseline=seg_vitb_baseline_s1, saga=seg_vitb_saga_s1",
+  "runs": {
+    "seg_vitb_baseline_s1/native": {
+      "backbone_matched": 1,
+      "ckpt_sha256": "d3aeca644c10b9b255a15371c9e79a10e553ecd0ffd6f650075f6861ef109100",
+      "mIoU": 43.5768,
+      "mean_acc": 55.3272,
+      "n_classes_scored": 150,
+      "n_images": 2000,
+      "n_labelled_pixels": 480230527,
+      "pixel_acc": 79.875
+    },
+    "seg_vitb_saga_s1/native": {
+      "backbone_matched": 1,
+      "ckpt_sha256": "a0833a80d6eb90a55ea38065972c7326e3c12f5a1ceb9bb17871c6030be7e93c",
+      "mIoU": 43.335,
+      "mean_acc": 55.3007,
+      "n_classes_scored": 150,
+      "n_images": 2000,
+      "n_labelled_pixels": 480230527,
+      "pixel_acc": 79.7288
+    },
+    "seg_vitb_saga_s1/term_1.00": {
+      "backbone_matched": 1,
+      "ckpt_sha256": "a0833a80d6eb90a55ea38065972c7326e3c12f5a1ceb9bb17871c6030be7e93c",
+      "mIoU": 41.1391,
+      "mean_acc": 53.3276,
+      "n_classes_scored": 150,
+      "n_images": 2000,
+      "n_labelled_pixels": 480230527,
+      "pixel_acc": 78.6539
+    }
+  }
+}
