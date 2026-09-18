@@ -1,10 +1,17 @@
 # TASK C handoff — the correspondence readout (I5) and incoming attention (I7)
 
-**GENERATED** by `analysis/build_C_handoff.py` at git `ecd1d0ce30962136ce6d7ea695868035f23a93c0`. Every number is read from a committed file under `results/frozen/I5_readout/`, `results/frozen/I7_attention/` or `results/ttr*/`; none is typed by hand. The surrounding prose is fixed text. Re-run the script after new results land and this document updates itself.
+**GENERATED** by `analysis/build_C_handoff.py` at git `13e222df0436e54743c711a291c77be745896af9`. Every number is read from a committed file under `results/frozen/I5_readout/`, `results/frozen/I7_attention/` or `results/ttr*/`; none is typed by hand. The surrounding prose is fixed text. Re-run the script after new results land and this document updates itself.
 
 ## 0. The parameter declaration, as it actually stands
 
-D9 and D10 are in `docs/LOCKED_ANALYSIS.md` and the document is FROZEN. The parameters below were signed before these results were inspected.
+D9 and D10 are in `docs/LOCKED_ANALYSIS.md` and the document is FROZEN — **but the signature came after these runs, so this is not a pre-registration.** The order is what a reader needs, so it is given as it happened:
+
+- **The values were fixed in committed YAML before any Phase B job ran.** `configs/frozen/I5_readout.yaml` was added at `8101916` and `configs/frozen/I7_attention.yaml` at `13caa17`; between them they carry the transforms, stages, descriptors, blocks, alignment, bootstrap seed and resample count, and `saga/frozen/runner.py` REFUSES anything not in them. That is verifiable from the git history, and it is the part of a pre-registration that actually constrains the analysis.
+- **The signature came after Phase B had run and its results had been committed, and they could have been inspected before it.** All 29 Phase B `run_meta.json` files record git sha `195467c2ad`, which is an ANCESTOR of the signed sha `5c1b737` (2026-09-17) — so the jobs ran at code predating the signature. (`run_meta.json` carries no completion TIMESTAMP; the recorded sha is the ordering evidence, and git ancestry cannot be back-dated the way a written timestamp could.)
+- **Phase C's tables were COMMITTED after the signature**: `results/frozen/I5_readout/sub2k/tables/T_I5e_diag_vs_readout.csv` was added at `5830233` (2026-09-17), which descends from `5c1b737`. Whether they had already been PRODUCED before the signature is not recorded anywhere — git dates the commit, not the computation — so this document says only what it can date.
+- **The person who signed it states that the Phase B results had in fact been inspected, and Phase C run, before the signature.** That is their own account of their own conduct, not something the artifacts can show, and it is recorded here because it is the LESS favourable reading and leaving it out would flatter the work.
+
+So the honest claim is the narrow one: the analysis configuration was fixed in advance and can be PROVED to have been, and D9/D10 are now signed. The paper may say that. It must **not** call this a pre-registration, and no result below acquires confirmatory status from the freeze.
 
 ## 1. I7 — the wording rule (D10), and what it returned
 
@@ -132,7 +139,41 @@ The control holds on the real records: `max_abs_s11_diff_vs_native` is ['0'] at 
 
 This is EXPLORATORY and must be read as such: the head was TRAINED on gated features, so a drop under the bypass measures sensitivity to an input distribution it never saw. It is not evidence that the gated features are better.
 
-## 6. I7 — incoming attention at the exceedance positions
+## 6. I5d/I5e — the exceedance positions, and whether the diagnostic predicts the readout
+
+Both tables are **SECONDARY under D7** and every row says so in its own `endpoint_class`; neither licenses a primary claim, and the size of the numbers below does not change that.
+
+### T_I5d — correspondence at exceedance vs non-exceedance positions
+
+| transform | checkpoint | acc(exceedance) | acc(non-exc.) | delta | CI |
+|---|---|---|---|---|---|
+| T1 | `e2r_vits_mixup_baseline_s1` | 0.5089 | 0.9453 | **-0.4364** | [-0.4435, -0.4291] |
+| T1 | `e2r_vits_mixup_baseline_s2` | 0.4709 | 0.9365 | **-0.4655** | [-0.4726, -0.4587] |
+| T2 | `e2r_vits_mixup_baseline_s1` | 0.5108 | 0.9384 | **-0.4276** | [-0.4361, -0.4193] |
+| T2 | `e2r_vits_mixup_baseline_s2` | 0.5484 | 0.9411 | **-0.3927** | [-0.4008, -0.3844] |
+| T3 | `e2r_vits_mixup_baseline_s1` | 0.4742 | 0.9269 | **-0.4527** | [-0.4612, -0.4438] |
+| T3 | `e2r_vits_mixup_baseline_s2` | 0.4749 | 0.9256 | **-0.4507** | [-0.4594, -0.4423] |
+
+**Mean delta -0.4376, negative on 6 of 6 rows**, with every interval well clear of zero. Positions the diagnostic flags correspond across an exact grid transform far less reliably than the positions it does not flag — roughly 0.47–0.55 against 0.93–0.95. This is the largest effect in Track C by an order of magnitude, and it is descriptive: it says these positions carry less transform-stable identity, not why they do.
+
+### T_I5e — does the diagnostic predict the readout? (the thesis test)
+
+| scope | transform | checkpoint | Spearman rho | images |
+|---|---|---|---|---|
+| within-checkpoint | T1 | `e2r_vits_mixup_baseline_s1` | **-0.4458** | 2000 |
+| within-checkpoint | T1 | `e2r_vits_mixup_baseline_s2` | **-0.4646** | 2000 |
+| within-checkpoint | T2 | `e2r_vits_mixup_baseline_s1` | **-0.3968** | 2000 |
+| within-checkpoint | T2 | `e2r_vits_mixup_baseline_s2` | **-0.4458** | 2000 |
+| within-checkpoint | T3 | `e2r_vits_mixup_baseline_s1` | **-0.4113** | 2000 |
+| within-checkpoint | T3 | `e2r_vits_mixup_baseline_s2` | **-0.4751** | 2000 |
+
+**Mean rho -0.4399 over the 6 fresh-baseline rows, negative on 6 of 6**, range [-0.4751, -0.3968]. Across the whole cohort (57 usable rows) the mean is -0.2056, negative on 47.
+
+**Within a checkpoint, the images with more exceedance positions read out worse.** That is the direction the thesis predicts, measured on the same images, with the diagnostic the paper already reports. It is a rank correlation across images and nothing more: it is not causal, it is secondary under D7, and it is consistent with both quantities depending on some third property of the image — texture, clutter, scale.
+
+**`across_checkpoints` is MISSING: 57 rows of that scope at this configuration, 0 of them carrying a rho.** The BETWEEN-checkpoint form of the same question — do checkpoints with more exceedance positions read out worse — is NOT answered here, and the within-checkpoint result above does not answer it by proxy. The two are different claims and only one of them has a number.
+
+## 7. I7 — incoming attention at the exceedance positions
 
 MAD is the PRIMARY basis. Patch queries, both blocks, all ten ViT-S/mixup checkpoints. Ratio = mean incoming mass per exceedance token / mean per other token, as a ratio of means with an image-level bootstrap.
 
@@ -170,7 +211,7 @@ MAD is the PRIMARY basis. Patch queries, both blocks, all ten ViT-S/mixup checkp
 
 `T_I7c_value_norm` (EXPLORATORY): the value-norm ratio at exceedance vs other positions runs 0.449 to 0.936 across the cell. It decides nothing about the wording rule.
 
-## 7. The TTR operating curve (§6)
+## 8. The TTR operating curve (§6)
 
 Built from committed files only; **no new TTR runs**. The two layer ranges are NOT a crossed grid — they were swept on different neuron grids over different cell sets, and the coverage table says so rather than presenting a cross product nobody intended to run.
 
@@ -181,7 +222,7 @@ Built from committed files only; **no new TTR runs**. The two layer ranges are N
 
 **32 points total.** The chosen operating point is marked on 4 cells, all at `n_neurons=24` in the midlayer range. The gate lines are read from each run's own `validate.json` and agree across every file.
 
-## 8. What Track C does NOT settle
+## 9. What Track C does NOT settle
 
 - **Correspondence under exact grid-aligned transforms is ONE utility, not utility.** T1-T3 are a flip and two whole-patch translations. They say nothing about scale, rotation, or any transform whose correspondence is not exact — which is precisely why those were excluded rather than approximated.
 - **The 3x in D10 is a convention.** It is not derived from anything, and the sentence the wording module returns says so. A different threshold would be a different sentence, and the measured ratios are reported so a reader can apply their own.
