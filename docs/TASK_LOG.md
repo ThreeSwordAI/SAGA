@@ -6723,3 +6723,82 @@ weakens no assertion.
 ### Tests
 
 `pytest -q`: **1243 passed, 30 skipped.**
+
+## 2026-09-17 — TASK B — two corrections to `docs/C_HANDOFF.md`
+
+Tag `[C]`, worktree `../SAGA-B`, branch `task/B`. Both were found by reading
+the generated document rather than the generator.
+
+### 1. The handoff claimed a pre-registration it does not have
+
+The previous entry above records the emphasis-insensitive `says_frozen` fix
+and, with it, that §0 began to read "The parameters below were signed before
+these results were inspected." **That sentence is false**, and my own earlier
+version of the same document had the order right before the two-state check
+flipped it: the freeze is signed at `5c1b737`, and every Phase B
+`run_meta.json` — 29 of them across I5 and I7 — records `git_sha`
+`195467c2ad0d8930e7d24174bb02f25b43d22f87`, which is an ANCESTOR of the
+signed sha. The jobs therefore ran at code predating the signature.
+
+`section_status()` now has THREE states, and returns which one it is so a
+test can pin it:
+
+| state | meaning |
+|---|---|
+| `signed_before` | signature predates every Phase B job — a real pre-registration |
+| `signed_after` | signed, but after the runs — **this project** |
+| `signed_indeterminate` | the shas are not on one line of descent, or one is absent |
+| `unsigned` | D9/D10 or the freeze header missing |
+
+**The ordering evidence is the sha, not a timestamp, and that is a deviation
+from the brief.** The instruction was to compare the signature date with the
+Phase B completion timestamps in `run_meta.json`. There are none:
+`tools/frozen_eval.py` never wrote one, and neither does the `.done.json`
+marker. So the comparison is `git merge-base --is-ancestor` between the
+recorded run sha and the signed sha — which is the better anchor anyway,
+because a written timestamp is whatever the writer put in the file while git
+ancestry is checkable by anyone holding the repository. A test asserts that
+no `run_meta.json` has acquired a timestamp field, so this decision gets
+revisited if that changes.
+
+**A second deviation, in the other direction.** The as-run wording I was
+asked for said the signature came after Phase B *and Phase C* had run. Git
+says Phase C's tables were added at `5830233` (14:32), which DESCENDS from
+the signed sha, and the freeze commit `54b65b5` is 14:12 — so the signature
+came after Phase B and **before** Phase C's tables were committed. The
+document now derives that bullet with `phase_c_bullet()` instead of
+asserting it, so it cannot go stale, and it states what git supports rather
+than what the brief said.
+
+What §0 claims now, and all it claims: the values were fixed in committed
+YAML before any job ran (`configs/frozen/I5_readout.yaml` at `8101916`,
+`configs/frozen/I7_attention.yaml` at `13caa17`), the signature came later,
+and the paper may say the former but must not call it a pre-registration.
+The human's own statement — that the Phase B results had been inspected and
+Phase C run before they signed — is carried in a fourth bullet, ATTRIBUTED
+to them rather than presented as derived, because it is the less favourable
+reading and omitting it would flatter the work.
+
+### 2. The two tests the thesis rests on were not in the handoff
+
+`T_I5d_positions` and `T_I5e_diag_vs_readout` were built, committed and
+never surfaced. New §6 carries both at D9's primary configuration —
+`s11_out`, `l2`, `count_mad_s11`, the two fresh ViT-S/mixup baselines, T0
+excluded because accuracy there is 1 by construction and a rank correlation
+against a constant is undefined.
+
+- **T_I5d**: acc at exceedance positions 0.47–0.55 against 0.93–0.95 at the
+  others; mean delta **−0.4376, negative on 6 of 6 rows**, every interval
+  clear of zero. The largest effect anywhere in Track C.
+- **T_I5e, the thesis test**: within-checkpoint Spearman rho, mean
+  **−0.4399** over the 6 fresh-baseline rows, negative on 6 of 6, range
+  [−0.4751, −0.3968]. Over the whole cohort, −0.2056 with 47 of 57 negative.
+  Images with more exceedance positions read out worse — the predicted
+  direction, on the same images, with the diagnostic the paper reports.
+- **`across_checkpoints` is MISSING and says so**: all 912 rows of that scope
+  carry no rho, so the between-checkpoint form of the question is
+  unanswered, and the within-checkpoint result is not allowed to stand in
+  for it.
+
+Every row of both tables is `secondary` or `descriptive` under D7 and the
+section says so before the numbers. A large effect is still a secondary one.

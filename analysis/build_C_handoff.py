@@ -18,10 +18,11 @@ Three things it must get right, and a test pins each:
      `i7_wording_verdict.json`, never re-decided and never re-worded. The
      rule was declared before the measurement existed; re-phrasing its
      output here would quietly undo that.
-  2. The D9/D10 status is reported as it IS. If those lines are not in
-     `docs/LOCKED_ANALYSIS.md`, the document says so and says when the runs
-     happened relative to that, rather than implying a pre-registration that
-     did not occur.
+  2. The D9/D10 status is reported as it IS, in THREE states, not two.
+     Signed-and-before-the-runs is a pre-registration; signed-and-after is
+     not; unsigned is neither. The state is DERIVED by comparing the sha in
+     the freeze header with the sha each Phase B run recorded, so the
+     document cannot claim a pre-registration it does not have.
   3. `MISSING` is printed as `MISSING`, never as a blank or a zero.
 
 No training, no optimizer, no probe fitting.
@@ -30,6 +31,8 @@ No training, no optimizer, no probe fitting.
 import argparse
 import csv
 import json
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,6 +51,12 @@ OUT = REPO / "docs" / "C_HANDOFF.md"
 PRIMARY_STAGE = "s11_out"
 PRIMARY_DESC = "l2"
 FRESH = ("e2r_vits_mixup_baseline_s1", "e2r_vits_mixup_baseline_s2")
+
+#: The conditions files whose ADDING COMMIT is the "fixed in advance" claim.
+CONFIGS = {"I5": "configs/frozen/I5_readout.yaml",
+           "I7": "configs/frozen/I7_attention.yaml"}
+#: Where Phase B wrote its per-run provenance.
+PHASE_B = ("results/frozen/I5_readout", "results/frozen/I7_attention")
 
 
 def read(path):
@@ -80,6 +89,112 @@ def git_sha():
 # Sections
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _git(*args):
+    """git, or MISSING. A generator must not die because git is absent."""
+    try:
+        r = subprocess.run(("git",) + args, cwd=str(REPO), text=True,
+                           capture_output=True)
+    except Exception:                                    # pragma: no cover
+        return MISSING
+    return r.stdout.strip() if r.returncode == 0 else MISSING
+
+
+def _is_ancestor(a, b):
+    """True / False / None — None when git could not answer at all, which is
+    never silently folded into either answer."""
+    try:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", a, b],
+                           cwd=str(REPO), capture_output=True)
+    except Exception:                                    # pragma: no cover
+        return None
+    if r.returncode in (0, 1):
+        return r.returncode == 0
+    return None                                          # bad sha, not a repo
+
+
+def config_shas():
+    """The commit that ADDED each conditions file. "Fixed in advance" is a
+    claim about a commit, so the commit is named and can be checked."""
+    return {k: (_git("log", "--diff-filter=A", "-1", "--format=%h", "--", v)
+                or MISSING)
+            for k, v in CONFIGS.items()}
+
+
+def signature_order():
+    """Did the signature come BEFORE or AFTER the Phase B jobs? → (state, ev)
+
+    `run_meta.json` carries NO completion timestamp — `tools/frozen_eval.py`
+    never wrote one — so the ordering evidence that exists is the `git_sha`
+    each job recorded, compared against the sha the freeze was signed at.
+    That is a stronger anchor than a wall clock anyway: a timestamp is
+    whatever the writer put in the file, while git ancestry is checkable by
+    anyone holding the repository and cannot be back-dated.
+
+    A run whose sha is an ANCESTOR of the signed sha ran at code that
+    predates the signature, so the run came first → "signed_after". A run
+    whose sha DESCENDS from it ran at code written after the signature, so
+    the signature came first → "signed_before". Anything else, including a
+    missing sha on either side, is "indeterminate" and is reported as such
+    rather than resolved by guessing.
+    """
+    text = LOCKED.read_text(encoding="utf-8")
+    m = re.search(r"Git sha at freeze:\s*`?([0-9a-fA-F]{7,40})`?", text)
+    sig = m.group(1) if m else None
+    date = None
+    md = re.search(r"Date frozen:\s*`?(\d{4}-\d{2}-\d{2})`?", text)
+    if md:
+        date = md.group(1)
+
+    runs = {}
+    for pkg in PHASE_B:
+        for meta in sorted((REPO / pkg).glob("*/*/run_meta.json")):
+            try:
+                g = json.loads(meta.read_text(encoding="utf-8")).get("git_sha")
+            except Exception:                            # pragma: no cover
+                continue
+            if g and g != MISSING:
+                runs[g] = runs.get(g, 0) + 1
+
+    ev = {"signature_sha": sig or MISSING, "signature_date": date or MISSING,
+          "run_shas": sorted(runs), "n_runs": sum(runs.values())}
+    if not sig or not runs:
+        return "indeterminate", ev
+
+    if all(_is_ancestor(r, sig) is True for r in runs):
+        return "signed_after", ev
+    if all(_is_ancestor(sig, r) is True for r in runs):
+        return "signed_before", ev
+    return "indeterminate", ev
+
+
+def phase_c_bullet(sig):
+    """Where Phase C's tables sit relative to the signature — DERIVED, not
+    asserted, and worded to say only what git can date. A sentence written
+    by hand here would be a chronology claim that nothing checks, which is
+    exactly the failure this whole section exists to correct."""
+    rel = "results/frozen/I5_readout/sub2k/tables/T_I5e_diag_vs_readout.csv"
+    add = _git("log", "--diff-filter=A", "-1", "--format=%h", "--", rel)
+    if add in (MISSING, ""):
+        return (f"- **Where Phase C's tables sit relative to the signature is "
+                f"UNKNOWN**: git does not name a commit that added `{rel}`.")
+    date = _git("log", "-1", "--format=%ad", "--date=short", add)
+    after = _is_ancestor(sig, add)
+    if after is None:
+        return (f"- **Where Phase C's tables sit relative to the signature is "
+                f"UNKNOWN**: `{rel}` was added at `{add}` ({date}), but git "
+                f"could not relate that to `{sig}`.")
+    if after:
+        return (f"- **Phase C's tables were COMMITTED after the signature**: "
+                f"`{rel}` was added at `{add}` ({date}), which descends from "
+                f"`{sig}`. Whether they had already been PRODUCED before the "
+                f"signature is not recorded anywhere — git dates the commit, "
+                f"not the computation — so this document says only what it "
+                f"can date.")
+    return (f"- **Phase C's tables were committed BEFORE the signature**: "
+            f"`{rel}` was added at `{add}` ({date}), which `{sig}` descends "
+            f"from. The signature therefore post-dates both phases.")
+
+
 def section_status(lines):
     text = LOCKED.read_text(encoding="utf-8")
     d9, d10 = "D9" in text, "D10" in text
@@ -89,15 +204,75 @@ def section_status(lines):
     # reported "Document frozen: NO" for a signed document.)
     from saga.frozen.masks import says_frozen
     frozen = says_frozen(text)
+    signed = d9 and d10 and frozen
+    order, ev = signature_order() if signed else ("indeterminate", {})
     lines += [
         "## 0. The parameter declaration, as it actually stands",
         "",
     ]
-    if d9 and d10 and frozen:
+    if signed and order == "signed_before":
+        runs = ", ".join(f"`{s[:10]}`" for s in ev["run_shas"])
+        lines += [
+            f"D9 and D10 are in `docs/LOCKED_ANALYSIS.md`, the document is "
+            f"FROZEN, and the signature PREDATES the runs: it was signed at "
+            f"`{ev['signature_sha']}` on {ev['signature_date']}, and every "
+            f"one of the {ev['n_runs']} Phase B jobs recorded a git sha "
+            f"({runs}) that descends from it. The parameters below were "
+            f"therefore signed before these results existed, let alone before "
+            f"they were inspected.",
+            "",
+        ]
+    elif signed and order == "signed_after":
+        cfg = config_shas()
+        runs = ", ".join(f"`{s[:10]}`" for s in ev["run_shas"])
         lines += [
             "D9 and D10 are in `docs/LOCKED_ANALYSIS.md` and the document is "
-            "FROZEN. The parameters below were signed before these results "
-            "were inspected.",
+            "FROZEN — **but the signature came after these runs, so this is "
+            "not a pre-registration.** The order is what a reader needs, so "
+            "it is given as it happened:",
+            "",
+            f"- **The values were fixed in committed YAML before any Phase B "
+            f"job ran.** `{CONFIGS['I5']}` was added at `{cfg['I5']}` and "
+            f"`{CONFIGS['I7']}` at `{cfg['I7']}`; between them they carry the "
+            f"transforms, stages, descriptors, blocks, alignment, bootstrap "
+            f"seed and resample count, and `saga/frozen/runner.py` REFUSES "
+            f"anything not in them. That is verifiable from the git history, "
+            f"and it is the part of a pre-registration that actually "
+            f"constrains the analysis.",
+            f"- **The signature came after Phase B had run and its results "
+            f"had been committed, and they could have been inspected before "
+            f"it.** All {ev['n_runs']} Phase B `run_meta.json` files record "
+            f"git sha {runs}, which is an ANCESTOR of the signed sha "
+            f"`{ev['signature_sha']}` ({ev['signature_date']}) — so the jobs "
+            f"ran at code predating the signature. (`run_meta.json` carries "
+            f"no completion TIMESTAMP; the recorded sha is the ordering "
+            f"evidence, and git ancestry cannot be back-dated the way a "
+            f"written timestamp could.)",
+            phase_c_bullet(ev["signature_sha"]),
+            "- **The person who signed it states that the Phase B results had "
+            "in fact been inspected, and Phase C run, before the signature.** "
+            "That is their own account of their own conduct, not something "
+            "the artifacts can show, and it is recorded here because it is "
+            "the LESS favourable reading and leaving it out would flatter the "
+            "work.",
+            "",
+            "So the honest claim is the narrow one: the analysis "
+            "configuration was fixed in advance and can be PROVED to have "
+            "been, and D9/D10 are now signed. The paper may say that. It must "
+            "**not** call this a pre-registration, and no result below "
+            "acquires confirmatory status from the freeze.",
+            "",
+        ]
+    elif signed:
+        lines += [
+            "D9 and D10 are in `docs/LOCKED_ANALYSIS.md` and the document is "
+            "FROZEN. **The order of signature and runs is INDETERMINATE from "
+            "the artifacts** — the signed sha and the shas recorded in the "
+            "Phase B `run_meta.json` files are not on one line of descent, or "
+            "one of them is absent — so this document does not claim the "
+            "parameters were signed before the results were inspected. "
+            "Treat the analysis as configured in advance (the conditions "
+            "YAMLs prove that much) and NOT as a pre-registration.",
             "",
         ]
     else:
@@ -125,7 +300,10 @@ def section_status(lines):
             "claim the latter.",
             "",
         ]
-    return d9 and d10 and frozen
+    if not signed:
+        return "unsigned"
+    return {"signed_before": "signed_before",
+            "signed_after": "signed_after"}.get(order, "signed_indeterminate")
 
 
 def section_wording(lines):
@@ -368,10 +546,134 @@ def section_i5b_seg(lines):
     lines.append("")
 
 
+def section_i5d_i5e(lines):
+    """T_I5d and T_I5e — the position split, and whether the diagnostic
+    predicts the readout.
+
+    T_I5e is the test this thesis rests on: the project has reported a patch
+    diagnostic for years, and this asks whether that diagnostic predicts a
+    downstream utility on the SAME images. It cannot be absent from the
+    handoff, so both tables render MISSING loudly rather than being skipped
+    when a filter comes back empty.
+
+    Primary configuration throughout: stage `s11_out`, descriptor `l2`,
+    `count_mad_s11`, the two fresh ViT-S/mixup baselines, T0 excluded — T0 is
+    the identity transform, where accuracy is 1 by construction and a rank
+    correlation against a constant is undefined.
+    """
+    d = [r for r in read(I5T / "T_I5d_positions.csv")
+         if r.get("stage") == PRIMARY_STAGE
+         and r.get("descriptor") == PRIMARY_DESC
+         and r.get("condition_id") == "native"
+         and r.get("run_id") in FRESH and r.get("transform") != "T0"]
+    lines += [
+        "## 6. I5d/I5e — the exceedance positions, and whether the "
+        "diagnostic predicts the readout",
+        "",
+        "Both tables are **SECONDARY under D7** and every row says so in its "
+        "own `endpoint_class`; neither licenses a primary claim, and the size "
+        "of the numbers below does not change that.",
+        "",
+        "### T_I5d — correspondence at exceedance vs non-exceedance positions",
+        "",
+    ]
+    if not d:
+        lines += ["**MISSING** — no `T_I5d_positions` rows at the primary "
+                  "configuration.", ""]
+    else:
+        lines += ["| transform | checkpoint | acc(exceedance) | "
+                  "acc(non-exc.) | delta | CI |",
+                  "|---|---|---|---|---|---|"]
+        for r in sorted(d, key=lambda r: (r["transform"], r["run_id"])):
+            lines.append(
+                f"| {r['transform']} | `{r['run_id']}` | {f(r['acc_exc'])} | "
+                f"{f(r['acc_nonexc'])} | **{f(r['delta_exc_minus_nonexc'])}** "
+                f"| [{f(r['delta_ci_lo'])}, {f(r['delta_ci_hi'])}] |")
+        dd = [float(r["delta_exc_minus_nonexc"]) for r in d]
+        neg = sum(1 for x in dd if x < 0)
+        lines += [
+            "",
+            f"**Mean delta {sum(dd) / len(dd):+.4f}, negative on {neg} of "
+            f"{len(dd)} rows**, with every interval well clear of zero. "
+            f"Positions the diagnostic flags correspond across an exact grid "
+            f"transform far less reliably than the positions it does not "
+            f"flag — roughly 0.47–0.55 against 0.93–0.95. This is the "
+            f"largest effect in Track C by an order of magnitude, and it is "
+            f"descriptive: it says these positions carry less "
+            f"transform-stable identity, not why they do.",
+            "",
+        ]
+
+    e = [r for r in read(I5T / "T_I5e_diag_vs_readout.csv")
+         if r.get("stage") == PRIMARY_STAGE
+         and r.get("descriptor") == PRIMARY_DESC
+         and r.get("diagnostic") == "count_mad_s11"
+         and r.get("transform") != "T0"]
+    within = [r for r in e if r.get("scope") == "within_checkpoint"]
+    fresh = [r for r in within if r.get("run_id") in FRESH
+             and r.get("spearman_rho") not in ("", MISSING)]
+    across = [r for r in e if r.get("scope") == "across_checkpoints"]
+    across_ok = [r for r in across
+                 if r.get("spearman_rho") not in ("", MISSING)]
+    lines += ["### T_I5e — does the diagnostic predict the readout? "
+              "(the thesis test)", ""]
+    if not fresh:
+        lines += ["**MISSING** — no within-checkpoint rows at the primary "
+                  "configuration. The thesis test has no answer in this "
+                  "handoff, and nothing below substitutes for it.", ""]
+    else:
+        lines += ["| scope | transform | checkpoint | Spearman rho | images |",
+                  "|---|---|---|---|---|"]
+        for r in sorted(fresh, key=lambda r: (r["transform"], r["run_id"])):
+            lines.append(
+                f"| within-checkpoint | {r['transform']} | `{r['run_id']}` | "
+                f"**{f(r['spearman_rho'])}** | {r['n']} |")
+        rho = [float(r["spearman_rho"]) for r in fresh]
+        allr = [float(r["spearman_rho"]) for r in within
+                if r.get("spearman_rho") not in ("", MISSING)]
+        neg = sum(1 for x in rho if x < 0)
+        lines += [
+            "",
+            f"**Mean rho {sum(rho) / len(rho):+.4f} over the {len(rho)} "
+            f"fresh-baseline rows, negative on {neg} of {len(rho)}**, range "
+            f"[{min(rho):+.4f}, {max(rho):+.4f}]. Across the whole cohort "
+            f"({len(allr)} usable rows) the mean is "
+            f"{sum(allr) / len(allr):+.4f}, negative on "
+            f"{sum(1 for x in allr if x < 0)}.",
+            "",
+            "**Within a checkpoint, the images with more exceedance positions "
+            "read out worse.** That is the direction the thesis predicts, "
+            "measured on the same images, with the diagnostic the paper "
+            "already reports. It is a rank correlation across images and "
+            "nothing more: it is not causal, it is secondary under D7, and it "
+            "is consistent with both quantities depending on some third "
+            "property of the image — texture, clutter, scale.",
+            "",
+        ]
+    if not across_ok:
+        lines += [
+            f"**`across_checkpoints` is MISSING: {len(across)} rows of that "
+            f"scope at this configuration, {len(across_ok)} of them carrying "
+            f"a rho.** The BETWEEN-checkpoint form of the same question — do "
+            f"checkpoints with more exceedance positions read out worse — is "
+            f"NOT answered here, and the within-checkpoint result above does "
+            f"not answer it by proxy. The two are different claims and only "
+            f"one of them has a number.",
+            "",
+        ]
+    else:
+        ar = [float(r["spearman_rho"]) for r in across_ok]
+        lines += [
+            f"`across_checkpoints`: mean rho {sum(ar) / len(ar):+.4f} over "
+            f"{len(ar)} of {len(across)} rows.",
+            "",
+        ]
+
+
 def section_i7(lines):
     a = read(I7T / "T_I7a_incoming.csv")
     lines += [
-        "## 6. I7 — incoming attention at the exceedance positions",
+        "## 7. I7 — incoming attention at the exceedance positions",
         "",
         "MAD is the PRIMARY basis. Patch queries, both blocks, all ten "
         "ViT-S/mixup checkpoints. Ratio = mean incoming mass per exceedance "
@@ -425,7 +727,7 @@ def section_ttr(lines):
     curve = read(I7T / "T_I7d_ttr_curve.csv")
     cov = read(I7T / "T_I7d_ttr_coverage.csv")
     lines += [
-        "## 7. The TTR operating curve (§6)",
+        "## 8. The TTR operating curve (§6)",
         "",
         "Built from committed files only; **no new TTR runs**. The two layer "
         "ranges are NOT a crossed grid — they were swept on different neuron "
@@ -461,7 +763,7 @@ def section_ttr(lines):
 
 def section_not_settled(lines):
     lines += [
-        "## 8. What Track C does NOT settle",
+        "## 9. What Track C does NOT settle",
         "",
         "- **Correspondence under exact grid-aligned transforms is ONE "
         "utility, not utility.** T1-T3 are a flip and two whole-patch "
@@ -526,6 +828,7 @@ def build(sha=None):
     section_i5b_methods(lines)
     section_i5c(lines)
     section_i5b_seg(lines)
+    section_i5d_i5e(lines)
     section_i7(lines)
     section_ttr(lines)
     section_not_settled(lines)

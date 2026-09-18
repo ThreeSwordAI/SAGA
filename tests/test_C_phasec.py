@@ -184,18 +184,104 @@ def test_the_handoff_provenance_line_is_the_only_thing_that_may_move():
 
 def test_the_handoff_reports_the_d9_d10_status_truthfully():
     """The handoff must not imply a pre-registration that did not happen —
-    nor deny one that did. It reports whichever is the case."""
+    nor deny one that did. It reports whichever of THREE states holds.
+
+    The third state is the one this project is actually in and the one a
+    two-state check got wrong: D9/D10 signed, but signed AFTER the runs. A
+    document that collapses that into "signed" claims a pre-registration it
+    does not have.
+    """
     if not HANDOFF.exists():
         pytest.skip("handoff not present")
-    locked = (REPO / "docs" / "LOCKED_ANALYSIS.md").read_text(encoding="utf-8")
+    from analysis.build_C_handoff import section_status
+
     text = HANDOFF.read_text(encoding="utf-8")
-    from saga.frozen.masks import says_frozen
-    signed = ("D9" in locked and "D10" in locked and says_frozen(locked))
-    if signed:
-        assert "signed before these results were inspected" in text
+    state = section_status([])
+    assert state in ("unsigned", "signed_before", "signed_after",
+                     "signed_indeterminate")
+    if state == "signed_before":
+        assert "signature PREDATES the runs" in text
+        assert "signed before these results existed" in text
+    elif state == "signed_after":
+        assert "the signature came after these runs" in text
+        assert "not a pre-registration" in text
+        assert "were fixed in committed YAML before any Phase B job ran" in text
+        # and it must NOT make the claim the two-state version made
+        assert "signed before these results were inspected" not in text
+    elif state == "signed_indeterminate":
+        assert "INDETERMINATE from the artifacts" in text
     else:
         assert "not** a signed pre-registration" in text
         assert "were fixed in committed code before any Phase B job ran" in text
+
+
+def test_the_signature_order_is_decided_from_artifacts_not_asserted():
+    """The state above is a CLAIM about chronology, so it must be derived.
+
+    `run_meta.json` carries no completion timestamp — `tools/frozen_eval.py`
+    never wrote one — so the ordering evidence is the `git_sha` each Phase B
+    job recorded against the sha the freeze was signed at. This pins that the
+    comparison actually runs and returns the shas it compared, rather than a
+    hard-coded verdict that would survive any future re-signing.
+    """
+    from analysis.build_C_handoff import signature_order
+
+    state, ev = signature_order()
+    assert state in ("signed_before", "signed_after", "indeterminate")
+    if state == "indeterminate":
+        return
+    assert ev["signature_sha"] != MISSING and len(ev["signature_sha"]) >= 7
+    assert ev["run_shas"] and ev["n_runs"] > 0
+    for sha in ev["run_shas"]:
+        assert len(sha) >= 7 and sha != MISSING
+    # no run_meta.json anywhere carries a timestamp, which is WHY the sha is
+    # the anchor — if that ever changes, this test should be revisited.
+    metas = list((REPO / "results" / "frozen" / "I5_readout").glob(
+        "*/*/run_meta.json"))
+    if metas:
+        keys = set(json.loads(metas[0].read_text(encoding="utf-8")))
+        assert not ({"t_end", "finished_at", "timestamp", "completed_at"}
+                    & keys), "run_meta.json now has a timestamp — use it"
+
+
+def test_the_handoff_carries_the_two_i5_headline_tests():
+    """T_I5e is the test the thesis rests on: does the patch diagnostic
+    predict a downstream utility on the same images? It cannot be absent, and
+    neither can the position split beside it."""
+    if not HANDOFF.exists():
+        pytest.skip("handoff not present")
+    text = HANDOFF.read_text(encoding="utf-8")
+    assert "T_I5d — correspondence at exceedance vs non-exceedance" in text
+    assert "T_I5e — does the diagnostic predict the readout?" in text
+    # neither may be sold as primary
+    assert "SECONDARY under D7" in text
+    # and the headline numbers are RECOMPUTED here from the tables, so the
+    # document cannot drift away from what it was derived from
+    from analysis.build_C_handoff import FRESH, PRIMARY_DESC, PRIMARY_STAGE
+
+    d = [r for r in read(I5T / "T_I5d_positions.csv")
+         if r["stage"] == PRIMARY_STAGE and r["descriptor"] == PRIMARY_DESC
+         and r["condition_id"] == "native" and r["run_id"] in FRESH
+         and r["transform"] != "T0"]
+    assert d, "no T_I5d rows at the primary configuration"
+    dd = [float(r["delta_exc_minus_nonexc"]) for r in d]
+    assert (f"Mean delta {sum(dd) / len(dd):+.4f}, negative on "
+            f"{sum(1 for x in dd if x < 0)} of {len(dd)} rows") in text
+
+    e = [r for r in read(I5T / "T_I5e_diag_vs_readout.csv")
+         if r["stage"] == PRIMARY_STAGE and r["descriptor"] == PRIMARY_DESC
+         and r["diagnostic"] == "count_mad_s11" and r["transform"] != "T0"]
+    fresh = [r for r in e if r["scope"] == "within_checkpoint"
+             and r["run_id"] in FRESH and r["spearman_rho"] != MISSING]
+    assert fresh, "the thesis test has no rows at the primary configuration"
+    rho = [float(r["spearman_rho"]) for r in fresh]
+    assert (f"Mean rho {sum(rho) / len(rho):+.4f} over the {len(rho)} "
+            f"fresh-baseline rows") in text
+    # the gap is named rather than papered over
+    across = [r for r in e if r["scope"] == "across_checkpoints"
+              and r["spearman_rho"] != MISSING]
+    if not across:
+        assert "`across_checkpoints` is MISSING" in text
 
 
 def test_the_handoff_states_what_track_c_does_not_settle():
