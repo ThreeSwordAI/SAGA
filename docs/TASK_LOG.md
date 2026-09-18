@@ -6802,3 +6802,9 @@ against a constant is undefined.
 
 Every row of both tables is `secondary` or `descriptive` under D7 and the
 section says so before the numbers. A large effect is still a secondary one.
+
+### Tests
+
+`pytest -q` on `main` after the merge: **1245 passed, 30 skipped** — the two
+added here (the three-state pin, and the headline check that recomputes both
+tables from the CSVs and matches them against the document) on top of 1243.
